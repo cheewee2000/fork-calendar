@@ -63,11 +63,11 @@ struct TimeGridView: View {
                     .contentShape(Rectangle())
                 }
                 HStack(alignment: .top, spacing: 0) {
-                    Text("all-day")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                    // Blank gutter spacer; still blocks clicks from reaching
+                    // the strip's invisible out-of-bounds content.
+                    Color.clear
                         .frame(width: gutterWidth)
-                        .frame(maxHeight: .infinity, alignment: .top)
+                        .frame(maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .zIndex(1)
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
