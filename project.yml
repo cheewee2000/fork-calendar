@@ -26,8 +26,8 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.7.3"
-        CFBundleVersion: "15"
+        CFBundleShortVersionString: "0.8.0"
+        CFBundleVersion: "16"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSHumanReadableCopyright: © 2026 CW&T
@@ -51,8 +51,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.7.3"
-        CFBundleVersion: "15"
+        CFBundleShortVersionString: "0.8.0"
+        CFBundleVersion: "16"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         UILaunchScreen: {}

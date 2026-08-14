@@ -157,29 +157,22 @@ enum KeyMonitor {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// End of a pan: no snap at all — the grid rests exactly where the scroll
-    /// ended. The anchor is still re-pointed at the nearest day (so the header
-    /// label and event fetching stay accurate), but with an exact pixel
-    /// compensation so nothing moves on screen.
+    /// End of a pan: the columns are left exactly where the scroll ended —
+    /// layout is never touched here. Only currentDate is re-pointed at the day
+    /// nearest the visible left edge (header label, fetch window); layout
+    /// reads gridAnchor, so that update is invisible.
     private static func settlePan(_ appState: AppState) {
         snapWork?.cancel()
-        let colWidth = appState.gridColumnWidth
-        guard colWidth > 4 else {
-            appState.pan.offset = 0
-            appState.isPanning = false
-            return
-        }
-        let pan = appState.pan.offset
-        let dayShift = Int((-pan / colWidth).rounded())
-        if dayShift != 0 {
-            appState.panShiftDays(dayShift)
-            var t = Transaction()
-            t.disablesAnimations = true
-            withTransaction(t) { appState.pan.offset = pan + CGFloat(dayShift) * colWidth }
+        if let anchor = appState.gridAnchor, appState.gridColumnWidth > 4 {
+            let dayShift = Int((-appState.pan.offset / appState.gridColumnWidth).rounded())
+            if dayShift != 0,
+               let visualFirst = appState.calendar.date(byAdding: .day, value: dayShift, to: anchor) {
+                appState.currentDate = visualFirst
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Keep isPanning through the re-anchor's onChange pass so the
-            // residual offset isn't reset; skip if a new pan already latched.
+            // Keep isPanning through the currentDate onChange pass so the
+            // resting offset isn't reset; skip if a new pan already latched.
             if capture != .horizontal { appState.isPanning = false }
         }
     }

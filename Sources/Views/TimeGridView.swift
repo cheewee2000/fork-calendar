@@ -13,7 +13,7 @@ struct TimeGridView: View {
     @EnvironmentObject var settings: AppSettings
     let days: [Date]
 
-    private var gutterWidth: CGFloat { settings.secondaryTimeZone == nil ? 54 : 96 }
+    private var gutterWidth: CGFloat { 54 + CGFloat(settings.secondaryTimeZones.count) * 42 }
     private var hourHeight: CGFloat { appState.hourHeight }
     @State private var zoomBase: CGFloat?
     @State private var zoomAnchorHours: CGFloat?
@@ -182,9 +182,9 @@ struct TimeGridView: View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
                 HStack(spacing: 0) {
-                    if let tz = settings.secondaryTimeZone {
+                    ForEach(settings.secondaryTZs, id: \.self) { id in
                         Group {
-                            if hour > 0 {
+                            if hour > 0, let tz = TimeZone(identifier: id) {
                                 Text(hourLabel(hour, timeZone: tz))
                                     .font(.system(size: 9))
                                     .foregroundStyle(.tertiary)
@@ -205,10 +205,25 @@ struct TimeGridView: View {
                     .frame(maxWidth: .infinity, alignment: .topTrailing)
                 }
                 .frame(width: gutterWidth, height: hourHeight, alignment: .top)
-                .id("hour-\(hour)")
             }
         }
         .frame(width: gutterWidth)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Menu("Add time zone") {
+                ForEach(AppSettings.curatedTimeZones.filter { !settings.secondaryTZs.contains($0) }, id: \.self) { id in
+                    Button(AppSettings.timeZoneLabel(id)) { settings.secondaryTZs.append(id) }
+                }
+            }
+            if !settings.secondaryTZs.isEmpty {
+                Divider()
+                ForEach(settings.secondaryTZs, id: \.self) { id in
+                    Button("Remove \(AppSettings.timeZoneLabel(id))") {
+                        settings.secondaryTZs.removeAll { $0 == id }
+                    }
+                }
+            }
+        }
     }
 
     private var hourLines: some View {

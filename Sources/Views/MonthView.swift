@@ -131,6 +131,13 @@ struct MonthWeekRow: View {
                 MonthSpanBar(bar: bar, cellW: cellW, rowH: rowH, barsTop: barsTop)
             }
         }
+        .onAppear {
+            // Lazy rows fetch their own range: on tall windows many weeks are
+            // visible beyond the header month's fetch window.
+            if let end = cal.date(byAdding: .day, value: 7, to: weekStart) {
+                store.ensureFetched(DateInterval(start: weekStart, end: end))
+            }
+        }
     }
 }
 

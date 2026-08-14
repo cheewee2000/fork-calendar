@@ -5,13 +5,18 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var googleAuth = GoogleAuth.shared
 
-    private static let timeZones: [String] = [
-        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-        "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin",
-        "Europe/Madrid", "Africa/Cairo", "Asia/Dubai", "Asia/Kolkata",
-        "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul", "Asia/Singapore",
-        "Australia/Sydney", "Pacific/Auckland", "UTC",
-    ]
+    private static let timeZones = AppSettings.curatedTimeZones
+
+    /// Selecting from the picker appends to the list, then the picker resets.
+    private var addTimeZoneBinding: Binding<String> {
+        Binding(
+            get: { "" },
+            set: { id in
+                guard !id.isEmpty, !settings.secondaryTZs.contains(id) else { return }
+                settings.secondaryTZs.append(id)
+            }
+        )
+    }
 
     var body: some View {
         Form {
@@ -29,9 +34,21 @@ struct SettingsView: View {
             Toggle("Show declined events", isOn: $settings.showDeclined)
             Toggle("Month view: all-day events only", isOn: $settings.monthAllDayOnly)
             TextField("Zoom personal meeting URL", text: $settings.zoomLink, prompt: Text("https://zoom.us/j/…"))
-            Picker("Secondary time zone", selection: $settings.secondaryTZ) {
-                Text("None").tag("")
-                ForEach(Self.timeZones, id: \.self) { id in
+            ForEach(settings.secondaryTZs, id: \.self) { id in
+                HStack {
+                    Text("Time zone: \(AppSettings.timeZoneLabel(id))")
+                    Spacer()
+                    Button {
+                        settings.secondaryTZs.removeAll { $0 == id }
+                    } label: {
+                        Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Picker("Add time zone", selection: addTimeZoneBinding) {
+                Text("Choose…").tag("")
+                ForEach(Self.timeZones.filter { !settings.secondaryTZs.contains($0) }, id: \.self) { id in
                     Text(id.replacingOccurrences(of: "_", with: " ")).tag(id)
                 }
             }

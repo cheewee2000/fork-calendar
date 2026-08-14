@@ -66,15 +66,34 @@ private struct YearWeekRow: View {
 
     var body: some View {
         let cal = appState.calendar
+        let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
         HStack(spacing: 0) {
             Text(monthLabel(calendar: cal))
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: gutter, alignment: .leading)
                 .padding(.leading, 6)
-            ForEach(0..<7, id: \.self) { offset in
-                if let day = cal.date(byAdding: .day, value: offset, to: weekStart) {
-                    YearDayCell(day: day, year: year, rowH: rowH)
+            ZStack(alignment: .topLeading) {
+                HStack(spacing: 0) {
+                    ForEach(days, id: \.self) { day in
+                        YearDayCell(day: day, year: year, rowH: rowH)
+                    }
+                }
+                // All-day/multi-day events as compact bars along the row bottom
+                GeometryReader { geo in
+                    let cellW = geo.size.width / 7
+                    let barH: CGFloat = rowH >= 26 ? 9 : 4
+                    let laneCap = rowH >= 38 ? 2 : 1
+                    let bars = SpanLayout.bars(days: days, store: store, calendar: cal)
+                        .filter { $0.lane < laneCap }
+                    ForEach(bars) { bar in
+                        YearSpanChip(event: bar.event, showTitle: barH >= 8)
+                            .frame(width: CGFloat(bar.endIndex - bar.startIndex + 1) * cellW - 3, height: barH)
+                            .offset(
+                                x: CGFloat(bar.startIndex) * cellW + 1.5,
+                                y: rowH - 1.5 - barH - CGFloat(bar.lane) * (barH + 1)
+                            )
+                    }
                 }
             }
         }
@@ -93,6 +112,31 @@ private struct YearWeekRow: View {
             }
         }
         return ""
+    }
+}
+
+private struct YearSpanChip: View {
+    @EnvironmentObject var appState: AppState
+    let event: EKEvent
+    let showTitle: Bool
+
+    var body: some View {
+        let color = event.calendar?.displayColor ?? Color.accentColor
+        Group {
+            if showTitle {
+                Text(event.title ?? "Untitled")
+                    .font(.system(size: 7, weight: .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(color)
+                    .padding(.horizontal, 3)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 2).fill(color.opacity(0.22)))
+            } else {
+                Capsule().fill(color.opacity(0.7))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { appState.select(event) }
     }
 }
 

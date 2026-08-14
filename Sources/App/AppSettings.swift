@@ -12,8 +12,8 @@ final class AppSettings: ObservableObject {
     @Published var showWeekends: Bool { didSet { UserDefaults.standard.set(showWeekends, forKey: "showWeekends") } }
     /// Month view: hide timed-event chips, keep only all-day/multi-day bars
     @Published var monthAllDayOnly: Bool { didSet { UserDefaults.standard.set(monthAllDayOnly, forKey: "monthAllDayOnly") } }
-    /// TimeZone identifier, empty = none
-    @Published var secondaryTZ: String { didSet { UserDefaults.standard.set(secondaryTZ, forKey: "secondaryTZ") } }
+    /// Extra time-zone columns in the time gutter (TimeZone identifiers, in order)
+    @Published var secondaryTZs: [String] { didSet { UserDefaults.standard.set(secondaryTZs, forKey: "secondaryTZs") } }
     /// Personal Zoom meeting URL, used by "Add conferencing"
     @Published var zoomLink: String { didSet { UserDefaults.standard.set(zoomLink, forKey: "zoomLink") } }
     /// Per-calendar color overrides (calendarIdentifier → hex "RRGGBB")
@@ -29,14 +29,32 @@ final class AppSettings: ObservableObject {
         showDeclined = d.object(forKey: "showDeclined") as? Bool ?? true
         showWeekends = d.object(forKey: "showWeekends") as? Bool ?? true
         monthAllDayOnly = d.object(forKey: "monthAllDayOnly") as? Bool ?? false
-        secondaryTZ = d.string(forKey: "secondaryTZ") ?? ""
+        if let list = d.stringArray(forKey: "secondaryTZs") {
+            secondaryTZs = list
+        } else if let legacy = d.string(forKey: "secondaryTZ"), !legacy.isEmpty {
+            secondaryTZs = [legacy] // migrate the old single-zone setting
+        } else {
+            secondaryTZs = []
+        }
         zoomLink = d.string(forKey: "zoomLink") ?? ""
         calendarColors = d.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]
         googleClientID = d.string(forKey: "googleClientID") ?? ""
         googleClientSecret = d.string(forKey: "googleClientSecret") ?? ""
     }
 
-    var secondaryTimeZone: TimeZone? {
-        secondaryTZ.isEmpty ? nil : TimeZone(identifier: secondaryTZ)
+    var secondaryTimeZones: [TimeZone] {
+        secondaryTZs.compactMap(TimeZone.init(identifier:))
+    }
+
+    static let curatedTimeZones: [String] = [
+        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+        "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin",
+        "Europe/Madrid", "Africa/Cairo", "Asia/Dubai", "Asia/Kolkata",
+        "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul", "Asia/Singapore",
+        "Australia/Sydney", "Pacific/Auckland", "UTC",
+    ]
+
+    static func timeZoneLabel(_ id: String) -> String {
+        (id.components(separatedBy: "/").last ?? id).replacingOccurrences(of: "_", with: " ")
     }
 }
