@@ -47,7 +47,7 @@ struct RootView: View {
         .onChange(of: store.events) { reresolveSelection() }
         .sheet(item: compactSheetBinding) { ctx in
             NavigationStack {
-                EventPanelView(context: ctx)
+                EventPanelView(context: ctx, isSheet: true)
             }
         }
         .overlay {

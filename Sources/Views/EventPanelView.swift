@@ -61,6 +61,9 @@ struct EventPanelView: View {
     @Environment(\.openURL) private var openURL
 
     let context: EditorContext
+    /// True only when presented as a sheet (iOS compact). The inline macOS
+    /// panel must NOT call dismiss() — that dismisses the whole window.
+    var isSheet = false
 
     @State private var title: String
     @State private var isAllDay: Bool
@@ -76,8 +79,9 @@ struct EventPanelView: View {
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
 
-    init(context: EditorContext) {
+    init(context: EditorContext, isSheet: Bool = false) {
         self.context = context
+        self.isSheet = isSheet
         _title = State(initialValue: context.event.title ?? "")
         _isAllDay = State(initialValue: context.event.isAllDay)
         _start = State(initialValue: context.event.startDate ?? Date())
@@ -378,7 +382,7 @@ struct EventPanelView: View {
 
     private func close() {
         appState.closePanel()
-        dismiss()
+        if isSheet { dismiss() }
     }
 
     private func save() {
@@ -407,7 +411,7 @@ struct EventPanelView: View {
             Task { await GoogleSync.attachGuests(event: event, emails: emails, addMeet: meet, appState: state) }
         }
         appState.closePanel()
-        dismiss()
+        if isSheet { dismiss() }
     }
 }
 
