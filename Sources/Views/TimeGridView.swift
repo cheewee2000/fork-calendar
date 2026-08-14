@@ -486,7 +486,9 @@ struct EventBlockView: View {
                     .onChanged { value in
                         isResizing = true
                         resizingTop = top
-                        resizeDelta = value.translation.height
+                        // Live preview snaps in 15-minute steps
+                        let quarter = hourHeight / 4
+                        resizeDelta = (value.translation.height / quarter).rounded() * quarter
                     }
                     .onEnded { value in
                         defer {
@@ -515,7 +517,12 @@ struct EventBlockView: View {
             .onChanged { value in
                 guard isEditable else { return }
                 isDragging = true
-                dragOffset = value.translation
+                // Live preview snaps to 15-minute rows and whole day columns
+                let quarter = hourHeight / 4
+                dragOffset = CGSize(
+                    width: (value.translation.width / colWidth).rounded() * colWidth,
+                    height: (value.translation.height / quarter).rounded() * quarter
+                )
             }
             .onEnded { value in
                 defer {
