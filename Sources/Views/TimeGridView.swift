@@ -44,12 +44,23 @@ struct TimeGridView: View {
                     }
                 }
                 .overlay(alignment: .leading) {
-                    // Inert blocker: keeps clicks in the gutter column from
-                    // reaching the strip's invisible out-of-bounds headers.
-                    Color.clear
-                        .frame(width: gutterWidth)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
+                    // Zone labels for the gutter columns; doubles as the click
+                    // blocker keeping the strip's invisible out-of-bounds
+                    // headers from receiving gutter clicks.
+                    HStack(spacing: 0) {
+                        ForEach(settings.secondaryTZs, id: \.self) { id in
+                            Text(TimeZone(identifier: id)?.abbreviation() ?? AppSettings.timeZoneLabel(id))
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .frame(width: 42, alignment: .trailing)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.bottom, 2)
+                    .frame(width: gutterWidth, alignment: .leading)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .contentShape(Rectangle())
                 }
                 HStack(alignment: .top, spacing: 0) {
                     Text("all-day")

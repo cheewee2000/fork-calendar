@@ -22,12 +22,13 @@ targets:
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: false
         COMBINE_HIDPI_IMAGES: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.8.3"
-        CFBundleVersion: "19"
+        CFBundleShortVersionString: "0.9.0"
+        CFBundleVersion: "20"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSHumanReadableCopyright: © 2026 CW&T
@@ -47,12 +48,15 @@ targets:
         PRODUCT_NAME: Fork Calendar
         PRODUCT_BUNDLE_IDENTIFIER: com.cwandt.forkcalendar.ios
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEVELOPMENT_TEAM: 3BU3GL43JN
+        CODE_SIGN_STYLE: Automatic
     info:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.8.3"
-        CFBundleVersion: "19"
+        CFBundleShortVersionString: "0.9.0"
+        CFBundleVersion: "20"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         UILaunchScreen: {}
