@@ -50,6 +50,24 @@ enum GoogleCalendarAPI {
         return response.items?.first(where: { $0.status != "cancelled" })?.id
     }
 
+    /// Fallback lookup: exact title within ±36h of the event start.
+    static func findEventIDByTime(title: String, start: Date, calendarID: String, token: String) async throws -> String? {
+        struct SearchResponse: Decodable {
+            struct Item: Decodable { let id: String; let summary: String?; let status: String? }
+            let items: [Item]?
+        }
+        let iso = ISO8601DateFormatter()
+        let timeMin = iso.string(from: start.addingTimeInterval(-36 * 3600))
+        let timeMax = iso.string(from: start.addingTimeInterval(36 * 3600))
+        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
+        let q = title.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? title
+        let data = try await get("\(base)/calendars/\(cal)/events?q=\(q)&timeMin=\(timeMin)&timeMax=\(timeMax)&maxResults=25", token: token)
+        let items = (try JSONDecoder().decode(SearchResponse.self, from: data)).items ?? []
+        let matches = items.filter { $0.status != "cancelled" && $0.summary == title }
+        // Prefer the series master (no occurrence suffix) so RSVPs cover the series
+        return matches.first(where: { !$0.id.contains("_") })?.id ?? matches.first?.id
+    }
+
     static func eventAttendees(eventID: String, calendarID: String, token: String) async throws -> [String] {
         struct Event: Decodable {
             struct Attendee: Decodable { let email: String? }
@@ -137,21 +155,49 @@ enum GoogleCalendarAPI {
 enum GoogleSync {
     private static var cachedCalendars: [GoogleCalendarAPI.GCalendar]?
 
-    /// Find the Google (calendarID, eventID) for an EventKit event by iCal UID.
-    /// Tries the title-matched calendar first, then all other calendars — the
-    /// EKCalendar title doesn't always equal the Google calendar summary.
-    private static func locateEvent(uid: String, calendarTitle: String, token: String) async throws -> (calendarID: String, eventID: String)? {
+    /// UID forms worth trying: EventKit's external identifier can carry
+    /// occurrence suffixes ("…/RID=…") or omit Google's "@google.com".
+    static func uidCandidates(for event: EKEvent) -> [String] {
+        guard let raw = event.calendarItemExternalIdentifier, !raw.isEmpty else { return [] }
+        var forms = [raw]
+        if let slash = raw.firstIndex(of: "/") {
+            forms.append(String(raw[..<slash]))
+        }
+        var result: [String] = []
+        for form in forms {
+            result.append(form)
+            if !form.contains("@") { result.append(form + "@google.com") }
+        }
+        var seen = Set<String>()
+        return result.filter { seen.insert($0).inserted }
+    }
+
+    /// Find the Google (calendarID, eventID) for an EventKit event. Tries all
+    /// UID forms on the title-matched calendar first, then every calendar,
+    /// then falls back to a time-window + exact-title search.
+    private static func locateEvent(event: EKEvent, token: String) async throws -> (calendarID: String, eventID: String)? {
         if cachedCalendars == nil {
             cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
         }
-        let calendars = cachedCalendars ?? []
+        let calendars = (cachedCalendars ?? []).filter { $0.accessRole != "freeBusyReader" }
+        let calendarTitle = event.calendar?.title ?? ""
         var ordered = calendars.filter {
             $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
         }
         ordered += calendars.filter { cal in !ordered.contains(where: { $0.id == cal.id }) }
-        for cal in ordered where cal.accessRole != "freeBusyReader" {
-            if let eventID = ((try? await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token)) ?? nil) {
-                return (cal.id, eventID)
+
+        for cal in ordered {
+            for uid in uidCandidates(for: event) {
+                if let eventID = ((try? await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token)) ?? nil) {
+                    return (cal.id, eventID)
+                }
+            }
+        }
+        if let title = event.title, !title.isEmpty, let start = event.startDate {
+            for cal in ordered {
+                if let eventID = ((try? await GoogleCalendarAPI.findEventIDByTime(title: title, start: start, calendarID: cal.id, token: token)) ?? nil) {
+                    return (cal.id, eventID)
+                }
             }
         }
         return nil
@@ -171,16 +217,11 @@ enum GoogleSync {
                      reason: "Google not connected")
             return
         }
-        guard let uid = event.calendarItemExternalIdentifier,
-              let calendarTitle = event.calendar?.title else {
-            fallback(event: event, emails: cleanEmails, appState: appState, reason: "No event UID yet")
-            return
-        }
         do {
             // The CalDAV push to Google may lag a few seconds for new events
             var located: (calendarID: String, eventID: String)?
             for _ in 0..<8 {
-                located = try await locateEvent(uid: uid, calendarTitle: calendarTitle, token: token)
+                located = try await locateEvent(event: event, token: token)
                 if located != nil { break }
                 try await Task.sleep(nanoseconds: 3_000_000_000)
             }
@@ -220,13 +261,8 @@ enum GoogleSync {
             appState.toast = "RSVP needs Google connected (Settings ⌘,)"
             return
         }
-        guard let uid = event.calendarItemExternalIdentifier,
-              let calendarTitle = event.calendar?.title else {
-            appState.toast = "Can't identify this event on Google"
-            return
-        }
         do {
-            guard let located = try await locateEvent(uid: uid, calendarTitle: calendarTitle, token: token) else {
+            guard let located = try await locateEvent(event: event, token: token) else {
                 appState.toast = "Event not found on the connected Google account"
                 return
             }
@@ -249,5 +285,61 @@ enum GoogleSync {
 
     static func clearCache() {
         cachedCalendars = nil
+    }
+
+    /// Dump Google-lookup diagnostics for upcoming attendee events to a file.
+    static func runDiagnostics(store: CalendarStore, appState: AppState) async {
+        var lines: [String] = ["Fork Calendar Google diagnostics — \(Date())"]
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("forkcal-google-diag.txt")
+        defer {
+            try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
+            appState.toast = "Diagnostics written"
+        }
+        guard let token = await GoogleAuth.shared.validToken() else {
+            lines.append("NO TOKEN — not connected")
+            return
+        }
+        lines.append("token: ok")
+        do {
+            let calendars = try await GoogleCalendarAPI.calendarList(token: token)
+            lines.append("google calendars:")
+            for cal in calendars {
+                lines.append("  \(cal.summary) | id=\(cal.id) | role=\(cal.accessRole ?? "?")")
+            }
+            let now = Date()
+            let candidates = store.events
+                .filter { $0.attendees?.isEmpty == false && ($0.startDate ?? now) > now.addingTimeInterval(-7 * 86400) }
+                .prefix(5)
+            lines.append("candidate events with attendees: \(candidates.count)")
+            for event in candidates {
+                lines.append("EVENT \"\(event.title ?? "?")\"")
+                lines.append("  ekCalendar=\(event.calendar?.title ?? "?") source=\(event.calendar?.source?.title ?? "?")")
+                lines.append("  externalID=\(event.calendarItemExternalIdentifier ?? "nil")")
+                lines.append("  eventIdentifier=\(event.eventIdentifier ?? "nil")")
+                let uids = uidCandidates(for: event)
+                lines.append("  uid candidates: \(uids)")
+                var hits = 0
+                for cal in calendars {
+                    for uid in uids {
+                        do {
+                            if let found = try await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token) {
+                                lines.append("  FOUND in \(cal.summary) via \(uid): eventID=\(found)")
+                                hits += 1
+                            }
+                        } catch {
+                            lines.append("  lookup error in \(cal.summary): \(error.localizedDescription)")
+                        }
+                    }
+                    if hits == 0, let title = event.title, let start = event.startDate,
+                       let found = ((try? await GoogleCalendarAPI.findEventIDByTime(title: title, start: start, calendarID: cal.id, token: token)) ?? nil) {
+                        lines.append("  FOUND by time+title in \(cal.summary): eventID=\(found)")
+                        hits += 1
+                    }
+                }
+                if hits == 0 { lines.append("  NOT FOUND in any calendar") }
+            }
+        } catch {
+            lines.append("calendarList error: \(error.localizedDescription)")
+        }
     }
 }

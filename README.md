@@ -2,7 +2,7 @@
 
 A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI + EventKit. Reads and edits your real system calendars (iCloud, Google via macOS/iOS accounts, etc.).
 
-**v0.5.4**
+**v0.5.5**
 
 ## Features
 
