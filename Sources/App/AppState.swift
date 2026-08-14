@@ -88,6 +88,8 @@ final class AppState: ObservableObject {
     @Published var pendingSpanAction: PendingSpanAction?
     @Published var showSpanDialog = false
     @Published var columnVisibility: NavigationSplitViewVisibility = .all
+    /// iPhone: presents the calendar list (sidebar equivalent) as a sheet.
+    @Published var showCalendarsSheet = false
 
     // ⌘K palette
     @Published var paletteOpen = false

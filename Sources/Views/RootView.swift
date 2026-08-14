@@ -21,17 +21,29 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $appState.columnVisibility) {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
-        } detail: {
-            HStack(spacing: 0) {
+        Group {
+            if isCompact {
+                // iPhone: the grid directly; calendar list lives in a sheet
+                // (a collapsed NavigationSplitView would strand users on the
+                // sidebar with no path to the detail column).
                 CalendarDetailView()
-                if !isCompact, let ctx = appState.panelContext {
-                    Divider()
-                    EventPanelView(context: ctx)
-                        .id(ctx.id)
-                        .frame(width: 320)
+                    .sheet(isPresented: $appState.showCalendarsSheet) {
+                        NavigationStack { SidebarView() }
+                    }
+            } else {
+                NavigationSplitView(columnVisibility: $appState.columnVisibility) {
+                    SidebarView()
+                        .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
+                } detail: {
+                    HStack(spacing: 0) {
+                        CalendarDetailView()
+                        if let ctx = appState.panelContext {
+                            Divider()
+                            EventPanelView(context: ctx)
+                                .id(ctx.id)
+                                .frame(width: 320)
+                        }
+                    }
                 }
             }
         }
@@ -164,9 +176,29 @@ struct CalendarDetailView: View {
 struct HeaderBar: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    private var showsCalendarsButton: Bool {
+        #if os(iOS)
+        return sizeClass == .compact
+        #else
+        return false
+        #endif
+    }
 
     var body: some View {
         HStack(spacing: 10) {
+            if showsCalendarsButton {
+                Button {
+                    appState.showCalendarsSheet = true
+                } label: {
+                    Image(systemName: "sidebar.leading")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
             Text(Fmt.monthYear.string(from: appState.currentDate))
                 .font(.title3.weight(.semibold))
                 .lineLimit(1)
