@@ -11,18 +11,46 @@ struct SpanBar: Identifiable {
 }
 
 enum SpanLayout {
+    private static let byStart: (EKEvent, EKEvent) -> Bool = {
+        if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
+        return $0.endDate > $1.endDate
+    }
+
     /// Lays out spanning events over the given ordered day columns
     /// (handles gaps, e.g. hidden weekends).
+    ///
+    /// With `stableLanes`, lane assignment runs over every fetched spanning
+    /// event (not just the visible window), so bars keep their row while the
+    /// grid side-scrolls; the window merely clips the result. Without it,
+    /// lanes pack densely within the window (used by month rows, which don't
+    /// slide).
     @MainActor
-    static func bars(days: [Date], store: CalendarStore, calendar: Calendar) -> [SpanBar] {
+    static func bars(days: [Date], store: CalendarStore, calendar: Calendar, stableLanes: Bool = false) -> [SpanBar] {
         guard let first = days.first, let last = days.last else { return [] }
         let rangeStart = calendar.startOfDay(for: first)
         guard let rangeEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)) else { return [] }
         let dayKeys = days.map { calendar.startOfDay(for: $0) }
 
-        let events = store.spanningEvents(from: rangeStart, to: rangeEnd).sorted {
-            if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
-            return $0.endDate > $1.endDate
+        let events = store.spanningEvents(from: rangeStart, to: rangeEnd).sorted(by: byStart)
+
+        var globalLanes: [String: Int] = [:]
+        if stableLanes {
+            // Greedy sweep in calendar-day ordinals over the full fetched set;
+            // an event's lane depends only on its neighbors, not the window.
+            let all = store.spanningEvents(from: .distantPast, to: .distantFuture).sorted(by: byStart)
+            var laneEnds: [Int] = []
+            for event in all {
+                guard let start = event.startDate, let end = event.endDate else { continue }
+                let s = dayOrdinal(calendar.startOfDay(for: start), calendar: calendar, epoch: rangeStart)
+                let e = dayOrdinal(calendar.startOfDay(for: max(end.addingTimeInterval(-1), start)), calendar: calendar, epoch: rangeStart)
+                if let free = laneEnds.indices.first(where: { laneEnds[$0] < s }) {
+                    globalLanes[eventKey(event)] = free
+                    laneEnds[free] = e
+                } else {
+                    globalLanes[eventKey(event)] = laneEnds.count
+                    laneEnds.append(e)
+                }
+            }
         }
 
         var laneEnds: [Int] = []
@@ -35,7 +63,9 @@ enum SpanLayout {
                   let endIndex = dayKeys.lastIndex(where: { $0 <= lastMomentDay }),
                   endIndex >= startIndex else { continue }
             let lane: Int
-            if let free = laneEnds.firstIndex(where: { $0 < startIndex }) {
+            if stableLanes {
+                lane = globalLanes[eventKey(event)] ?? 0
+            } else if let free = laneEnds.firstIndex(where: { $0 < startIndex }) {
                 lane = free
                 laneEnds[free] = endIndex
             } else {
@@ -45,6 +75,10 @@ enum SpanLayout {
             result.append(SpanBar(event: event, startIndex: startIndex, endIndex: endIndex, lane: lane))
         }
         return result
+    }
+
+    private static func dayOrdinal(_ day: Date, calendar: Calendar, epoch: Date) -> Int {
+        calendar.dateComponents([.day], from: epoch, to: day).day ?? 0
     }
 }
 

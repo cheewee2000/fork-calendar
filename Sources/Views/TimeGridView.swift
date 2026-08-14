@@ -25,7 +25,7 @@ struct TimeGridView: View {
             let pageWidth = max(outer.size.width - gutterWidth, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
             let extDays = appState.visibleDays(pageOffset: -1) + days + appState.visibleDays(pageOffset: 1)
-            let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar)
+            let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)
             let laneCount = (bars.map(\.lane).max() ?? -1) + 1
 
             VStack(spacing: 0) {
