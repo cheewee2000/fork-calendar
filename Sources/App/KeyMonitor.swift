@@ -157,8 +157,8 @@ enum KeyMonitor {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// Settle on a day boundary, with a light extra snap when the frame is
-    /// within one day of a full week alignment.
+    /// Settle on the nearest day boundary (no week alignment — the grid can
+    /// rest on any day).
     private static func settlePan(_ appState: AppState) {
         snapWork?.cancel()
         let colWidth = appState.gridColumnWidth
@@ -173,19 +173,6 @@ enum KeyMonitor {
         if dayShift != 0 {
             appState.panShiftDays(dayShift)
             pan += CGFloat(dayShift) * colWidth
-        }
-        // Light week snap (week view only): within one day of Sun–Sat framing
-        if case .week = appState.viewMode, let anchor = appState.gridAnchor {
-            let cal = appState.calendar
-            let weekStart = cal.startOfWeek(for: anchor)
-            let offsetDays = cal.dateComponents([.day], from: weekStart, to: anchor).day ?? 0
-            if offsetDays == 1 {
-                appState.panShiftDays(-1)
-                pan -= colWidth
-            } else if offsetDays == 6 {
-                appState.panShiftDays(1)
-                pan += colWidth
-            }
         }
         var t = Transaction()
         t.disablesAnimations = true
