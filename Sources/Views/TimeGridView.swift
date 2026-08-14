@@ -318,10 +318,27 @@ struct AllDayCreateLayer: View {
             }
             .contentShape(Rectangle())
             #if os(iOS)
-            .gesture(createLongPress)
-            .gesture(SpatialTapGesture().onEnded { _ in
-                if appState.panelContext != nil { appState.closePanel() }
-            })
+            .overlay {
+                LongPressDrag(
+                    onTap: { _ in
+                        if appState.panelContext != nil { appState.closePanel() }
+                    },
+                    onBegan: { point in
+                        anchorIndex = index(at: point.x)
+                        currentIndex = anchorIndex
+                    },
+                    onMoved: { point, _ in
+                        currentIndex = index(at: point.x)
+                    },
+                    onEnded: { completed in
+                        if completed, let a = anchorIndex, let c = currentIndex {
+                            createAllDay(from: min(a, c), to: max(a, c))
+                        }
+                        anchorIndex = nil
+                        currentIndex = nil
+                    }
+                )
+            }
             #else
             .gesture(createDrag)
             .gesture(SpatialTapGesture().onEnded { value in
@@ -334,28 +351,6 @@ struct AllDayCreateLayer: View {
             #endif
         }
     }
-
-    #if os(iOS)
-    private var createLongPress: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard case .second(true, let drag?) = value else { return }
-                if anchorIndex == nil {
-                    Haptics.tap()
-                    anchorIndex = index(at: drag.startLocation.x)
-                }
-                currentIndex = index(at: drag.location.x)
-            }
-            .onEnded { _ in
-                if let a = anchorIndex, let c = currentIndex {
-                    createAllDay(from: min(a, c), to: max(a, c))
-                }
-                anchorIndex = nil
-                currentIndex = nil
-            }
-    }
-    #endif
 
     private func index(at x: CGFloat) -> Int {
         max(0, min(extDays.count - 1, Int(floor(x / max(colWidth, 1)))))
@@ -425,10 +420,31 @@ struct AllDaySpanBar: View {
             .overlay(alignment: .trailing) { if isEditable { resizeHandle(lead: false) } }
             #endif
             .opacity(isDragging || isResizing ? 0.75 : 1)
-            .offset(x: CGFloat(startIdx) * colWidth + 2, y: CGFloat(bar.lane) * 18)
             #if os(iOS)
-            .gesture(moveLongPress)
-            #else
+            .overlay {
+                LongPressDrag(
+                    onTap: { _ in appState.select(bar.event) },
+                    onBegan: { _ in
+                        guard isEditable else { return }
+                        isDragging = true
+                        dragCols = 0
+                    },
+                    onMoved: { _, translation in
+                        guard isEditable else { return }
+                        dragCols = Int((translation.width / colWidth).rounded())
+                    },
+                    onEnded: { completed in
+                        let cols = dragCols
+                        isDragging = false
+                        dragCols = 0
+                        guard completed, isEditable else { return }
+                        commitMove(cols: cols)
+                    }
+                )
+            }
+            #endif
+            .offset(x: CGFloat(startIdx) * colWidth + 2, y: CGFloat(bar.lane) * 18)
+            #if os(macOS)
             .gesture(moveDrag)
             #endif
     }
@@ -444,28 +460,6 @@ struct AllDaySpanBar: View {
         appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
     }
 
-    #if os(iOS)
-    private var moveLongPress: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard isEditable, case .second(true, let drag) = value else { return }
-                if !isDragging {
-                    isDragging = true
-                    Haptics.tap()
-                }
-                if let drag { dragCols = Int((drag.translation.width / colWidth).rounded()) }
-            }
-            .onEnded { value in
-                defer {
-                    isDragging = false
-                    dragCols = 0
-                }
-                guard isEditable, case .second(true, let drag?) = value else { return }
-                commitMove(cols: Int((drag.translation.width / colWidth).rounded()))
-            }
-    }
-    #endif
 
     /// Calendar-day difference between two strip columns.
     private func dayDelta(fromIndex: Int, toIndex: Int) -> Int {
@@ -554,11 +548,8 @@ struct DayColumn: View {
             }
             Color.clear
                 .contentShape(Rectangle())
-                #if os(iOS)
-                .gesture(createLongPress)
-                #else
+                #if os(macOS)
                 .gesture(createDrag)
-                #endif
                 .gesture(SpatialTapGesture().onEnded { value in
                     // Single click never creates a timed event — only drags do
                     // (all-day events can still be made with one click up top).
@@ -568,6 +559,33 @@ struct DayColumn: View {
                         appState.closePanel()
                     }
                 })
+                #endif
+
+            #if os(iOS)
+            // Long-press drops a 1-hour draft; drag adjusts; release opens the
+            // editor. Sits below the event blocks so their layers win touches.
+            LongPressDrag(
+                onTap: { _ in
+                    if appState.panelContext != nil { appState.closePanel() }
+                },
+                onBegan: { point in
+                    draftStart = snap(point.y)
+                    draftEnd = (draftStart ?? 0) + hourHeight
+                },
+                onMoved: { point, translation in
+                    if abs(translation.height) > 8 { draftEnd = snap(point.y) }
+                },
+                onEnded: { completed in
+                    defer {
+                        draftStart = nil
+                        draftEnd = nil
+                    }
+                    guard completed, let s = draftStart, var e = draftEnd else { return }
+                    if abs(e - s) < hourHeight / 4 { e = s + hourHeight }
+                    createEvent(fromY: min(s, e), toY: max(s, e))
+                }
+            )
+            #endif
 
             if let s = draftStart, let e = draftEnd {
                 RoundedRectangle(cornerRadius: 5)
@@ -647,42 +665,6 @@ struct DayColumn: View {
             }
     }
 
-    #if os(iOS)
-    /// Notion-style touch creation: long-press drops a one-hour draft under
-    /// the finger (with a haptic), dragging adjusts it, release opens the
-    /// editor. Plain drags stay free for scrolling.
-    private var createLongPress: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                // The sequenced drag reports as soon as the long press hands
-                // off, so its startLocation is where the finger held.
-                guard case .second(true, let drag?) = value else { return }
-                if draftStart == nil {
-                    Haptics.tap()
-                    draftStart = snap(drag.startLocation.y)
-                    draftEnd = (draftStart ?? 0) + hourHeight
-                }
-                if abs(drag.translation.height) > 8 {
-                    draftEnd = snap(drag.location.y)
-                }
-            }
-            .onEnded { value in
-                defer {
-                    draftStart = nil
-                    draftEnd = nil
-                }
-                guard case .second(true, _) = value, let s = draftStart, var e = draftEnd else { return }
-                if abs(e - s) < hourHeight / 4 { e = s + hourHeight }
-                if appState.availabilityMode {
-                    addSlot(fromY: min(s, e), toY: max(s, e))
-                } else {
-                    createEvent(fromY: min(s, e), toY: max(s, e))
-                }
-            }
-    }
-    #endif
-
     private func snap(_ y: CGFloat) -> CGFloat {
         let quarter = hourHeight / 4
         return (y / quarter).rounded() * quarter
@@ -737,6 +719,7 @@ struct EventBlockView: View {
 
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
+    @State private var moveTranslation: CGSize = .zero
     @State private var resizeDelta: CGFloat = 0
     @State private var resizingTop = false
     @State private var isResizing = false
@@ -820,14 +803,38 @@ struct EventBlockView: View {
             }
         }
         .opacity((isDragging ? 0.7 : 1) * (isPast && !isSelected ? 0.55 : 1))
+        #if os(iOS)
+        .overlay {
+            LongPressDrag(
+                onTap: { _ in appState.select(item.event) },
+                onBegan: { _ in
+                    guard isEditable else { return }
+                    isDragging = true
+                    moveTranslation = .zero
+                },
+                onMoved: { _, translation in
+                    guard isEditable else { return }
+                    moveTranslation = translation
+                    dragOffset = snappedMoveOffset(translation)
+                },
+                onEnded: { completed in
+                    defer {
+                        isDragging = false
+                        dragOffset = .zero
+                        moveTranslation = .zero
+                    }
+                    guard completed, isEditable, isDragging else { return }
+                    commitMove(moveTranslation)
+                }
+            )
+        }
+        #endif
         .offset(x: x + dragOffset.width, y: y + dragOffset.height)
         .onTapGesture { appState.select(item.event) }
-        #if os(iOS)
-        .gesture(moveLongPress)
-        #else
+        #if os(macOS)
         .gesture(moveDrag)
-        #endif
         .contextMenu { contextMenuItems(joinURL: joinURL) }
+        #endif
     }
 
     /// On touch, handles appear only on the selected event so drags on
@@ -981,27 +988,4 @@ struct EventBlockView: View {
             }
     }
 
-    #if os(iOS)
-    /// Long-press lifts the event (haptic), then dragging moves it.
-    private var moveLongPress: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard isEditable, case .second(true, let drag) = value else { return }
-                if !isDragging {
-                    isDragging = true
-                    Haptics.tap()
-                }
-                if let drag { dragOffset = snappedMoveOffset(drag.translation) }
-            }
-            .onEnded { value in
-                defer {
-                    isDragging = false
-                    dragOffset = .zero
-                }
-                guard isEditable, case .second(true, let drag?) = value else { return }
-                commitMove(drag.translation)
-            }
-    }
-    #endif
 }
