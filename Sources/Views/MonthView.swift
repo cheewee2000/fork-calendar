@@ -174,16 +174,56 @@ struct MonthSpanBar: View {
 
         return SpanBarView(event: bar.event, compact: true)
             .frame(width: CGFloat(endIdx - startIdx + 1) * cellW - 6, height: 14)
+            #if os(macOS)
             .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }
             .overlay(alignment: .trailing) { if isEditable { resizeHandle(lead: false) } }
+            #endif
             .opacity(isDragging || isResizing ? 0.75 : 1)
             .zIndex(isDragging ? 100 : 0)
             .offset(
                 x: CGFloat(startIdx) * cellW + 3 + dragOffset.width,
                 y: barsTop + CGFloat(bar.lane) * 16 + dragOffset.height
             )
+            #if os(iOS)
+            .gesture(moveLongPress)
+            #else
             .gesture(moveDrag)
+            #endif
     }
+
+    private func snappedOffset(_ translation: CGSize) -> CGSize {
+        CGSize(
+            width: (translation.width / cellW).rounded() * cellW,
+            height: (translation.height / rowH).rounded() * rowH
+        )
+    }
+
+    private func moveDelta(_ translation: CGSize) -> Int {
+        Int((translation.width / cellW).rounded()) + 7 * Int((translation.height / rowH).rounded())
+    }
+
+    #if os(iOS)
+    private var moveLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard isEditable, case .second(true, let drag) = value else { return }
+                if !isDragging {
+                    isDragging = true
+                    Haptics.tap()
+                }
+                if let drag { dragOffset = snappedOffset(drag.translation) }
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragOffset = .zero
+                }
+                guard isEditable, case .second(true, let drag?) = value else { return }
+                shift(byDays: moveDelta(drag.translation))
+            }
+    }
+    #endif
 
     private func shift(byDays delta: Int) {
         guard delta != 0 else { return }
@@ -199,10 +239,7 @@ struct MonthSpanBar: View {
             .onChanged { value in
                 guard isEditable else { return }
                 isDragging = true
-                dragOffset = CGSize(
-                    width: (value.translation.width / cellW).rounded() * cellW,
-                    height: (value.translation.height / rowH).rounded() * rowH
-                )
+                dragOffset = snappedOffset(value.translation)
             }
             .onEnded { value in
                 defer {
@@ -210,9 +247,7 @@ struct MonthSpanBar: View {
                     dragOffset = .zero
                 }
                 guard isEditable else { return }
-                let delta = Int((value.translation.width / cellW).rounded())
-                    + 7 * Int((value.translation.height / rowH).rounded())
-                shift(byDays: delta)
+                shift(byDays: moveDelta(value.translation))
             }
     }
 
@@ -334,7 +369,29 @@ struct MonthCell: View {
             appState.viewMode = .day
         }
         .onTapGesture { appState.currentDate = day }
+        #if os(iOS)
+        .gesture(createLongPress)
+        #else
         .gesture(createDrag)
+        #endif
+    }
+
+    private func updateDragRange(translation: CGSize) {
+        let cal = appState.calendar
+        let delta = Int((translation.width / cellW).rounded())
+            + 7 * Int((translation.height / rowH).rounded())
+        let anchor = cal.startOfDay(for: day)
+        let target = cal.date(byAdding: .day, value: delta, to: anchor) ?? anchor
+        appState.monthDragRange = min(anchor, target)...max(anchor, target)
+    }
+
+    private func finishDragCreate() {
+        if let range = appState.monthDragRange {
+            let cal = appState.calendar
+            let end = cal.date(byAdding: .day, value: 1, to: range.upperBound) ?? range.upperBound
+            appState.newEvent(store: store, start: range.lowerBound, end: end, allDay: true)
+        }
+        appState.monthDragRange = nil
     }
 
     /// Drag across cells to create a (multi-day) all-day event — horizontal =
@@ -342,22 +399,33 @@ struct MonthCell: View {
     private var createDrag: some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
-                let cal = appState.calendar
-                let delta = Int((value.translation.width / cellW).rounded())
-                    + 7 * Int((value.translation.height / rowH).rounded())
-                let anchor = cal.startOfDay(for: day)
-                let target = cal.date(byAdding: .day, value: delta, to: anchor) ?? anchor
-                appState.monthDragRange = min(anchor, target)...max(anchor, target)
+                updateDragRange(translation: value.translation)
             }
             .onEnded { _ in
-                if let range = appState.monthDragRange {
-                    let cal = appState.calendar
-                    let end = cal.date(byAdding: .day, value: 1, to: range.upperBound) ?? range.upperBound
-                    appState.newEvent(store: store, start: range.lowerBound, end: end, allDay: true)
-                }
-                appState.monthDragRange = nil
+                finishDragCreate()
             }
     }
+
+    #if os(iOS)
+    /// Long-press highlights the day (haptic), drag extends the span,
+    /// release opens the editor. Plain drags stay free for scrolling.
+    private var createLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard case .second(true, let drag) = value else { return }
+                if appState.monthDragRange == nil { Haptics.tap() }
+                updateDragRange(translation: drag?.translation ?? .zero)
+            }
+            .onEnded { value in
+                guard case .second(true, _) = value else {
+                    appState.monthDragRange = nil
+                    return
+                }
+                finishDragCreate()
+            }
+    }
+    #endif
 
     private var monthDayLabel: String {
         let f = DateFormatter()
@@ -411,7 +479,11 @@ struct MonthChip: View {
         .zIndex(isDragging ? 100 : 0)
         .opacity(isDragging ? 0.85 : 1)
         .onTapGesture { appState.select(event) }
+        #if os(iOS)
+        .gesture(moveLongPress)
+        #else
         .gesture(moveDrag)
+        #endif
         .contextMenu {
             if isEditable {
                 Button("Duplicate") { store.duplicate(event) }
@@ -419,6 +491,17 @@ struct MonthChip: View {
             }
             Button("Copy title") { Clipboard.copy(event.title ?? "") }
         }
+    }
+
+    private func commitMove(_ translation: CGSize) {
+        let dayDelta = Int((translation.width / cellW).rounded())
+            + 7 * Int((translation.height / rowH).rounded())
+        guard dayDelta != 0 else { return }
+        let snapshot = EventSnapshot(event)
+        let cal = appState.calendar
+        event.startDate = cal.date(byAdding: .day, value: dayDelta, to: event.startDate) ?? event.startDate
+        event.endDate = cal.date(byAdding: .day, value: dayDelta, to: event.endDate) ?? event.endDate
+        appState.commitChange(to: event, snapshot: snapshot, isNew: false, store: store)
     }
 
     /// Drag a chip to another day cell — horizontal = days, vertical = weeks.
@@ -435,14 +518,30 @@ struct MonthChip: View {
                     dragOffset = .zero
                 }
                 guard isEditable else { return }
-                let dayDelta = Int((value.translation.width / cellW).rounded())
-                    + 7 * Int((value.translation.height / rowH).rounded())
-                guard dayDelta != 0 else { return }
-                let snapshot = EventSnapshot(event)
-                let cal = appState.calendar
-                event.startDate = cal.date(byAdding: .day, value: dayDelta, to: event.startDate) ?? event.startDate
-                event.endDate = cal.date(byAdding: .day, value: dayDelta, to: event.endDate) ?? event.endDate
-                appState.commitChange(to: event, snapshot: snapshot, isNew: false, store: store)
+                commitMove(value.translation)
             }
     }
+
+    #if os(iOS)
+    private var moveLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard isEditable, case .second(true, let drag) = value else { return }
+                if !isDragging {
+                    isDragging = true
+                    Haptics.tap()
+                }
+                if let drag { dragOffset = drag.translation }
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragOffset = .zero
+                }
+                guard isEditable, case .second(true, let drag?) = value else { return }
+                commitMove(drag.translation)
+            }
+    }
+    #endif
 }

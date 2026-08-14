@@ -302,6 +302,9 @@ struct AllDayCreateLayer: View {
 
     @State private var anchorIndex: Int?
     @State private var currentIndex: Int?
+    #if os(iOS)
+    @State private var touchX: CGFloat = 0
+    #endif
 
     var body: some View {
         GeometryReader { geo in
@@ -317,6 +320,14 @@ struct AllDayCreateLayer: View {
                 }
             }
             .contentShape(Rectangle())
+            #if os(iOS)
+            .simultaneousGesture(DragGesture(minimumDistance: 0)
+                .onChanged { touchX = $0.location.x })
+            .gesture(createLongPress)
+            .gesture(SpatialTapGesture().onEnded { _ in
+                if appState.panelContext != nil { appState.closePanel() }
+            })
+            #else
             .gesture(createDrag)
             .gesture(SpatialTapGesture().onEnded { value in
                 if appState.panelContext != nil {
@@ -325,8 +336,32 @@ struct AllDayCreateLayer: View {
                     createAllDay(from: index(at: value.location.x), to: index(at: value.location.x))
                 }
             })
+            #endif
         }
     }
+
+    #if os(iOS)
+    private var createLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard case .second(true, let drag) = value else { return }
+                if anchorIndex == nil {
+                    Haptics.tap()
+                    anchorIndex = index(at: drag?.startLocation.x ?? touchX)
+                    currentIndex = anchorIndex
+                }
+                if let drag { currentIndex = index(at: drag.location.x) }
+            }
+            .onEnded { _ in
+                if let a = anchorIndex, let c = currentIndex {
+                    createAllDay(from: min(a, c), to: max(a, c))
+                }
+                anchorIndex = nil
+                currentIndex = nil
+            }
+    }
+    #endif
 
     private func index(at x: CGFloat) -> Int {
         max(0, min(extDays.count - 1, Int(floor(x / max(colWidth, 1)))))
@@ -391,12 +426,52 @@ struct AllDaySpanBar: View {
 
         return SpanBarView(event: bar.event)
             .frame(width: CGFloat(endIdx - startIdx + 1) * colWidth - 4, height: 16)
+            #if os(macOS)
             .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }
             .overlay(alignment: .trailing) { if isEditable { resizeHandle(lead: false) } }
+            #endif
             .opacity(isDragging || isResizing ? 0.75 : 1)
             .offset(x: CGFloat(startIdx) * colWidth + 2, y: CGFloat(bar.lane) * 18)
+            #if os(iOS)
+            .gesture(moveLongPress)
+            #else
             .gesture(moveDrag)
+            #endif
     }
+
+    private func commitMove(cols: Int) {
+        let target = max(0, min(extDays.count - 1, bar.startIndex + cols))
+        let delta = dayDelta(fromIndex: bar.startIndex, toIndex: target)
+        guard delta != 0 else { return }
+        let cal = appState.calendar
+        let snapshot = EventSnapshot(bar.event)
+        bar.event.startDate = cal.date(byAdding: .day, value: delta, to: bar.event.startDate) ?? bar.event.startDate
+        bar.event.endDate = cal.date(byAdding: .day, value: delta, to: bar.event.endDate) ?? bar.event.endDate
+        appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+    }
+
+    #if os(iOS)
+    private var moveLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard isEditable, case .second(true, let drag) = value else { return }
+                if !isDragging {
+                    isDragging = true
+                    Haptics.tap()
+                }
+                if let drag { dragCols = Int((drag.translation.width / colWidth).rounded()) }
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragCols = 0
+                }
+                guard isEditable, case .second(true, let drag?) = value else { return }
+                commitMove(cols: Int((drag.translation.width / colWidth).rounded()))
+            }
+    }
+    #endif
 
     /// Calendar-day difference between two strip columns.
     private func dayDelta(fromIndex: Int, toIndex: Int) -> Int {
@@ -419,15 +494,7 @@ struct AllDaySpanBar: View {
                     dragCols = 0
                 }
                 guard isEditable else { return }
-                let cols = Int((value.translation.width / colWidth).rounded())
-                let target = max(0, min(extDays.count - 1, bar.startIndex + cols))
-                let delta = dayDelta(fromIndex: bar.startIndex, toIndex: target)
-                guard delta != 0 else { return }
-                let cal = appState.calendar
-                let snapshot = EventSnapshot(bar.event)
-                bar.event.startDate = cal.date(byAdding: .day, value: delta, to: bar.event.startDate) ?? bar.event.startDate
-                bar.event.endDate = cal.date(byAdding: .day, value: delta, to: bar.event.endDate) ?? bar.event.endDate
-                appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+                commitMove(cols: Int((value.translation.width / colWidth).rounded()))
             }
     }
 
@@ -482,6 +549,9 @@ struct DayColumn: View {
 
     @State private var draftStart: CGFloat?
     @State private var draftEnd: CGFloat?
+    #if os(iOS)
+    @State private var touchY: CGFloat = 0
+    #endif
 
     var body: some View {
         let timed = store.events(on: day, calendar: appState.calendar).timed
@@ -493,7 +563,13 @@ struct DayColumn: View {
             }
             Color.clear
                 .contentShape(Rectangle())
+                #if os(iOS)
+                .simultaneousGesture(DragGesture(minimumDistance: 0)
+                    .onChanged { touchY = $0.location.y })
+                .gesture(createLongPress)
+                #else
                 .gesture(createDrag)
+                #endif
                 .gesture(SpatialTapGesture().onEnded { value in
                     // Single click never creates a timed event — only drags do
                     // (all-day events can still be made with one click up top).
@@ -581,6 +657,40 @@ struct DayColumn: View {
                 draftEnd = nil
             }
     }
+
+    #if os(iOS)
+    /// Notion-style touch creation: long-press drops a one-hour draft under
+    /// the finger (with a haptic), dragging adjusts it, release opens the
+    /// editor. Plain drags stay free for scrolling.
+    private var createLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard case .second(true, let drag) = value else { return }
+                if draftStart == nil {
+                    Haptics.tap()
+                    draftStart = snap(drag?.startLocation.y ?? touchY)
+                    draftEnd = (draftStart ?? 0) + hourHeight
+                }
+                if let drag, abs(drag.translation.height) > 8 {
+                    draftEnd = snap(drag.location.y)
+                }
+            }
+            .onEnded { value in
+                defer {
+                    draftStart = nil
+                    draftEnd = nil
+                }
+                guard case .second(true, _) = value, let s = draftStart, var e = draftEnd else { return }
+                if abs(e - s) < hourHeight / 4 { e = s + hourHeight }
+                if appState.availabilityMode {
+                    addSlot(fromY: min(s, e), toY: max(s, e))
+                } else {
+                    createEvent(fromY: min(s, e), toY: max(s, e))
+                }
+            }
+    }
+    #endif
 
     private func snap(_ y: CGFloat) -> CGFloat {
         let quarter = hourHeight / 4
@@ -709,20 +819,35 @@ struct EventBlockView: View {
             }
         }
         .overlay(alignment: .top) {
-            if isEditable, !appState.availabilityMode {
+            if showsResizeHandles(isSelected: isSelected) {
                 resizeHandle(top: true)
             }
         }
         .overlay(alignment: .bottom) {
-            if isEditable, !appState.availabilityMode {
+            if showsResizeHandles(isSelected: isSelected) {
                 resizeHandle(top: false)
             }
         }
         .opacity((isDragging ? 0.7 : 1) * (isPast && !isSelected ? 0.55 : 1))
         .offset(x: x + dragOffset.width, y: y + dragOffset.height)
         .onTapGesture { appState.select(item.event) }
+        #if os(iOS)
+        .gesture(moveLongPress)
+        #else
         .gesture(moveDrag)
+        #endif
         .contextMenu { contextMenuItems(joinURL: joinURL) }
+    }
+
+    /// On touch, handles appear only on the selected event so drags on
+    /// unselected blocks scroll the grid (Notion Calendar behavior).
+    private func showsResizeHandles(isSelected: Bool) -> Bool {
+        guard isEditable, !appState.availabilityMode else { return false }
+        #if os(iOS)
+        return isSelected
+        #else
+        return true
+        #endif
     }
 
     @ViewBuilder
@@ -820,17 +945,40 @@ struct EventBlockView: View {
             )
     }
 
+    /// Live preview snaps to 15-minute rows and whole day columns
+    private func snappedMoveOffset(_ translation: CGSize) -> CGSize {
+        let quarter = hourHeight / 4
+        return CGSize(
+            width: (translation.width / colWidth).rounded() * colWidth,
+            height: (translation.height / quarter).rounded() * quarter
+        )
+    }
+
+    private func commitMove(_ translation: CGSize) {
+        let minuteDelta = (Double(translation.height / hourHeight) * 60 / 15).rounded() * 15
+        let dayDelta = (translation.width / colWidth).rounded()
+        guard minuteDelta != 0 || dayDelta != 0 else { return }
+        let interval = minuteDelta * 60 + Double(dayDelta) * 86400
+        var isOption = false
+        #if os(macOS)
+        isOption = NSEvent.modifierFlags.contains(.option)
+        #endif
+        if isOption {
+            store.duplicate(item.event, dayOffset: interval / 86400)
+        } else {
+            let snapshot = EventSnapshot(item.event)
+            item.event.startDate = item.event.startDate.addingTimeInterval(interval)
+            item.event.endDate = item.event.endDate.addingTimeInterval(interval)
+            appState.commitChange(to: item.event, snapshot: snapshot, isNew: false, store: store)
+        }
+    }
+
     private var moveDrag: some Gesture {
         DragGesture(minimumDistance: 5)
             .onChanged { value in
                 guard isEditable else { return }
                 isDragging = true
-                // Live preview snaps to 15-minute rows and whole day columns
-                let quarter = hourHeight / 4
-                dragOffset = CGSize(
-                    width: (value.translation.width / colWidth).rounded() * colWidth,
-                    height: (value.translation.height / quarter).rounded() * quarter
-                )
+                dragOffset = snappedMoveOffset(value.translation)
             }
             .onEnded { value in
                 defer {
@@ -838,22 +986,31 @@ struct EventBlockView: View {
                     dragOffset = .zero
                 }
                 guard isEditable else { return }
-                let minuteDelta = (Double(value.translation.height / hourHeight) * 60 / 15).rounded() * 15
-                let dayDelta = (value.translation.width / colWidth).rounded()
-                guard minuteDelta != 0 || dayDelta != 0 else { return }
-                let interval = minuteDelta * 60 + Double(dayDelta) * 86400
-                var isOption = false
-                #if os(macOS)
-                isOption = NSEvent.modifierFlags.contains(.option)
-                #endif
-                if isOption {
-                    store.duplicate(item.event, dayOffset: interval / 86400)
-                } else {
-                    let snapshot = EventSnapshot(item.event)
-                    item.event.startDate = item.event.startDate.addingTimeInterval(interval)
-                    item.event.endDate = item.event.endDate.addingTimeInterval(interval)
-                    appState.commitChange(to: item.event, snapshot: snapshot, isNew: false, store: store)
-                }
+                commitMove(value.translation)
             }
     }
+
+    #if os(iOS)
+    /// Long-press lifts the event (haptic), then dragging moves it.
+    private var moveLongPress: some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard isEditable, case .second(true, let drag) = value else { return }
+                if !isDragging {
+                    isDragging = true
+                    Haptics.tap()
+                }
+                if let drag { dragOffset = snappedMoveOffset(drag.translation) }
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragOffset = .zero
+                }
+                guard isEditable, case .second(true, let drag?) = value else { return }
+                commitMove(drag.translation)
+            }
+    }
+    #endif
 }
