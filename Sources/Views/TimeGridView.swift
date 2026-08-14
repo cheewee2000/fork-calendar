@@ -1,13 +1,18 @@
 import SwiftUI
 import EventKit
+#if os(macOS)
+import AppKit
+#endif
 
-/// Day/week timeline: hour gutter, day columns, drag-to-create, drag-to-move.
+/// Day/N-day/week timeline: hour gutter (with optional secondary time zone),
+/// day columns, drag-to-create, drag-to-move, edge-resize, availability mode.
 struct TimeGridView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
     let days: [Date]
 
-    private let gutterWidth: CGFloat = 54
+    private var gutterWidth: CGFloat { settings.secondaryTimeZone == nil ? 54 : 96 }
     private let hourHeight: CGFloat = 56
 
     var body: some View {
@@ -99,16 +104,30 @@ struct TimeGridView: View {
     private var timeGutter: some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
-                Group {
-                    if hour > 0 {
-                        Text(hourLabel(hour))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .padding(.trailing, 8)
-                            .offset(y: -6)
+                HStack(spacing: 0) {
+                    if let tz = settings.secondaryTimeZone {
+                        Group {
+                            if hour > 0 {
+                                Text(hourLabel(hour, timeZone: tz))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.tertiary)
+                                    .offset(y: -6)
+                            }
+                        }
+                        .frame(width: 42, alignment: .topTrailing)
                     }
+                    Group {
+                        if hour > 0 {
+                            Text(hourLabel(hour, timeZone: nil))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .padding(.trailing, 8)
+                                .offset(y: -6)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topTrailing)
                 }
-                .frame(width: gutterWidth, height: hourHeight, alignment: .topTrailing)
+                .frame(width: gutterWidth, height: hourHeight, alignment: .top)
                 .id("hour-\(hour)")
             }
         }
@@ -127,8 +146,14 @@ struct TimeGridView: View {
         }
     }
 
-    private func hourLabel(_ hour: Int) -> String {
+    private func hourLabel(_ hour: Int, timeZone: TimeZone?) -> String {
         let date = Calendar.autoupdatingCurrent.date(bySettingHour: hour, minute: 0, second: 0, of: Date()) ?? Date()
+        if let timeZone {
+            let f = DateFormatter()
+            f.setLocalizedDateFormatFromTemplate("j")
+            f.timeZone = timeZone
+            return f.string(from: date)
+        }
         return Fmt.hour.string(from: date)
     }
 }
@@ -151,16 +176,37 @@ struct DayColumn: View {
                 .contentShape(Rectangle())
                 .gesture(createDrag)
                 .gesture(SpatialTapGesture().onEnded { value in
-                    createEvent(fromY: snap(value.location.y), toY: snap(value.location.y) + hourHeight)
+                    if appState.availabilityMode {
+                        addSlot(fromY: snap(value.location.y), toY: snap(value.location.y) + hourHeight / 2)
+                    } else if appState.panelContext != nil {
+                        appState.closePanel()
+                    } else {
+                        createEvent(fromY: snap(value.location.y), toY: snap(value.location.y) + hourHeight)
+                    }
                 })
 
             if let s = draftStart, let e = draftEnd {
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.accentColor.opacity(0.22))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor.opacity(0.6)))
+                    .fill(draftColor.opacity(0.22))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(draftColor.opacity(0.6)))
                     .frame(width: colWidth - 6, height: max(abs(e - s), 10))
                     .offset(x: 2, y: min(s, e))
                     .allowsHitTesting(false)
+            }
+
+            // Availability slots on this day
+            ForEach(appState.availabilitySlots.filter { $0.start.isSameDay(as: day, calendar: appState.calendar) }) { slot in
+                let dayStart = appState.calendar.startOfDay(for: day)
+                let y = CGFloat(slot.start.timeIntervalSince(dayStart) / 3600) * hourHeight
+                let h = CGFloat(slot.end.timeIntervalSince(slot.start) / 3600) * hourHeight
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.green.opacity(0.25))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.green.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4])))
+                    .frame(width: colWidth - 6, height: max(h, 8))
+                    .offset(x: 2, y: y)
+                    .onTapGesture {
+                        appState.availabilitySlots.removeAll { $0.id == slot.id }
+                    }
             }
 
             ForEach(positioned) { item in
@@ -177,6 +223,10 @@ struct DayColumn: View {
         }
     }
 
+    private var draftColor: Color {
+        appState.availabilityMode ? .green : .accentColor
+    }
+
     private var createDrag: some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
@@ -185,7 +235,11 @@ struct DayColumn: View {
             }
             .onEnded { _ in
                 if let s = draftStart, let e = draftEnd, abs(e - s) >= hourHeight / 8 {
-                    createEvent(fromY: min(s, e), toY: max(s, e))
+                    if appState.availabilityMode {
+                        addSlot(fromY: min(s, e), toY: max(s, e))
+                    } else {
+                        createEvent(fromY: min(s, e), toY: max(s, e))
+                    }
                 }
                 draftStart = nil
                 draftEnd = nil
@@ -209,6 +263,13 @@ struct DayColumn: View {
         if end <= start { end = start.addingTimeInterval(1800) }
         appState.newEvent(store: store, start: start, end: end)
     }
+
+    private func addSlot(fromY: CGFloat, toY: CGFloat) {
+        let start = date(atY: fromY)
+        var end = date(atY: toY)
+        if end <= start { end = start.addingTimeInterval(1800) }
+        appState.availabilitySlots.append(AvailabilitySlot(start: start, end: end))
+    }
 }
 
 struct NowLine: View {
@@ -231,6 +292,7 @@ struct NowLine: View {
 struct EventBlockView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @Environment(\.openURL) private var openURL
     let item: PositionedEvent
     let day: Date
     let colWidth: CGFloat
@@ -238,6 +300,13 @@ struct EventBlockView: View {
 
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
+    @State private var resizeDelta: CGFloat = 0
+    @State private var resizingTop = false
+    @State private var isResizing = false
+
+    private var isEditable: Bool {
+        item.event.calendar?.allowsContentModifications == true
+    }
 
     var body: some View {
         let cal = appState.calendar
@@ -245,20 +314,39 @@ struct EventBlockView: View {
         let dayEnd = dayStart.addingTimeInterval(86400)
         let start = max(item.event.startDate ?? dayStart, dayStart)
         let end = min(item.event.endDate ?? dayEnd, dayEnd)
-        let y = CGFloat(start.timeIntervalSince(dayStart) / 3600) * hourHeight
-        let height = max(CGFloat(end.timeIntervalSince(start) / 3600) * hourHeight, 16)
+        var y = CGFloat(start.timeIntervalSince(dayStart) / 3600) * hourHeight
+        var height = max(CGFloat(end.timeIntervalSince(start) / 3600) * hourHeight, 16)
         let subWidth = (colWidth - 6) / CGFloat(item.columnCount)
         let x = 2 + subWidth * CGFloat(item.column)
         let color = item.event.calendar?.displayColor ?? Color.accentColor
+        let isSelected = appState.selectedKey == item.id
+        let isPast = (item.event.endDate ?? Date()) < Date()
+        let joinURL = MeetLink.url(for: item.event)
 
-        VStack(alignment: .leading, spacing: 1) {
-            Text(item.event.title ?? "Untitled")
-                .font(.system(size: 11, weight: .semibold))
-                .lineLimit(height > 32 ? 2 : 1)
-            if height > 34, let s = item.event.startDate {
-                Text(Fmt.time.string(from: s))
+        if isResizing {
+            if resizingTop {
+                y += resizeDelta
+                height = max(height - resizeDelta, hourHeight / 4)
+            } else {
+                height = max(height + resizeDelta, hourHeight / 4)
+            }
+        }
+
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 3) {
+                Text(item.event.title ?? "Untitled")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(height > 32 ? 2 : 1)
+                if joinURL != nil, height > 20, subWidth > 60 {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 8))
+                }
+            }
+            if height > 34, let s = item.event.startDate, let e = item.event.endDate {
+                Text(Fmt.interval.string(from: s, to: e))
                     .font(.system(size: 9))
                     .opacity(0.75)
+                    .lineLimit(1)
             }
         }
         .foregroundStyle(color)
@@ -266,21 +354,116 @@ struct EventBlockView: View {
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .frame(width: max(subWidth - 2, 12), height: height, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(0.16)))
+        .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(isSelected ? 0.28 : 0.16)))
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 5))
-        .opacity(isDragging ? 0.7 : 1)
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 5).strokeBorder(color, lineWidth: 1.5)
+            }
+        }
+        .overlay(alignment: .top) {
+            if isEditable, !appState.availabilityMode {
+                resizeHandle(top: true)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if isEditable, !appState.availabilityMode {
+                resizeHandle(top: false)
+            }
+        }
+        .opacity((isDragging ? 0.7 : 1) * (isPast && !isSelected ? 0.55 : 1))
         .offset(x: x + dragOffset.width, y: y + dragOffset.height)
-        .onTapGesture { appState.edit(item.event) }
+        .onTapGesture { appState.select(item.event) }
         .gesture(moveDrag)
+        .contextMenu { contextMenuItems(joinURL: joinURL) }
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(joinURL: URL?) -> some View {
+        if let joinURL {
+            Button {
+                openURL(joinURL)
+            } label: {
+                Label("Join meeting", systemImage: "video")
+            }
+        }
+        Button {
+            appState.select(item.event)
+        } label: {
+            Label("Open", systemImage: "sidebar.right")
+        }
+        if isEditable {
+            Button {
+                store.duplicate(item.event)
+            } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+            Menu("Move to calendar") {
+                ForEach(store.writableCalendars, id: \.calendarIdentifier) { cal in
+                    Button(cal.title) { store.move(item.event, to: cal) }
+                }
+            }
+        }
+        Button {
+            Clipboard.copy(item.event.title ?? "")
+        } label: {
+            Label("Copy title", systemImage: "doc.on.doc")
+        }
+        if isEditable {
+            Divider()
+            Button(role: .destructive) {
+                appState.requestDelete(item.event, store: store)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private func resizeHandle(top: Bool) -> some View {
+        Color.clear
+            .frame(height: 7)
+            .contentShape(Rectangle())
+            #if os(macOS)
+            .onHover { inside in
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            #endif
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { value in
+                        isResizing = true
+                        resizingTop = top
+                        resizeDelta = value.translation.height
+                    }
+                    .onEnded { value in
+                        defer {
+                            isResizing = false
+                            resizeDelta = 0
+                        }
+                        let minutes = (Double(value.translation.height / hourHeight) * 60 / 15).rounded() * 15
+                        guard minutes != 0 else { return }
+                        let snapshot = EventSnapshot(item.event)
+                        if top {
+                            let newStart = item.event.startDate.addingTimeInterval(minutes * 60)
+                            guard newStart < item.event.endDate else { return }
+                            item.event.startDate = newStart
+                        } else {
+                            let newEnd = item.event.endDate.addingTimeInterval(minutes * 60)
+                            guard newEnd > item.event.startDate else { return }
+                            item.event.endDate = newEnd
+                        }
+                        appState.commitChange(to: item.event, snapshot: snapshot, isNew: false, store: store)
+                    }
+            )
     }
 
     private var moveDrag: some Gesture {
         DragGesture(minimumDistance: 5)
             .onChanged { value in
-                guard item.event.calendar?.allowsContentModifications == true else { return }
+                guard isEditable else { return }
                 isDragging = true
                 dragOffset = value.translation
             }
@@ -289,24 +472,35 @@ struct EventBlockView: View {
                     isDragging = false
                     dragOffset = .zero
                 }
-                guard item.event.calendar?.allowsContentModifications == true else { return }
+                guard isEditable else { return }
                 let minuteDelta = (Double(value.translation.height / hourHeight) * 60 / 15).rounded() * 15
                 let dayDelta = (value.translation.width / colWidth).rounded()
                 guard minuteDelta != 0 || dayDelta != 0 else { return }
                 let interval = minuteDelta * 60 + Double(dayDelta) * 86400
-                item.event.startDate = item.event.startDate.addingTimeInterval(interval)
-                item.event.endDate = item.event.endDate.addingTimeInterval(interval)
-                store.save(item.event)
+                var isOption = false
+                #if os(macOS)
+                isOption = NSEvent.modifierFlags.contains(.option)
+                #endif
+                if isOption {
+                    store.duplicate(item.event, dayOffset: interval / 86400)
+                } else {
+                    let snapshot = EventSnapshot(item.event)
+                    item.event.startDate = item.event.startDate.addingTimeInterval(interval)
+                    item.event.endDate = item.event.endDate.addingTimeInterval(interval)
+                    appState.commitChange(to: item.event, snapshot: snapshot, isNew: false, store: store)
+                }
             }
     }
 }
 
 struct AllDayChip: View {
     @EnvironmentObject var appState: AppState
+
     let event: EKEvent
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
+        let isSelected = appState.selectedKey == eventKey(event)
         Text(event.title ?? "Untitled")
             .font(.system(size: 10, weight: .medium))
             .lineLimit(1)
@@ -314,8 +508,8 @@ struct AllDayChip: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.16)))
+            .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(isSelected ? 0.3 : 0.16)))
             .contentShape(Rectangle())
-            .onTapGesture { appState.edit(event) }
+            .onTapGesture { appState.select(event) }
     }
 }

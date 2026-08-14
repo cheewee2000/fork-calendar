@@ -54,6 +54,12 @@ enum Fmt {
         f.setLocalizedDateFormatFromTemplate("d")
         return f
     }()
+    static let interval: DateIntervalFormatter = {
+        let f = DateIntervalFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
     static let weekdayShort: DateFormatter = {
         let f = DateFormatter()
         f.setLocalizedDateFormatFromTemplate("EEE")

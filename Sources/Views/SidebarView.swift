@@ -64,6 +64,7 @@ struct CalendarRow: View {
 
 struct MiniMonthView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         let cal = appState.calendar

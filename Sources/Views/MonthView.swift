@@ -86,10 +86,12 @@ struct MonthCell: View {
 
 struct MonthChip: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var store: CalendarStore
     let event: EKEvent
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
+        let isSelected = appState.selectedKey == eventKey(event)
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 5, height: 5)
             if !event.isAllDay, let s = event.startDate {
@@ -104,8 +106,15 @@ struct MonthChip: View {
         }
         .padding(.horizontal, 3)
         .padding(.vertical, 1)
-        .background(RoundedRectangle(cornerRadius: 3).fill(color.opacity(event.isAllDay ? 0.16 : 0)))
+        .background(RoundedRectangle(cornerRadius: 3).fill(color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)))
         .contentShape(Rectangle())
-        .onTapGesture { appState.edit(event) }
+        .onTapGesture { appState.select(event) }
+        .contextMenu {
+            if event.calendar?.allowsContentModifications == true {
+                Button("Duplicate") { store.duplicate(event) }
+                Button("Delete", role: .destructive) { appState.requestDelete(event, store: store) }
+            }
+            Button("Copy title") { Clipboard.copy(event.title ?? "") }
+        }
     }
 }
