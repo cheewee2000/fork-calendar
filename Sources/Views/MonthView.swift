@@ -1,13 +1,45 @@
 import SwiftUI
 import EventKit
 
+private struct WeekPosition: Equatable {
+    let week: Date
+    let y: CGFloat
+}
+
+private struct WeekPositionKey: PreferenceKey {
+    static var defaultValue: [WeekPosition] = []
+    static func reduce(value: inout [WeekPosition], nextValue: () -> [WeekPosition]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+/// Continuous vertically-scrolling month view (a stack of week rows spanning
+/// ±1–2 years). The header month updates as you scroll; navigation scrolls here.
 struct MonthView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
+
+    private let rowHeight: CGFloat = 108
+
+    private var weeks: [Date] {
+        let cal = appState.calendar
+        let today = Date()
+        guard let windowStart = cal.date(byAdding: .month, value: -12, to: today),
+              let windowEnd = cal.date(byAdding: .month, value: 24, to: today) else { return [] }
+        var result: [Date] = []
+        var day = cal.startOfWeek(for: windowStart)
+        while day < windowEnd {
+            result.append(day)
+            guard let next = cal.date(byAdding: .day, value: 7, to: day) else { break }
+            day = next
+        }
+        return result
+    }
 
     var body: some View {
         let cal = appState.calendar
-        let days = cal.monthGrid(for: appState.currentDate)
+        let allWeeks = weeks
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
@@ -20,17 +52,74 @@ struct MonthView: View {
             .padding(.vertical, 4)
             Divider()
             GeometryReader { geo in
-                let cellH = geo.size.height / 6
                 let cellW = geo.size.width / 7
-                VStack(spacing: 0) {
-                    ForEach(0..<6, id: \.self) { row in
-                        HStack(spacing: 0) {
-                            ForEach(0..<7, id: \.self) { col in
-                                MonthCell(day: days[row * 7 + col])
-                                    .frame(width: cellW, height: cellH)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(allWeeks, id: \.self) { weekStart in
+                                MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
+                                    .frame(height: rowHeight)
+                                    .id(weekStart)
+                                    .background(
+                                        GeometryReader { g in
+                                            Color.clear.preference(
+                                                key: WeekPositionKey.self,
+                                                value: [WeekPosition(week: weekStart, y: g.frame(in: .named("monthScroll")).minY)]
+                                            )
+                                        }
+                                    )
                             }
                         }
                     }
+                    .coordinateSpace(name: "monthScroll")
+                    .onPreferenceChange(WeekPositionKey.self) { positions in
+                        updateCurrentMonth(from: positions)
+                    }
+                    .onAppear {
+                        let target = appState.monthScrollTarget ?? appState.currentDate
+                        proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
+                        appState.monthScrollTarget = nil
+                    }
+                    .onChange(of: appState.monthScrollTarget) {
+                        guard let target = appState.monthScrollTarget else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
+                        }
+                        appState.monthScrollTarget = nil
+                    }
+                }
+            }
+        }
+    }
+
+    /// The topmost visible week defines the header month while scrolling.
+    private func updateCurrentMonth(from positions: [WeekPosition]) {
+        guard appState.viewMode == .month else { return }
+        guard let top = positions
+            .filter({ $0.y > -rowHeight * 0.6 })
+            .min(by: { $0.y < $1.y })
+        else { return }
+        let cal = appState.calendar
+        guard let representative = cal.date(byAdding: .day, value: 3, to: top.week) else { return }
+        if !cal.isDate(representative, equalTo: appState.currentDate, toGranularity: .month) {
+            appState.currentDate = representative
+        }
+    }
+}
+
+struct MonthWeekRow: View {
+    let weekStart: Date
+    let cellW: CGFloat
+    let rowH: CGFloat
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        let cal = appState.calendar
+        HStack(spacing: 0) {
+            ForEach(0..<7, id: \.self) { offset in
+                if let day = cal.date(byAdding: .day, value: offset, to: weekStart) {
+                    MonthCell(day: day, cellW: cellW, rowH: rowH)
+                        .frame(width: cellW, height: rowH)
                 }
             }
         }
@@ -41,23 +130,31 @@ struct MonthCell: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
     let day: Date
+    let cellW: CGFloat
+    let rowH: CGFloat
 
     var body: some View {
         let cal = appState.calendar
         let dayEvents = store.events(on: day, calendar: cal)
         let events = dayEvents.allDay + dayEvents.timed
         let isToday = day.isSameDay(as: Date(), calendar: cal)
-        let inMonth = cal.isDate(day, equalTo: appState.currentDate, toGranularity: .month)
+        let dayOfMonth = cal.component(.day, from: day)
+        let month = cal.component(.month, from: day)
+        let evenMonth = month % 2 == 0
 
         VStack(alignment: .leading, spacing: 2) {
-            Text(Fmt.dayNum.string(from: day))
-                .font(.system(size: 11, weight: isToday ? .bold : .regular))
-                .frame(width: 20, height: 20)
-                .background { if isToday { Circle().fill(Color.red) } }
-                .foregroundStyle(isToday ? Color.white : inMonth ? Color.primary : Color.secondary.opacity(0.5))
-                .padding(.leading, 2)
+            HStack(spacing: 4) {
+                Text(dayOfMonth == 1 ? monthDayLabel : Fmt.dayNum.string(from: day))
+                    .font(.system(size: 11, weight: isToday || dayOfMonth == 1 ? .bold : .regular))
+                    .padding(.horizontal, isToday ? 5 : 0)
+                    .frame(height: 20)
+                    .background { if isToday { Capsule().fill(Color.red) } }
+                    .foregroundStyle(isToday ? Color.white : Color.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 3)
             ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, event in
-                MonthChip(event: event)
+                MonthChip(event: event, cellW: cellW, rowH: rowH)
             }
             if events.count > 3 {
                 Text("\(events.count - 3) more")
@@ -69,6 +166,7 @@ struct MonthCell: View {
         }
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(evenMonth ? Color.primary.opacity(0.03) : Color.clear)
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
         }
@@ -82,12 +180,27 @@ struct MonthCell: View {
         }
         .onTapGesture { appState.currentDate = day }
     }
+
+    private var monthDayLabel: String {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("MMM d")
+        return f.string(from: day)
+    }
 }
 
 struct MonthChip: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
     let event: EKEvent
+    var cellW: CGFloat = 120
+    var rowH: CGFloat = 108
+
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDragging = false
+
+    private var isEditable: Bool {
+        event.calendar?.allowsContentModifications == true
+    }
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
@@ -106,15 +219,46 @@ struct MonthChip: View {
         }
         .padding(.horizontal, 3)
         .padding(.vertical, 1)
-        .background(RoundedRectangle(cornerRadius: 3).fill(color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)))
+        .background(RoundedRectangle(cornerRadius: 3).fill(
+            isDragging ? color.opacity(0.35) : color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)
+        ))
         .contentShape(Rectangle())
+        .offset(dragOffset)
+        .zIndex(isDragging ? 100 : 0)
+        .opacity(isDragging ? 0.85 : 1)
         .onTapGesture { appState.select(event) }
+        .gesture(moveDrag)
         .contextMenu {
-            if event.calendar?.allowsContentModifications == true {
+            if isEditable {
                 Button("Duplicate") { store.duplicate(event) }
                 Button("Delete", role: .destructive) { appState.requestDelete(event, store: store) }
             }
             Button("Copy title") { Clipboard.copy(event.title ?? "") }
         }
+    }
+
+    /// Drag a chip to another day cell — horizontal = days, vertical = weeks.
+    private var moveDrag: some Gesture {
+        DragGesture(minimumDistance: 5)
+            .onChanged { value in
+                guard isEditable else { return }
+                isDragging = true
+                dragOffset = value.translation
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragOffset = .zero
+                }
+                guard isEditable else { return }
+                let dayDelta = Int((value.translation.width / cellW).rounded())
+                    + 7 * Int((value.translation.height / rowH).rounded())
+                guard dayDelta != 0 else { return }
+                let snapshot = EventSnapshot(event)
+                let cal = appState.calendar
+                event.startDate = cal.date(byAdding: .day, value: dayDelta, to: event.startDate) ?? event.startDate
+                event.endDate = cal.date(byAdding: .day, value: dayDelta, to: event.endDate) ?? event.endDate
+                appState.commitChange(to: event, snapshot: snapshot, isNew: false, store: store)
+            }
     }
 }

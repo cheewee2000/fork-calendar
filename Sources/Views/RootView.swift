@@ -88,6 +88,12 @@ struct RootView: View {
             if let first = days.first, let last = days.last {
                 interval = DateInterval(start: first, end: cal.date(byAdding: .day, value: 1, to: last) ?? last)
             }
+        case .year:
+            let year = cal.component(.year, from: appState.currentDate)
+            if let jan1 = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
+               let nextJan = cal.date(from: DateComponents(year: year + 1, month: 1, day: 8)) {
+                interval = DateInterval(start: cal.startOfWeek(for: jan1), end: nextJan)
+            }
         default:
             let days = appState.visibleDays
             if let first = days.first, let last = days.last {
@@ -123,6 +129,8 @@ struct CalendarDetailView: View {
                 AccessDeniedView()
             } else if appState.viewMode == .month {
                 MonthView()
+            } else if appState.viewMode == .year {
+                YearView()
             } else {
                 TimeGridView(days: appState.visibleDays)
             }
@@ -196,6 +204,7 @@ struct HeaderBar: View {
             Button { appState.viewMode = .day } label: { menuLabel("Day", "D", appState.viewMode == .day) }
             Button { appState.viewMode = .week } label: { menuLabel("Week", "W", appState.viewMode == .week) }
             Button { appState.viewMode = .month } label: { menuLabel("Month", "M", appState.viewMode == .month) }
+            Button { appState.viewMode = .year } label: { menuLabel("Year", "Y", appState.viewMode == .year) }
             Divider()
             ForEach([2, 3, 4, 5], id: \.self) { n in
                 Button { appState.viewMode = .days(n) } label: {

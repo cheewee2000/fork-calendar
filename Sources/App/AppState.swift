@@ -6,6 +6,7 @@ enum ViewMode: Hashable {
     case week
     case days(Int)
     case month
+    case year
 
     var title: String {
         switch self {
@@ -13,6 +14,7 @@ enum ViewMode: Hashable {
         case .week: return "Week"
         case .days(let n): return "\(n) days"
         case .month: return "Month"
+        case .year: return "Year"
         }
     }
 }
@@ -38,6 +40,8 @@ struct AvailabilitySlot: Identifiable, Equatable {
 final class AppState: ObservableObject {
     @Published var currentDate = Date()
     @Published var viewMode: ViewMode = .week
+    /// Set when navigation (not scrolling) moves the month view; the view scrolls there and clears it.
+    @Published var monthScrollTarget: Date?
     @Published var panelContext: EditorContext?
     @Published var pendingSpanAction: PendingSpanAction?
     @Published var showSpanDialog = false
@@ -70,16 +74,19 @@ final class AppState: ObservableObject {
             let days = cal.week(containing: currentDate)
             if settings.showWeekends { return days }
             return days.filter { !cal.isDateInWeekend($0) }
-        case .month:
+        case .month, .year:
             return []
         }
     }
 
     // MARK: - Navigation
 
-    func goToToday() { currentDate = Date() }
+    func goToToday() { goTo(Date()) }
 
-    func goTo(_ date: Date) { currentDate = date }
+    func goTo(_ date: Date) {
+        currentDate = date
+        monthScrollTarget = date
+    }
 
     func step(_ direction: Int) {
         let cal = calendar
@@ -92,6 +99,9 @@ final class AppState: ObservableObject {
             currentDate = cal.date(byAdding: .weekOfYear, value: direction, to: currentDate) ?? currentDate
         case .month:
             currentDate = cal.date(byAdding: .month, value: direction, to: currentDate) ?? currentDate
+            monthScrollTarget = currentDate
+        case .year:
+            currentDate = cal.date(byAdding: .year, value: direction, to: currentDate) ?? currentDate
         }
     }
 
@@ -105,7 +115,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Events
 
-    func newEvent(store: CalendarStore, start: Date? = nil, end: Date? = nil, allDay: Bool = false) {
+    func newEvent(store: CalendarStore, start: Date? = nil, end: Date? = nil, allDay: Bool = false, title: String? = nil) {
         guard store.accessState == .granted else { return }
         let event = EKEvent(eventStore: store.eventStore)
         let startDate = start ?? defaultStart
@@ -113,6 +123,7 @@ final class AppState: ObservableObject {
         event.endDate = end ?? startDate.addingTimeInterval(Double(settings.defaultDuration) * 60)
         event.isAllDay = allDay
         event.calendar = store.defaultCalendar
+        if let title { event.title = title }
         panelContext = EditorContext(event: event, isNew: true)
     }
 

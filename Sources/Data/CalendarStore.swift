@@ -48,39 +48,54 @@ enum UndoAction {
 final class CalendarStore: ObservableObject {
     enum AccessState { case unknown, granted, denied }
 
+    /// Primary store — used for new events and write operations on own calendars.
     let eventStore = EKEventStore()
+    /// Primary + delegate stores (Gmail shared calendars surface as delegate sources).
+    private(set) var allStores: [EKEventStore] = []
+    private var calendarOwner: [String: EKEventStore] = [:]
 
     @Published var accessState: AccessState = .unknown
     @Published var calendars: [EKCalendar] = []
     @Published var events: [EKEvent] = []
     @Published var hiddenCalendarIDs: Set<String> {
-        didSet { UserDefaults.standard.set(Array(hiddenCalendarIDs), forKey: "hiddenCalendarIDs") }
+        didSet {
+            UserDefaults.standard.set(Array(hiddenCalendarIDs), forKey: "hiddenCalendarIDs")
+            dayIndexCache = nil
+        }
     }
 
     private var fetchedInterval: DateInterval?
     private var undoStack: [UndoAction] = []
     private var searchCache: [EKEvent]?
+    private var dayIndexCache: [Date: [EKEvent]]?
     private var bag = Set<AnyCancellable>()
 
     init() {
         hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: "hiddenCalendarIDs") ?? [])
+        allStores = [eventStore]
+        // object: nil so changes from delegate stores are caught too
         NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged, object: eventStore, queue: .main
+            forName: .EKEventStoreChanged, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.reload() }
         }
         AppSettings.shared.objectWillChange
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .sink { [weak self] _ in
+                self?.dayIndexCache = nil
+                self?.objectWillChange.send()
+            }
             .store(in: &bag)
     }
 
     var defaultCalendar: EKCalendar? {
-        eventStore.defaultCalendarForNewEvents ?? calendars.first { $0.allowsContentModifications }
+        eventStore.defaultCalendarForNewEvents
+            ?? eventStore.calendars(for: .event).first { $0.allowsContentModifications }
     }
 
+    /// Writable calendars on the primary store (new events / move targets).
     var writableCalendars: [EKCalendar] {
-        calendars.filter { $0.allowsContentModifications }
+        eventStore.calendars(for: .event).filter { $0.allowsContentModifications }
     }
 
     var calendarsBySource: [(source: String, calendars: [EKCalendar])] {
@@ -101,30 +116,70 @@ final class CalendarStore: ObservableObject {
                 accessState = .denied
             }
         }
-        if accessState == .granted { reload() }
+        if accessState == .granted { setupStores() }
+    }
+
+    /// Include delegate sources (how Gmail/Exchange shared calendars appear).
+    private func setupStores() {
+        let delegates = eventStore.delegateSources
+        if delegates.isEmpty {
+            allStores = [eventStore]
+        } else {
+            allStores = [eventStore, EKEventStore(sources: delegates)]
+        }
+        reload()
+    }
+
+    func reload() {
+        guard accessState == .granted else { return }
+        var merged: [EKCalendar] = []
+        var owners: [String: EKEventStore] = [:]
+        for store in allStores {
+            for cal in store.calendars(for: .event) {
+                merged.append(cal)
+                if owners[cal.calendarIdentifier] == nil {
+                    owners[cal.calendarIdentifier] = store
+                }
+            }
+        }
+        calendars = merged
+        calendarOwner = owners
+        searchCache = nil
+        dayIndexCache = nil
+        if let interval = fetchedInterval { fetch(interval) }
+    }
+
+    func owner(of event: EKEvent) -> EKEventStore {
+        event.calendar.flatMap { calendarOwner[$0.calendarIdentifier] } ?? eventStore
     }
 
     func ensureFetched(_ interval: DateInterval) {
         guard accessState == .granted else { return }
         if let fetched = fetchedInterval, fetched.start <= interval.start, fetched.end >= interval.end { return }
-        let buffered = DateInterval(
-            start: interval.start.addingTimeInterval(-28 * 86400),
-            end: interval.end.addingTimeInterval(28 * 86400)
-        )
-        fetchedInterval = buffered
-        fetch(buffered)
-    }
-
-    func reload() {
-        guard accessState == .granted else { return }
-        calendars = eventStore.calendars(for: .event)
-        searchCache = nil
-        if let interval = fetchedInterval { fetch(interval) }
+        var start = interval.start.addingTimeInterval(-28 * 86400)
+        var end = interval.end.addingTimeInterval(28 * 86400)
+        // Grow the window instead of replacing it (smooth month/year scrolling)
+        if let fetched = fetchedInterval {
+            start = min(start, fetched.start)
+            end = max(end, fetched.end)
+        }
+        // Cap the span at ~3 years so it can't grow without bound
+        if end.timeIntervalSince(start) > 3 * 365 * 86400 {
+            start = interval.start.addingTimeInterval(-180 * 86400)
+            end = interval.end.addingTimeInterval(180 * 86400)
+        }
+        fetchedInterval = DateInterval(start: start, end: end)
+        fetch(fetchedInterval!)
     }
 
     private func fetch(_ interval: DateInterval) {
-        let predicate = eventStore.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
-        events = eventStore.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+        var merged: [EKEvent] = []
+        for store in allStores {
+            let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
+            merged.append(contentsOf: store.events(matching: predicate))
+        }
+        events = merged.sorted { $0.startDate < $1.startDate }
+        dayIndexCache = nil
     }
 
     // MARK: - Visibility
@@ -146,17 +201,21 @@ final class CalendarStore: ObservableObject {
         return attendees.first(where: { $0.isCurrentUser })?.participantStatus == .declined
     }
 
+    private func passesFilters(_ event: EKEvent) -> Bool {
+        guard let cal = event.calendar, isVisible(cal) else { return false }
+        if !AppSettings.shared.showDeclined, isDeclined(event) { return false }
+        return true
+    }
+
     /// Visible events overlapping the given day, split into all-day/multi-day and timed.
     func events(on day: Date, calendar: Calendar) -> (allDay: [EKEvent], timed: [EKEvent]) {
         guard let dayInterval = calendar.dateInterval(of: .day, for: day) else { return ([], []) }
-        let showDeclined = AppSettings.shared.showDeclined
         var allDay: [EKEvent] = []
         var timed: [EKEvent] = []
         for event in events {
-            guard let cal = event.calendar, isVisible(cal) else { continue }
             guard let start = event.startDate, let end = event.endDate else { continue }
             guard start < dayInterval.end, end > dayInterval.start else { continue }
-            if !showDeclined, isDeclined(event) { continue }
+            guard passesFilters(event) else { continue }
             if event.isAllDay || end.timeIntervalSince(start) >= 86400 {
                 allDay.append(event)
             } else {
@@ -164,6 +223,32 @@ final class CalendarStore: ObservableObject {
             }
         }
         return (allDay, timed)
+    }
+
+    /// Fast per-day lookup for dense views (year view dots).
+    private func dayIndex() -> [Date: [EKEvent]] {
+        if let cached = dayIndexCache { return cached }
+        let cal = Calendar.autoupdatingCurrent
+        var index: [Date: [EKEvent]] = [:]
+        for event in events {
+            guard passesFilters(event) else { continue }
+            guard let start = event.startDate, let end = event.endDate else { continue }
+            var day = cal.startOfDay(for: start)
+            var hops = 0
+            while day < end, hops < 62 {
+                index[day, default: []].append(event)
+                day = cal.date(byAdding: .day, value: 1, to: day) ?? end
+                hops += 1
+            }
+        }
+        dayIndexCache = index
+        return index
+    }
+
+    func eventColors(on day: Date, calendar: Calendar, max maxCount: Int = 3) -> [Color] {
+        let key = calendar.startOfDay(for: day)
+        let dayEvents = dayIndex()[key] ?? []
+        return dayEvents.prefix(maxCount).map { $0.calendar?.displayColor ?? .accentColor }
     }
 
     /// Upcoming timed event today (for the menu bar).
@@ -182,12 +267,16 @@ final class CalendarStore: ObservableObject {
     func searchEvents(_ query: String) -> [EKEvent] {
         guard accessState == .granted, query.count >= 2 else { return [] }
         if searchCache == nil {
-            let predicate = eventStore.predicateForEvents(
-                withStart: Date().addingTimeInterval(-365 * 86400),
-                end: Date().addingTimeInterval(365 * 86400),
-                calendars: nil
-            )
-            searchCache = eventStore.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+            var merged: [EKEvent] = []
+            for store in allStores {
+                let predicate = store.predicateForEvents(
+                    withStart: Date().addingTimeInterval(-365 * 86400),
+                    end: Date().addingTimeInterval(365 * 86400),
+                    calendars: nil
+                )
+                merged.append(contentsOf: store.events(matching: predicate))
+            }
+            searchCache = merged.sorted { $0.startDate < $1.startDate }
         }
         let now = Date()
         return (searchCache ?? [])
@@ -199,7 +288,7 @@ final class CalendarStore: ObservableObject {
 
     func saveWithUndo(_ event: EKEvent, snapshot: EventSnapshot?, isNew: Bool, span: EKSpan) {
         do {
-            try eventStore.save(event, span: span, commit: true)
+            try owner(of: event).save(event, span: span, commit: true)
             if isNew {
                 if let id = event.eventIdentifier { undoStack.append(.remove(id: id)) }
             } else if let snapshot, let id = event.eventIdentifier {
@@ -214,7 +303,7 @@ final class CalendarStore: ObservableObject {
     func deleteWithUndo(_ event: EKEvent, span: EKSpan) {
         let snapshot = EventSnapshot(event)
         do {
-            try eventStore.remove(event, span: span, commit: true)
+            try owner(of: event).remove(event, span: span, commit: true)
             undoStack.append(.recreate(snapshot: snapshot))
         } catch {
             print("Delete failed: \(error)")
@@ -228,7 +317,8 @@ final class CalendarStore: ObservableObject {
         snapshot.start = snapshot.start.addingTimeInterval(dayOffset * 86400)
         snapshot.end = snapshot.end.addingTimeInterval(dayOffset * 86400)
         snapshot.apply(to: copy, in: self)
-        if copy.calendar == nil || !copy.calendar.allowsContentModifications {
+        if copy.calendar == nil || !copy.calendar.allowsContentModifications
+            || calendarOwner[copy.calendar.calendarIdentifier] !== eventStore {
             copy.calendar = defaultCalendar
         }
         saveWithUndo(copy, snapshot: nil, isNew: true, span: .thisEvent)
@@ -248,22 +338,28 @@ final class CalendarStore: ObservableObject {
         case .restore(let id, let snapshot):
             if let event = findEvent(id: id) {
                 snapshot.apply(to: event, in: self)
-                try? eventStore.save(event, span: .thisEvent, commit: true)
+                try? owner(of: event).save(event, span: .thisEvent, commit: true)
             }
         case .recreate(let snapshot):
             let event = EKEvent(eventStore: eventStore)
             snapshot.apply(to: event, in: self)
-            if event.calendar == nil { event.calendar = defaultCalendar }
+            if event.calendar == nil || calendarOwner[event.calendar.calendarIdentifier] !== eventStore {
+                event.calendar = defaultCalendar
+            }
             try? eventStore.save(event, span: .thisEvent, commit: true)
         case .remove(let id):
             if let event = findEvent(id: id) {
-                try? eventStore.remove(event, span: .thisEvent, commit: true)
+                try? owner(of: event).remove(event, span: .thisEvent, commit: true)
             }
         }
         reload()
     }
 
     private func findEvent(id: String) -> EKEvent? {
-        events.first { $0.eventIdentifier == id } ?? eventStore.event(withIdentifier: id)
+        if let match = events.first(where: { $0.eventIdentifier == id }) { return match }
+        for store in allStores {
+            if let match = store.event(withIdentifier: id) { return match }
+        }
+        return nil
     }
 }

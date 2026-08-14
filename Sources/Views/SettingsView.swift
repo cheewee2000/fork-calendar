@@ -26,6 +26,7 @@ struct SettingsView: View {
             }
             Toggle("Show weekends in week view", isOn: $settings.showWeekends)
             Toggle("Show declined events", isOn: $settings.showDeclined)
+            TextField("Zoom personal meeting URL", text: $settings.zoomLink, prompt: Text("https://zoom.us/j/…"))
             Picker("Secondary time zone", selection: $settings.secondaryTZ) {
                 Text("None").tag("")
                 ForEach(Self.timeZones, id: \.self) { id in

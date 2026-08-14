@@ -69,6 +69,7 @@ enum KeyMonitor {
         case "d": appState.viewMode = .day; return true
         case "w": appState.viewMode = .week; return true
         case "m": appState.viewMode = .month; return true
+        case "y": appState.viewMode = .year; return true
         case "c": appState.newEvent(store: store); return true
         case "s": appState.toggleAvailabilityMode(); return true
         case "1", "2", "3", "4", "5", "6", "7", "8", "9":

@@ -56,6 +56,7 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable {
 struct EventPanelView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -70,6 +71,7 @@ struct EventPanelView: View {
     @State private var urlString: String
     @State private var calendarID: String
     @State private var recurrence: RecurrenceChoice
+    @State private var inviteEmails: String = ""
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
 
@@ -126,7 +128,7 @@ struct EventPanelView: View {
                         .focused($titleFocused)
                         .lineLimit(3)
 
-                    if let joinURL = MeetLink.url(for: context.event) {
+                    if let joinURL = currentJoinURL {
                         Button {
                             openURL(joinURL)
                         } label: {
@@ -134,6 +136,8 @@ struct EventPanelView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
+                    } else if !isReadOnly {
+                        conferencingMenu
                     }
 
                     row(icon: "clock") {
@@ -196,6 +200,23 @@ struct EventPanelView: View {
                         }
                     }
 
+                    row(icon: "person.badge.plus") {
+                        VStack(alignment: .leading, spacing: 3) {
+                            TextField("Invite people (emails, comma-separated)", text: $inviteEmails)
+                                .textFieldStyle(.plain)
+                                .font(.callout)
+                                #if os(iOS)
+                                .keyboardType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                #endif
+                            if !inviteEmails.isEmpty {
+                                Text("Sent as an email invite (.ics) on save")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+
                     row(icon: "mappin.and.ellipse") {
                         TextField("Add location", text: $location)
                             .textFieldStyle(.plain)
@@ -243,6 +264,45 @@ struct EventPanelView: View {
         }
         .onAppear {
             if context.isNew { titleFocused = true }
+        }
+    }
+
+    /// Join link considering unsaved edits to the URL field.
+    private var currentJoinURL: URL? {
+        if let typed = URL(string: urlString), MeetLink.isMeetingURL(typed) { return typed }
+        return MeetLink.url(for: context.event)
+    }
+
+    private var conferencingMenu: some View {
+        Menu {
+            if let zoomURL = URL(string: settings.zoomLink), !settings.zoomLink.isEmpty {
+                Button {
+                    urlString = zoomURL.absoluteString
+                    if location.isEmpty { location = "Zoom" }
+                } label: {
+                    Label("Zoom (personal meeting)", systemImage: "video")
+                }
+            } else {
+                Button("Zoom — set your personal link in Settings…") {}
+                    .disabled(true)
+            }
+            Button {
+                if let url = URL(string: "https://meet.google.com/new") { openURL(url) }
+            } label: {
+                Label("Google Meet — create, then paste link", systemImage: "video.badge.plus")
+            }
+            Button {
+                if let pasted = Clipboard.paste(),
+                   let url = URL(string: pasted.trimmingCharacters(in: .whitespacesAndNewlines)),
+                   url.scheme?.hasPrefix("http") == true {
+                    urlString = url.absoluteString
+                }
+            } label: {
+                Label("Paste link from clipboard", systemImage: "doc.on.clipboard")
+            }
+        } label: {
+            Label("Add conferencing", systemImage: "video")
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -299,6 +359,10 @@ struct EventPanelView: View {
             event.calendar = store.defaultCalendar
         }
         appState.commitChange(to: event, snapshot: originalSnapshot, isNew: context.isNew, store: store)
+        let emails = inviteEmails.split(separator: ",").map(String.init)
+        if !emails.isEmpty {
+            Invites.send(event: event, emails: emails)
+        }
         appState.closePanel()
         dismiss()
     }

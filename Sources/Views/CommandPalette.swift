@@ -124,6 +124,21 @@ private struct PaletteBody: View {
         let q = model.query.trimmingCharacters(in: .whitespaces)
         var items: [PaletteItem] = []
 
+        // Natural-language quick add ("Lunch with Amy tomorrow 1pm")
+        if let parsed = QuickAdd.parse(q, defaultDurationMinutes: appState.settings.defaultDuration) {
+            let f = DateFormatter()
+            f.dateStyle = .medium
+            f.timeStyle = .short
+            items.append(PaletteItem(
+                title: "Create “\(parsed.title)”",
+                subtitle: "\(f.string(from: parsed.start)) – \(Fmt.time.string(from: parsed.end))",
+                icon: "plus.circle.fill",
+                shortcut: "↩"
+            ) {
+                appState.newEvent(store: store, start: parsed.start, end: parsed.end, title: parsed.title)
+            })
+        }
+
         // "Go to date" natural entry
         if let date = parseDate(q) {
             let f = DateFormatter()
@@ -140,6 +155,7 @@ private struct PaletteBody: View {
             PaletteItem(title: "Day view", subtitle: nil, icon: "rectangle", shortcut: "D") { appState.viewMode = .day },
             PaletteItem(title: "Week view", subtitle: nil, icon: "rectangle.split.3x1", shortcut: "W") { appState.viewMode = .week },
             PaletteItem(title: "Month view", subtitle: nil, icon: "square.grid.3x3", shortcut: "M") { appState.viewMode = .month },
+            PaletteItem(title: "Year view", subtitle: nil, icon: "square.grid.4x3.fill", shortcut: "Y") { appState.viewMode = .year },
             PaletteItem(title: "Share availability", subtitle: nil, icon: "square.and.arrow.up.on.square", shortcut: "S") { appState.toggleAvailabilityMode() },
             PaletteItem(title: "Undo", subtitle: nil, icon: "arrow.uturn.backward", shortcut: "⌘Z") { store.undo() },
         ]

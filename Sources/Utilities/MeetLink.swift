@@ -21,7 +21,7 @@ enum MeetLink {
         return nil
     }
 
-    private static func isMeetingURL(_ url: URL) -> Bool {
+    static func isMeetingURL(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         return hosts.contains { host == $0 || host.hasSuffix("." + $0) }
     }
@@ -40,6 +40,14 @@ enum Clipboard {
         NSPasteboard.general.setString(string, forType: .string)
         #else
         UIPasteboard.general.string = string
+        #endif
+    }
+
+    static func paste() -> String? {
+        #if os(macOS)
+        NSPasteboard.general.string(forType: .string)
+        #else
+        UIPasteboard.general.string
         #endif
     }
 }

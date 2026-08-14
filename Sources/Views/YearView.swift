@@ -1,0 +1,146 @@
+import SwiftUI
+import EventKit
+
+/// Whole year as a stack of weeks — one row per week, 7 columns, event dots.
+struct YearView: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
+
+    private let gutter: CGFloat = 38
+
+    var body: some View {
+        let cal = appState.calendar
+        let year = cal.component(.year, from: appState.currentDate)
+        let weeks = yearWeeks(year: year, calendar: cal)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: gutter, height: 1)
+                ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.vertical, 3)
+            Divider()
+            GeometryReader { geo in
+                let rowH = max(15, geo.size.height / CGFloat(weeks.count))
+                let needsScroll = rowH * CGFloat(weeks.count) > geo.size.height + 1
+                let content = VStack(spacing: 0) {
+                    ForEach(weeks, id: \.self) { weekStart in
+                        YearWeekRow(weekStart: weekStart, year: year, rowH: rowH, gutter: gutter)
+                    }
+                }
+                if needsScroll {
+                    ScrollView { content }
+                } else {
+                    content
+                }
+            }
+        }
+    }
+
+    private func yearWeeks(year: Int, calendar: Calendar) -> [Date] {
+        guard let jan1 = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
+              let dec31 = calendar.date(from: DateComponents(year: year, month: 12, day: 31)) else { return [] }
+        var result: [Date] = []
+        var day = calendar.startOfWeek(for: jan1)
+        while day <= dec31 {
+            result.append(day)
+            guard let next = calendar.date(byAdding: .day, value: 7, to: day) else { break }
+            day = next
+        }
+        return result
+    }
+}
+
+private struct YearWeekRow: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    let weekStart: Date
+    let year: Int
+    let rowH: CGFloat
+    let gutter: CGFloat
+
+    var body: some View {
+        let cal = appState.calendar
+        HStack(spacing: 0) {
+            Text(monthLabel(calendar: cal))
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: gutter, alignment: .leading)
+                .padding(.leading, 6)
+            ForEach(0..<7, id: \.self) { offset in
+                if let day = cal.date(byAdding: .day, value: offset, to: weekStart) {
+                    YearDayCell(day: day, year: year, rowH: rowH)
+                }
+            }
+        }
+        .frame(height: rowH)
+    }
+
+    /// Show the month name on the row containing the 1st of that month.
+    private func monthLabel(calendar: Calendar) -> String {
+        for offset in 0..<7 {
+            if let day = calendar.date(byAdding: .day, value: offset, to: weekStart),
+               calendar.component(.day, from: day) == 1,
+               calendar.component(.year, from: day) == year {
+                let f = DateFormatter()
+                f.setLocalizedDateFormatFromTemplate("MMM")
+                return f.string(from: day)
+            }
+        }
+        return ""
+    }
+}
+
+private struct YearDayCell: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    let day: Date
+    let year: Int
+    let rowH: CGFloat
+
+    var body: some View {
+        let cal = appState.calendar
+        let inYear = cal.component(.year, from: day) == year
+        let isToday = day.isSameDay(as: Date(), calendar: cal)
+        let colors = inYear ? store.eventColors(on: day, calendar: cal) : []
+        let evenMonth = cal.component(.month, from: day) % 2 == 0
+        let showDots = rowH >= 22
+
+        HStack(spacing: 3) {
+            Text(Fmt.dayNum.string(from: day))
+                .font(.system(size: 9, weight: isToday ? .bold : .regular))
+                .frame(width: 16, height: 13)
+                .background { if isToday { Capsule().fill(Color.red) } }
+                .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : Color.secondary.opacity(0.35))
+            if showDots {
+                HStack(spacing: 2) {
+                    ForEach(Array(colors.enumerated()), id: \.offset) { _, color in
+                        Circle().fill(color).frame(width: 4, height: 4)
+                    }
+                }
+            } else if !colors.isEmpty {
+                Circle().fill(colors[0]).frame(width: 4, height: 4)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(inYear && evenMonth ? Color.primary.opacity(0.035) : Color.clear)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.primary.opacity(0.05)).frame(height: 0.5)
+        }
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.primary.opacity(0.04)).frame(width: 0.5)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            appState.goTo(day)
+            appState.viewMode = .day
+        }
+    }
+}

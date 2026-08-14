@@ -12,6 +12,8 @@ final class AppSettings: ObservableObject {
     @Published var showWeekends: Bool { didSet { UserDefaults.standard.set(showWeekends, forKey: "showWeekends") } }
     /// TimeZone identifier, empty = none
     @Published var secondaryTZ: String { didSet { UserDefaults.standard.set(secondaryTZ, forKey: "secondaryTZ") } }
+    /// Personal Zoom meeting URL, used by "Add conferencing"
+    @Published var zoomLink: String { didSet { UserDefaults.standard.set(zoomLink, forKey: "zoomLink") } }
 
     private init() {
         let d = UserDefaults.standard
@@ -20,6 +22,7 @@ final class AppSettings: ObservableObject {
         showDeclined = d.object(forKey: "showDeclined") as? Bool ?? true
         showWeekends = d.object(forKey: "showWeekends") as? Bool ?? true
         secondaryTZ = d.string(forKey: "secondaryTZ") ?? ""
+        zoomLink = d.string(forKey: "zoomLink") ?? ""
     }
 
     var secondaryTimeZone: TimeZone? {
