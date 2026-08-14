@@ -39,13 +39,21 @@ struct AvailabilitySlot: Identifiable, Equatable {
 @MainActor
 final class AppState: ObservableObject {
     @Published var currentDate = Date()
-    @Published var viewMode: ViewMode = .week
+    @Published var viewMode: ViewMode = .week {
+        didSet { if viewMode != oldValue { gridAnchor = nil } }
+    }
     /// Set when navigation (not scrolling) moves the month view; the view scrolls there and clears it.
     @Published var monthScrollTarget: Date?
+    /// When set, the time grid starts at this day instead of the aligned week
+    /// (free side-scrolling can rest on any day).
+    @Published var gridAnchor: Date?
     /// Live horizontal pan offset for the time grid (trackpad side-scroll).
     @Published var weekPan: CGFloat = 0
-    /// Page width reported by the time grid, used for pan snapping.
+    /// Layout metrics reported by the time grid, used for pan re-anchoring.
     var weekPageWidth: CGFloat = 0
+    var gridColumnWidth: CGFloat = 0
+    /// True while a side-scroll gesture (or its settling animation) is active.
+    var isPanning = false
     /// Transient status message.
     @Published var toast: String?
     @Published var panelContext: EditorContext?
@@ -69,21 +77,42 @@ final class AppState: ObservableObject {
         return c
     }
 
-    var visibleDays: [Date] { days(reference: currentDate) }
+    var visibleDays: [Date] {
+        if let anchor = gridAnchor {
+            let cal = calendar
+            let count: Int
+            switch viewMode {
+            case .day: count = 1
+            case .days(let n): count = n
+            case .week: count = 7
+            case .month, .year: return []
+            }
+            return (0..<count).compactMap { cal.date(byAdding: .day, value: $0, to: anchor) }
+        }
+        return days(reference: currentDate)
+    }
 
     /// The day columns one page before/after the current ones (for side-scroll).
     func visibleDays(pageOffset: Int) -> [Date] {
-        guard pageOffset != 0 else { return visibleDays }
+        let current = visibleDays
+        guard pageOffset != 0 else { return current }
+        guard let firstDay = current.first else { return [] }
         let cal = calendar
-        let ref: Date?
-        switch viewMode {
-        case .day: ref = cal.date(byAdding: .day, value: pageOffset, to: currentDate)
-        case .days(let n): ref = cal.date(byAdding: .day, value: pageOffset * n, to: currentDate)
-        case .week: ref = cal.date(byAdding: .weekOfYear, value: pageOffset, to: currentDate)
-        case .month, .year: ref = nil
+        if case .week = viewMode, !settings.showWeekends, gridAnchor == nil {
+            guard let ref = cal.date(byAdding: .weekOfYear, value: pageOffset, to: firstDay) else { return [] }
+            return days(reference: ref)
         }
-        guard let ref else { return [] }
-        return days(reference: ref)
+        guard let start = cal.date(byAdding: .day, value: pageOffset * current.count, to: firstDay) else { return [] }
+        return (0..<current.count).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+    }
+
+    /// Shift the free-scroll anchor by whole days (during trackpad panning).
+    func panShiftDays(_ dayDelta: Int) {
+        let cal = calendar
+        let anchor = gridAnchor ?? visibleDays.first ?? currentDate
+        let shifted = cal.date(byAdding: .day, value: dayDelta, to: anchor) ?? anchor
+        gridAnchor = shifted
+        currentDate = shifted
     }
 
     private func days(reference: Date) -> [Date] {
@@ -107,12 +136,22 @@ final class AppState: ObservableObject {
     func goToToday() { goTo(Date()) }
 
     func goTo(_ date: Date) {
+        gridAnchor = nil
         currentDate = date
         monthScrollTarget = date
     }
 
     func step(_ direction: Int) {
         let cal = calendar
+        if gridAnchor != nil {
+            switch viewMode {
+            case .day: panShiftDays(direction)
+            case .days(let n): panShiftDays(direction * n)
+            case .week: panShiftDays(direction * 7)
+            default: break
+            }
+            return
+        }
         switch viewMode {
         case .day:
             currentDate = cal.date(byAdding: .day, value: direction, to: currentDate) ?? currentDate
@@ -129,6 +168,7 @@ final class AppState: ObservableObject {
     }
 
     func setDayCount(_ n: Int) {
+        gridAnchor = nil
         switch n {
         case 1: viewMode = .day
         case 7: viewMode = .week

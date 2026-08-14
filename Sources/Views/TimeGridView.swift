@@ -83,9 +83,19 @@ struct TimeGridView: View {
                     }
                 }
             }
-            .onAppear { appState.weekPageWidth = pageWidth }
-            .onChange(of: outer.size.width) { appState.weekPageWidth = pageWidth }
+            .onAppear {
+                appState.weekPageWidth = pageWidth
+                appState.gridColumnWidth = colWidth
+            }
+            .onChange(of: outer.size.width) {
+                appState.weekPageWidth = pageWidth
+                appState.gridColumnWidth = colWidth
+            }
+            .onChange(of: days.count) {
+                appState.gridColumnWidth = pageWidth / CGFloat(max(days.count, 1))
+            }
             .onChange(of: appState.currentDate) {
+                guard !appState.isPanning else { return }
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { appState.weekPan = 0 }

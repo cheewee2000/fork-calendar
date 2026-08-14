@@ -25,7 +25,7 @@ enum KeyMonitor {
         }
     }
 
-    // MARK: - Horizontal pan (trackpad side-scroll to neighboring weeks)
+    // MARK: - Horizontal pan (smooth day-granular side-scroll)
 
     private static func handleScroll(_ event: NSEvent, appState: AppState) -> Bool {
         switch appState.viewMode {
@@ -36,43 +36,84 @@ enum KeyMonitor {
         let dx = event.scrollingDeltaX
         let dy = event.scrollingDeltaY
         // Once panning, keep capturing even if a sample is vertical-dominant
-        let panning = appState.weekPan != 0
+        let panning = appState.isPanning
         guard abs(dx) > abs(dy) || (panning && abs(dx) > 0.01) else { return false }
+        let colWidth = appState.gridColumnWidth
+        guard colWidth > 4 else { return false }
         if event.momentumPhase != [] {
-            return panning // swallow horizontal momentum during/after a pan
+            // Let momentum glide keep panning, day by day
+            guard panning else { return false }
+            if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
+                settlePan(appState)
+                return true
+            }
         }
-        let pageWidth = appState.weekPageWidth
-        guard pageWidth > 0 else { return false }
-        appState.weekPan = max(-pageWidth, min(pageWidth, appState.weekPan + dx))
+        appState.isPanning = true
+        var pan = appState.weekPan + dx
+        // Re-anchor day by day so the strip scrolls continuously
+        while pan <= -colWidth {
+            appState.panShiftDays(1)
+            pan += colWidth
+        }
+        while pan >= colWidth {
+            appState.panShiftDays(-1)
+            pan -= colWidth
+        }
+        appState.weekPan = pan
         snapWork?.cancel()
         if event.phase == .ended || event.phase == .cancelled {
-            snapPan(appState)
-        } else {
-            // Fallback for classic scroll wheels that never send an .ended phase
-            let work = DispatchWorkItem { snapPan(appState) }
-            snapWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+            // Trackpad fingers lifted; momentum may still arrive — settle after a beat
+            scheduleSettle(appState, delay: 0.08)
+        } else if event.phase == [] && event.momentumPhase == [] {
+            // Classic scroll wheel: no phases at all
+            scheduleSettle(appState, delay: 0.25)
         }
         return true
     }
 
-    private static func snapPan(_ appState: AppState) {
+    private static func scheduleSettle(_ appState: AppState, delay: TimeInterval) {
         snapWork?.cancel()
-        let pageWidth = appState.weekPageWidth
-        let pan = appState.weekPan
-        guard pageWidth > 0, pan != 0 else { return }
-        if pan < -pageWidth / 4 {
-            withAnimation(.easeOut(duration: 0.18)) { appState.weekPan = -pageWidth }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                appState.step(1) // grid resets pan without animation on date change
+        let work = DispatchWorkItem { settlePan(appState) }
+        snapWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Settle on a day boundary, with a light extra snap when the frame is
+    /// within one day of a full week alignment.
+    private static func settlePan(_ appState: AppState) {
+        snapWork?.cancel()
+        let colWidth = appState.gridColumnWidth
+        guard colWidth > 4 else {
+            appState.weekPan = 0
+            appState.isPanning = false
+            return
+        }
+        var pan = appState.weekPan
+        // Nearest day boundary
+        let dayShift = Int((-pan / colWidth).rounded())
+        if dayShift != 0 {
+            appState.panShiftDays(dayShift)
+            pan += CGFloat(dayShift) * colWidth
+        }
+        // Light week snap (week view only): within one day of Sun–Sat framing
+        if case .week = appState.viewMode, let anchor = appState.gridAnchor {
+            let cal = appState.calendar
+            let weekStart = cal.startOfWeek(for: anchor)
+            let offsetDays = cal.dateComponents([.day], from: weekStart, to: anchor).day ?? 0
+            if offsetDays == 1 {
+                appState.panShiftDays(-1)
+                pan -= colWidth
+            } else if offsetDays == 6 {
+                appState.panShiftDays(1)
+                pan += colWidth
             }
-        } else if pan > pageWidth / 4 {
-            withAnimation(.easeOut(duration: 0.18)) { appState.weekPan = pageWidth }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                appState.step(-1)
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.15)) { appState.weekPan = 0 }
+        }
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { appState.weekPan = pan }
+        withAnimation(.easeOut(duration: 0.2)) { appState.weekPan = 0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            appState.isPanning = false
         }
     }
 

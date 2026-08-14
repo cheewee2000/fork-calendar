@@ -163,23 +163,38 @@ final class CalendarStore: ObservableObject {
             start = min(start, fetched.start)
             end = max(end, fetched.end)
         }
-        // Cap the span at ~3 years so it can't grow without bound
-        if end.timeIntervalSince(start) > 3 * 365 * 86400 {
-            start = interval.start.addingTimeInterval(-180 * 86400)
-            end = interval.end.addingTimeInterval(180 * 86400)
+        // Cap the span so refetches stay fast
+        if end.timeIntervalSince(start) > 400 * 86400 {
+            start = interval.start.addingTimeInterval(-45 * 86400)
+            end = interval.end.addingTimeInterval(45 * 86400)
         }
         fetchedInterval = DateInterval(start: start, end: end)
         fetch(fetchedInterval!)
     }
 
+    private let fetchQueue = DispatchQueue(label: "com.cwandt.forkcalendar.fetch", qos: .userInitiated)
+    private var fetchGeneration = 0
+
+    /// Fetches off the main thread so saves/navigation never beachball.
     private func fetch(_ interval: DateInterval) {
-        var merged: [EKEvent] = []
-        for store in allStores {
-            let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
-            merged.append(contentsOf: store.events(matching: predicate))
+        fetchGeneration += 1
+        let generation = fetchGeneration
+        let stores = allStores
+        fetchQueue.async { [weak self] in
+            var merged: [EKEvent] = []
+            for store in stores {
+                let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
+                merged.append(contentsOf: store.events(matching: predicate))
+            }
+            merged.sort { $0.startDate < $1.startDate }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, self.fetchGeneration == generation else { return }
+                    self.events = merged
+                    self.dayIndexCache = nil
+                }
+            }
         }
-        events = merged.sorted { $0.startDate < $1.startDate }
-        dayIndexCache = nil
     }
 
     // MARK: - Visibility
