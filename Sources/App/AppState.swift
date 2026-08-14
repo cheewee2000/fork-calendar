@@ -42,6 +42,12 @@ final class AppState: ObservableObject {
     @Published var viewMode: ViewMode = .week
     /// Set when navigation (not scrolling) moves the month view; the view scrolls there and clears it.
     @Published var monthScrollTarget: Date?
+    /// Live horizontal pan offset for the time grid (trackpad side-scroll).
+    @Published var weekPan: CGFloat = 0
+    /// Page width reported by the time grid, used for pan snapping.
+    var weekPageWidth: CGFloat = 0
+    /// Transient status message.
+    @Published var toast: String?
     @Published var panelContext: EditorContext?
     @Published var pendingSpanAction: PendingSpanAction?
     @Published var showSpanDialog = false
@@ -63,15 +69,32 @@ final class AppState: ObservableObject {
         return c
     }
 
-    var visibleDays: [Date] {
+    var visibleDays: [Date] { days(reference: currentDate) }
+
+    /// The day columns one page before/after the current ones (for side-scroll).
+    func visibleDays(pageOffset: Int) -> [Date] {
+        guard pageOffset != 0 else { return visibleDays }
+        let cal = calendar
+        let ref: Date?
+        switch viewMode {
+        case .day: ref = cal.date(byAdding: .day, value: pageOffset, to: currentDate)
+        case .days(let n): ref = cal.date(byAdding: .day, value: pageOffset * n, to: currentDate)
+        case .week: ref = cal.date(byAdding: .weekOfYear, value: pageOffset, to: currentDate)
+        case .month, .year: ref = nil
+        }
+        guard let ref else { return [] }
+        return days(reference: ref)
+    }
+
+    private func days(reference: Date) -> [Date] {
         let cal = calendar
         switch viewMode {
         case .day:
-            return [currentDate]
+            return [reference]
         case .days(let n):
-            return (0..<n).compactMap { cal.date(byAdding: .day, value: $0, to: currentDate) }
+            return (0..<n).compactMap { cal.date(byAdding: .day, value: $0, to: reference) }
         case .week:
-            let days = cal.week(containing: currentDate)
+            let days = cal.week(containing: reference)
             if settings.showWeekends { return days }
             return days.filter { !cal.isDateInWeekend($0) }
         case .month, .year:

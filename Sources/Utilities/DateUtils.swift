@@ -67,8 +67,23 @@ enum Fmt {
     }()
 }
 
+extension EKEvent {
+    var myParticipantStatus: EKParticipantStatus? {
+        attendees?.first(where: { $0.isCurrentUser })?.participantStatus
+    }
+
+    /// True when I'm invited but haven't responded yet.
+    var needsMyResponse: Bool {
+        myParticipantStatus == .pending
+    }
+}
+
 extension EKCalendar {
     var displayColor: Color {
+        if let hex = AppSettings.shared.calendarColors[calendarIdentifier],
+           let override = Color(hex: hex) {
+            return override
+        }
         #if os(macOS)
         if let c = color { return Color(nsColor: c) }
         #else

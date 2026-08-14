@@ -8,6 +8,8 @@ import SwiftUI
 @MainActor
 enum KeyMonitor {
     private static var monitor: Any?
+    private static var scrollMonitor: Any?
+    private static var snapWork: DispatchWorkItem?
 
     static func install(appState: AppState, store: CalendarStore) {
         guard monitor == nil else { return }
@@ -15,6 +17,62 @@ enum KeyMonitor {
             MainActor.assumeIsolated {
                 handle(event, appState: appState, store: store) ? nil : event
             }
+        }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            MainActor.assumeIsolated {
+                handleScroll(event, appState: appState) ? nil : event
+            }
+        }
+    }
+
+    // MARK: - Horizontal pan (trackpad side-scroll to neighboring weeks)
+
+    private static func handleScroll(_ event: NSEvent, appState: AppState) -> Bool {
+        switch appState.viewMode {
+        case .day, .week, .days: break
+        default: return false
+        }
+        guard !appState.paletteOpen else { return false }
+        let dx = event.scrollingDeltaX
+        let dy = event.scrollingDeltaY
+        // Once panning, keep capturing even if a sample is vertical-dominant
+        let panning = appState.weekPan != 0
+        guard abs(dx) > abs(dy) || (panning && abs(dx) > 0.01) else { return false }
+        if event.momentumPhase != [] {
+            return panning // swallow horizontal momentum during/after a pan
+        }
+        let pageWidth = appState.weekPageWidth
+        guard pageWidth > 0 else { return false }
+        appState.weekPan = max(-pageWidth, min(pageWidth, appState.weekPan + dx))
+        snapWork?.cancel()
+        if event.phase == .ended || event.phase == .cancelled {
+            snapPan(appState)
+        } else {
+            // Fallback for classic scroll wheels that never send an .ended phase
+            let work = DispatchWorkItem { snapPan(appState) }
+            snapWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
+        return true
+    }
+
+    private static func snapPan(_ appState: AppState) {
+        snapWork?.cancel()
+        let pageWidth = appState.weekPageWidth
+        let pan = appState.weekPan
+        guard pageWidth > 0, pan != 0 else { return }
+        if pan < -pageWidth / 4 {
+            withAnimation(.easeOut(duration: 0.18)) { appState.weekPan = -pageWidth }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                appState.step(1) // grid resets pan without animation on date change
+            }
+        } else if pan > pageWidth / 4 {
+            withAnimation(.easeOut(duration: 0.18)) { appState.weekPan = pageWidth }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                appState.step(-1)
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.15)) { appState.weekPan = 0 }
         }
     }
 

@@ -61,6 +61,21 @@ struct RootView: View {
                     .padding(.bottom, 16)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if let toast = appState.toast {
+                Text(toast)
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+                    .padding(14)
+                    .task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        appState.toast = nil
+                    }
+            }
+        }
         .confirmationDialog(
             "This is a repeating event.",
             isPresented: $appState.showSpanDialog,

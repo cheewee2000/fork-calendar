@@ -4,8 +4,9 @@ import EventKit
 import AppKit
 #endif
 
-/// Day/N-day/week timeline: hour gutter (with optional secondary time zone),
-/// day columns, drag-to-create, drag-to-move, edge-resize, availability mode.
+/// Day/N-day/week timeline. Renders three "pages" (previous / current / next
+/// period) in a clipped strip so trackpad side-scrolling pans smoothly into
+/// the neighboring weeks before snapping.
 struct TimeGridView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
@@ -16,89 +17,109 @@ struct TimeGridView: View {
     private let hourHeight: CGFloat = 56
 
     var body: some View {
-        VStack(spacing: 0) {
-            dayHeaders
-            allDayRow
-            Divider()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    grid
-                }
-                .onAppear {
-                    proxy.scrollTo("hour-8", anchor: .top)
-                }
-            }
-        }
-    }
+        GeometryReader { outer in
+            let pageWidth = max(outer.size.width - gutterWidth, 1)
+            let colWidth = pageWidth / CGFloat(max(days.count, 1))
+            let extDays = appState.visibleDays(pageOffset: -1) + days + appState.visibleDays(pageOffset: 1)
+            let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar)
+            let laneCount = (bars.map(\.lane).max() ?? -1) + 1
 
-    private var dayHeaders: some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: gutterWidth, height: 1)
-            ForEach(days, id: \.self) { day in
-                let isToday = day.isSameDay(as: Date(), calendar: appState.calendar)
-                VStack(spacing: 2) {
-                    Text(Fmt.weekdayShort.string(from: day).uppercased())
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isToday ? Color.red : Color.secondary)
-                    Text(Fmt.dayNum.string(from: day))
-                        .font(.system(size: 15, weight: isToday ? .bold : .regular))
-                        .frame(width: 26, height: 26)
-                        .background { if isToday { Circle().fill(Color.red) } }
-                        .foregroundStyle(isToday ? Color.white : Color.primary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    appState.currentDate = day
-                    appState.viewMode = .day
-                }
-            }
-        }
-    }
-
-    private var allDayRow: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Text("all-day")
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-                .frame(width: gutterWidth)
-            ForEach(days, id: \.self) { day in
-                let allDay = store.events(on: day, calendar: appState.calendar).allDay
-                VStack(spacing: 2) {
-                    ForEach(Array(allDay.prefix(3).enumerated()), id: \.offset) { _, event in
-                        AllDayChip(event: event)
-                    }
-                    if allDay.count > 3 {
-                        Text("+\(allDay.count - 3) more")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 2)
-            }
-        }
-        .padding(.bottom, 4)
-    }
-
-    private var grid: some View {
-        HStack(alignment: .top, spacing: 0) {
-            timeGutter
-            GeometryReader { geo in
-                let colWidth = geo.size.width / CGFloat(days.count)
-                ZStack(alignment: .topLeading) {
-                    hourLines
-                    HStack(spacing: 0) {
-                        ForEach(days, id: \.self) { day in
-                            DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: gutterWidth, height: 1)
+                    paged(pageWidth) {
+                        HStack(spacing: 0) {
+                            ForEach(extDays, id: \.self) { day in
+                                dayHeader(day)
+                                    .frame(width: colWidth)
+                            }
                         }
                     }
                 }
+                HStack(alignment: .top, spacing: 0) {
+                    Text("all-day")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .frame(width: gutterWidth)
+                    paged(pageWidth) {
+                        ZStack(alignment: .topLeading) {
+                            Color.clear
+                            ForEach(bars) { bar in
+                                SpanBarView(event: bar.event)
+                                    .frame(
+                                        width: CGFloat(bar.endIndex - bar.startIndex + 1) * colWidth - 4,
+                                        height: 16
+                                    )
+                                    .offset(x: CGFloat(bar.startIndex) * colWidth + 2, y: CGFloat(bar.lane) * 18)
+                            }
+                        }
+                        .frame(width: pageWidth * 3, alignment: .topLeading)
+                    }
+                }
+                .frame(height: max(CGFloat(laneCount) * 18 + 2, 10))
+                .padding(.bottom, 3)
+                Divider()
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        HStack(alignment: .top, spacing: 0) {
+                            timeGutter
+                            paged(pageWidth) {
+                                ZStack(alignment: .topLeading) {
+                                    hourLines
+                                    HStack(spacing: 0) {
+                                        ForEach(extDays, id: \.self) { day in
+                                            DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
+                                        }
+                                    }
+                                }
+                                .frame(width: pageWidth * 3)
+                            }
+                        }
+                        .frame(height: hourHeight * 24)
+                        .padding(.bottom, 20)
+                    }
+                    .onAppear {
+                        proxy.scrollTo("hour-8", anchor: .top)
+                    }
+                }
             }
-            .frame(height: hourHeight * 24)
+            .onAppear { appState.weekPageWidth = pageWidth }
+            .onChange(of: outer.size.width) { appState.weekPageWidth = pageWidth }
+            .onChange(of: appState.currentDate) {
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { appState.weekPan = 0 }
+            }
         }
-        .padding(.bottom, 20)
+    }
+
+    /// Clip a 3-page-wide strip to one page and apply the live pan offset.
+    private func paged<Content: View>(_ pageWidth: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .offset(x: -pageWidth + appState.weekPan)
+            .frame(width: pageWidth, alignment: .leading)
+            .clipped()
+    }
+
+    private func dayHeader(_ day: Date) -> some View {
+        let isToday = day.isSameDay(as: Date(), calendar: appState.calendar)
+        return VStack(spacing: 2) {
+            Text(Fmt.weekdayShort.string(from: day).uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(isToday ? Color.red : Color.secondary)
+            Text(Fmt.dayNum.string(from: day))
+                .font(.system(size: 15, weight: isToday ? .bold : .regular))
+                .frame(width: 26, height: 26)
+                .background { if isToday { Circle().fill(Color.red) } }
+                .foregroundStyle(isToday ? Color.white : Color.primary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            appState.currentDate = day
+            appState.viewMode = .day
+        }
     }
 
     private var timeGutter: some View {
@@ -194,7 +215,6 @@ struct DayColumn: View {
                     .allowsHitTesting(false)
             }
 
-            // Availability slots on this day
             ForEach(appState.availabilitySlots.filter { $0.start.isSameDay(as: day, calendar: appState.calendar) }) { slot in
                 let dayStart = appState.calendar.startOfDay(for: day)
                 let y = CGFloat(slot.start.timeIntervalSince(dayStart) / 3600) * hourHeight
@@ -354,13 +374,20 @@ struct EventBlockView: View {
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .frame(width: max(subWidth - 2, 12), height: height, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(isSelected ? 0.28 : 0.16)))
+        .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(
+            item.event.needsMyResponse ? 0.07 : isSelected ? 0.28 : 0.16
+        )))
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 1)
+            if !item.event.needsMyResponse {
+                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 1)
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .overlay {
-            if isSelected {
+            if item.event.needsMyResponse {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(color, style: StrokeStyle(lineWidth: isSelected ? 1.8 : 1.2, dash: [4, 3]))
+            } else if isSelected {
                 RoundedRectangle(cornerRadius: 5).strokeBorder(color, lineWidth: 1.5)
             }
         }
@@ -383,6 +410,13 @@ struct EventBlockView: View {
 
     @ViewBuilder
     private func contextMenuItems(joinURL: URL?) -> some View {
+        if item.event.attendees?.isEmpty == false {
+            Menu("RSVP") {
+                Button("Going") { rsvp("accepted") }
+                Button("Maybe") { rsvp("tentative") }
+                Button("Not going") { rsvp("declined") }
+            }
+        }
         if let joinURL {
             Button {
                 openURL(joinURL)
@@ -420,6 +454,12 @@ struct EventBlockView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+
+    private func rsvp(_ status: String) {
+        let event = item.event
+        let state = appState
+        Task { await GoogleSync.respond(event: event, status: status, appState: state) }
     }
 
     private func resizeHandle(top: Bool) -> some View {
@@ -490,26 +530,5 @@ struct EventBlockView: View {
                     appState.commitChange(to: item.event, snapshot: snapshot, isNew: false, store: store)
                 }
             }
-    }
-}
-
-struct AllDayChip: View {
-    @EnvironmentObject var appState: AppState
-
-    let event: EKEvent
-
-    var body: some View {
-        let color = event.calendar?.displayColor ?? Color.accentColor
-        let isSelected = appState.selectedKey == eventKey(event)
-        Text(event.title ?? "Untitled")
-            .font(.system(size: 10, weight: .medium))
-            .lineLimit(1)
-            .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(isSelected ? 0.3 : 0.16)))
-            .contentShape(Rectangle())
-            .onTapGesture { appState.select(event) }
     }
 }

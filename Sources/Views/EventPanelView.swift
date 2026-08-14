@@ -72,6 +72,7 @@ struct EventPanelView: View {
     @State private var calendarID: String
     @State private var recurrence: RecurrenceChoice
     @State private var inviteEmails: String = ""
+    @State private var addMeetOnSave = false
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
 
@@ -136,6 +137,10 @@ struct EventPanelView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
+                    } else if addMeetOnSave {
+                        Label("Google Meet will be created on save", systemImage: "video.badge.checkmark")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     } else if !isReadOnly {
                         conferencingMenu
                     }
@@ -180,6 +185,21 @@ struct EventPanelView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
+                    if !context.isNew, context.event.attendees?.isEmpty == false {
+                        row(icon: "envelope.badge") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Your response")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    rsvpButton("Going", status: "accepted", current: .accepted)
+                                    rsvpButton("Maybe", status: "tentative", current: .tentative)
+                                    rsvpButton("No", status: "declined", current: .declined)
+                                }
+                            }
+                        }
+                    }
+
                     if let attendees = context.event.attendees, !attendees.isEmpty {
                         row(icon: "person.2") {
                             VStack(alignment: .leading, spacing: 4) {
@@ -210,7 +230,9 @@ struct EventPanelView: View {
                                 .textInputAutocapitalization(.never)
                                 #endif
                             if !inviteEmails.isEmpty {
-                                Text("Sent as an email invite (.ics) on save")
+                                Text(GoogleAuth.shared.isConnected
+                                     ? "Added to the Google event's guest list on save"
+                                     : "Sent as an email invite (.ics) on save")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
@@ -275,6 +297,13 @@ struct EventPanelView: View {
 
     private var conferencingMenu: some View {
         Menu {
+            if GoogleAuth.shared.isConnected {
+                Button {
+                    addMeetOnSave = true
+                } label: {
+                    Label("Google Meet (created on save)", systemImage: "video.badge.plus")
+                }
+            }
             if let zoomURL = URL(string: settings.zoomLink), !settings.zoomLink.isEmpty {
                 Button {
                     urlString = zoomURL.absoluteString
@@ -315,6 +344,18 @@ struct EventPanelView: View {
                 .padding(.top, 3)
             content()
         }
+    }
+
+    private func rsvpButton(_ label: String, status: String, current: EKParticipantStatus) -> some View {
+        let isCurrent = context.event.myParticipantStatus == current
+        return Button(label) {
+            let event = context.event
+            let state = appState
+            Task { await GoogleSync.respond(event: event, status: status, appState: state) }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(isCurrent ? .accentColor : nil)
     }
 
     private func statusIcon(_ status: EKParticipantStatus) -> String {
@@ -360,8 +401,10 @@ struct EventPanelView: View {
         }
         appState.commitChange(to: event, snapshot: originalSnapshot, isNew: context.isNew, store: store)
         let emails = inviteEmails.split(separator: ",").map(String.init)
-        if !emails.isEmpty {
-            Invites.send(event: event, emails: emails)
+        if !emails.isEmpty || addMeetOnSave {
+            let meet = addMeetOnSave
+            let state = appState
+            Task { await GoogleSync.attachGuests(event: event, emails: emails, addMeet: meet, appState: state) }
         }
         appState.closePanel()
         dismiss()

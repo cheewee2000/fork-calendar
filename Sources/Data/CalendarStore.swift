@@ -225,6 +225,16 @@ final class CalendarStore: ObservableObject {
         return (allDay, timed)
     }
 
+    /// All-day and multi-day events overlapping the interval (for span bars).
+    func spanningEvents(from: Date, to: Date) -> [EKEvent] {
+        events.filter { event in
+            guard passesFilters(event) else { return false }
+            guard let start = event.startDate, let end = event.endDate else { return false }
+            guard event.isAllDay || end.timeIntervalSince(start) >= 86400 else { return false }
+            return start < to && end > from
+        }
+    }
+
     /// Fast per-day lookup for dense views (year view dots).
     private func dayIndex() -> [Date: [EKEvent]] {
         if let cached = dayIndexCache { return cached }

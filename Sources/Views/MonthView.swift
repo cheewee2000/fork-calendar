@@ -112,15 +112,28 @@ struct MonthWeekRow: View {
     let cellW: CGFloat
     let rowH: CGFloat
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var store: CalendarStore
 
     var body: some View {
         let cal = appState.calendar
-        HStack(spacing: 0) {
-            ForEach(0..<7, id: \.self) { offset in
-                if let day = cal.date(byAdding: .day, value: offset, to: weekStart) {
-                    MonthCell(day: day, cellW: cellW, rowH: rowH)
+        let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
+        let bars = SpanLayout.bars(days: days, store: store, calendar: cal).filter { $0.lane < 3 }
+        let laneCount = (bars.map(\.lane).max() ?? -1) + 1
+        let barsTop: CGFloat = 24
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                ForEach(days, id: \.self) { day in
+                    MonthCell(day: day, cellW: cellW, rowH: rowH, laneInset: CGFloat(laneCount) * 16)
                         .frame(width: cellW, height: rowH)
                 }
+            }
+            ForEach(bars) { bar in
+                SpanBarView(event: bar.event, compact: true)
+                    .frame(
+                        width: CGFloat(bar.endIndex - bar.startIndex + 1) * cellW - 6,
+                        height: 14
+                    )
+                    .offset(x: CGFloat(bar.startIndex) * cellW + 3, y: barsTop + CGFloat(bar.lane) * 16)
             }
         }
     }
@@ -132,11 +145,11 @@ struct MonthCell: View {
     let day: Date
     let cellW: CGFloat
     let rowH: CGFloat
+    var laneInset: CGFloat = 0
 
     var body: some View {
         let cal = appState.calendar
-        let dayEvents = store.events(on: day, calendar: cal)
-        let events = dayEvents.allDay + dayEvents.timed
+        let events = store.events(on: day, calendar: cal).timed
         let isToday = day.isSameDay(as: Date(), calendar: cal)
         let dayOfMonth = cal.component(.day, from: day)
         let month = cal.component(.month, from: day)
@@ -153,6 +166,9 @@ struct MonthCell: View {
                 Spacer(minLength: 0)
             }
             .padding(.leading, 3)
+            if laneInset > 0 {
+                Color.clear.frame(height: laneInset)
+            }
             ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, event in
                 MonthChip(event: event, cellW: cellW, rowH: rowH)
             }
@@ -222,6 +238,12 @@ struct MonthChip: View {
         .background(RoundedRectangle(cornerRadius: 3).fill(
             isDragging ? color.opacity(0.35) : color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)
         ))
+        .overlay {
+            if event.needsMyResponse {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            }
+        }
         .contentShape(Rectangle())
         .offset(dragOffset)
         .zIndex(isDragging ? 100 : 0)

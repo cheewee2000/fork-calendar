@@ -2,7 +2,7 @@
 
 A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI + EventKit. Reads and edits your real system calendars (iCloud, Google via macOS/iOS accounts, etc.).
 
-**v0.3.0**
+**v0.5.0**
 
 ## Features
 
@@ -21,6 +21,11 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 - Add conferencing: Zoom personal room (set in Settings), Google Meet create-and-paste, or paste any link
 - Invite people by email — sends a standards-compliant .ics invite via Mail/share sheet
 - Gmail shared calendars via delegate calendar sources
+- Multi-day/all-day events render as single continuous bars across days (week + month views)
+- Week/day views side-scroll smoothly to neighboring pages (trackpad swipe, snaps to the week)
+- Custom per-calendar colors (hover a sidebar calendar → palette, presets or any color)
+- Google account connection (your own OAuth client): real Google-side guest lists with email invites, auto-created Google Meet links, and RSVP (Going/Maybe/No) from the event panel or right-click
+- Events awaiting your RSVP show a dotted outline
 - Undo (⌘Z) for moves, edits, deletes, and creates
 - macOS menu bar agenda with next event + Join buttons
 - Settings (⌘,): week start, default duration, weekends, declined events, secondary time zone in the gutter

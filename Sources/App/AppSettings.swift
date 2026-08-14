@@ -14,6 +14,11 @@ final class AppSettings: ObservableObject {
     @Published var secondaryTZ: String { didSet { UserDefaults.standard.set(secondaryTZ, forKey: "secondaryTZ") } }
     /// Personal Zoom meeting URL, used by "Add conferencing"
     @Published var zoomLink: String { didSet { UserDefaults.standard.set(zoomLink, forKey: "zoomLink") } }
+    /// Per-calendar color overrides (calendarIdentifier → hex "RRGGBB")
+    @Published var calendarColors: [String: String] { didSet { UserDefaults.standard.set(calendarColors, forKey: "calendarColors") } }
+    /// Google OAuth desktop-app client (user-supplied, from console.cloud.google.com)
+    @Published var googleClientID: String { didSet { UserDefaults.standard.set(googleClientID, forKey: "googleClientID") } }
+    @Published var googleClientSecret: String { didSet { UserDefaults.standard.set(googleClientSecret, forKey: "googleClientSecret") } }
 
     private init() {
         let d = UserDefaults.standard
@@ -23,6 +28,9 @@ final class AppSettings: ObservableObject {
         showWeekends = d.object(forKey: "showWeekends") as? Bool ?? true
         secondaryTZ = d.string(forKey: "secondaryTZ") ?? ""
         zoomLink = d.string(forKey: "zoomLink") ?? ""
+        calendarColors = d.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]
+        googleClientID = d.string(forKey: "googleClientID") ?? ""
+        googleClientSecret = d.string(forKey: "googleClientSecret") ?? ""
     }
 
     var secondaryTimeZone: TimeZone? {

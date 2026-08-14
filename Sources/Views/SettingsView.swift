@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var googleAuth = GoogleAuth.shared
 
     private static let timeZones: [String] = [
         "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
@@ -33,9 +34,32 @@ struct SettingsView: View {
                     Text(id.replacingOccurrences(of: "_", with: " ")).tag(id)
                 }
             }
+            Section("Google account (guest lists & Meet links)") {
+                TextField("OAuth Client ID", text: $settings.googleClientID)
+                TextField("OAuth Client Secret", text: $settings.googleClientSecret)
+                HStack {
+                    if googleAuth.isConnected {
+                        Button("Disconnect") {
+                            googleAuth.disconnect()
+                            GoogleSync.clearCache()
+                        }
+                    } else {
+                        Button("Connect Google…") {
+                            Task { await googleAuth.connect() }
+                        }
+                        .disabled(settings.googleClientID.isEmpty)
+                    }
+                    Text(googleAuth.isConnected ? "Connected" : googleAuth.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Create a **Desktop app** OAuth client at console.cloud.google.com (APIs & Services → Credentials) with the Google Calendar API enabled, then paste its ID and secret here.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 420)
+        .frame(width: 440)
         .fixedSize()
     }
 }

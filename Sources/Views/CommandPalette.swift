@@ -35,8 +35,11 @@ private struct PaletteBody: View {
         }
         .onAppear {
             model.reset()
-            focused = true
             model.itemCount = items.count
+            // Focus can fail while the overlay is still being inserted — retry.
+            focused = true
+            DispatchQueue.main.async { focused = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focused = true }
         }
         .onChange(of: model.query) {
             model.index = 0
@@ -76,6 +79,8 @@ private struct PaletteBody: View {
                 .focused($focused)
         }
         .padding(14)
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
     }
 
     private func resultsList(items: [PaletteItem]) -> some View {
