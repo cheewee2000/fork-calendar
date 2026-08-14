@@ -14,13 +14,16 @@ struct TimeGridView: View {
     let days: [Date]
 
     private var gutterWidth: CGFloat { settings.secondaryTimeZone == nil ? 54 : 96 }
-    private let hourHeight: CGFloat = 56
+    private var hourHeight: CGFloat { appState.hourHeight }
+    @State private var zoomBase: CGFloat?
 
     var body: some View {
         GeometryReader { outer in
             let pageWidth = max(outer.size.width - gutterWidth, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
-            let extDays = appState.visibleDays(pageOffset: -1) + days + appState.visibleDays(pageOffset: 1)
+            let extDays = appState.visibleDays(pageOffset: -2) + appState.visibleDays(pageOffset: -1)
+                + days
+                + appState.visibleDays(pageOffset: 1) + appState.visibleDays(pageOffset: 2)
             let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar)
             let laneCount = (bars.map(\.lane).max() ?? -1) + 1
 
@@ -53,7 +56,7 @@ struct TimeGridView: View {
                                     .offset(x: CGFloat(bar.startIndex) * colWidth + 2, y: CGFloat(bar.lane) * 18)
                             }
                         }
-                        .frame(width: pageWidth * 3, alignment: .topLeading)
+                        .frame(width: pageWidth * 5, alignment: .topLeading)
                     }
                 }
                 .frame(height: max(CGFloat(laneCount) * 18 + 2, 10))
@@ -72,12 +75,13 @@ struct TimeGridView: View {
                                         }
                                     }
                                 }
-                                .frame(width: pageWidth * 3)
+                                .frame(width: pageWidth * 5)
                             }
                         }
                         .frame(height: hourHeight * 24)
                         .padding(.bottom, 20)
                     }
+                    .simultaneousGesture(zoomGesture)
                     .onAppear {
                         proxy.scrollTo("hour-8", anchor: .top)
                     }
@@ -103,12 +107,24 @@ struct TimeGridView: View {
         }
     }
 
-    /// Clip a 3-page-wide strip to one page and apply the live pan offset.
+    /// Clip a 5-page-wide strip to one page and apply the live pan offset.
     private func paged<Content: View>(_ pageWidth: CGFloat, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .offset(x: -pageWidth + appState.weekPan)
+            .offset(x: -pageWidth * 2 + appState.weekPan)
             .frame(width: pageWidth, alignment: .leading)
             .clipped()
+    }
+
+    /// Pinch to zoom the hour scale (28–160 pt/hour).
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                if zoomBase == nil { zoomBase = appState.hourHeight }
+                appState.hourHeight = min(160, max(28, (zoomBase ?? 56) * value.magnification))
+            }
+            .onEnded { _ in
+                zoomBase = nil
+            }
     }
 
     private func dayHeader(_ day: Date) -> some View {
@@ -352,6 +368,7 @@ struct EventBlockView: View {
         let isSelected = appState.selectedKey == item.id
         let isPast = (item.event.endDate ?? Date()) < Date()
         let joinURL = MeetLink.url(for: item.event)
+        let awaiting = store.awaitingResponse(item.event)
 
         if isResizing {
             if resizingTop {
@@ -385,16 +402,16 @@ struct EventBlockView: View {
         .padding(.vertical, 3)
         .frame(width: max(subWidth - 2, 12), height: height, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(
-            item.event.needsMyResponse ? 0.07 : isSelected ? 0.28 : 0.16
+            awaiting ? 0.07 : isSelected ? 0.28 : 0.16
         )))
         .overlay(alignment: .leading) {
-            if !item.event.needsMyResponse {
+            if !awaiting {
                 RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 1)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .overlay {
-            if item.event.needsMyResponse {
+            if awaiting {
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(color, style: StrokeStyle(lineWidth: isSelected ? 1.8 : 1.2, dash: [4, 3]))
             } else if isSelected {
@@ -469,7 +486,8 @@ struct EventBlockView: View {
     private func rsvp(_ status: String) {
         let event = item.event
         let state = appState
-        Task { await GoogleSync.respond(event: event, status: status, appState: state) }
+        let s = store
+        Task { await GoogleSync.respond(event: event, status: status, appState: state, store: s) }
     }
 
     private func resizeHandle(top: Bool) -> some View {

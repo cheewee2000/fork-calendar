@@ -351,11 +351,12 @@ struct EventPanelView: View {
     }
 
     private func rsvpButton(_ label: String, status: String, current: EKParticipantStatus) -> some View {
-        let isCurrent = context.event.myParticipantStatus == current
+        let isCurrent = store.effectiveStatus(context.event) == current
         return Button(label) {
             let event = context.event
             let state = appState
-            Task { await GoogleSync.respond(event: event, status: status, appState: state) }
+            let s = store
+            Task { await GoogleSync.respond(event: event, status: status, appState: state, store: s) }
         }
         .buttonStyle(.bordered)
         .controlSize(.small)

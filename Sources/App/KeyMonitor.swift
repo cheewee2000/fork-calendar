@@ -50,14 +50,19 @@ enum KeyMonitor {
         }
         appState.isPanning = true
         var pan = appState.weekPan + dx
-        // Re-anchor day by day so the strip scrolls continuously
-        while pan <= -colWidth {
-            appState.panShiftDays(1)
-            pan += colWidth
-        }
-        while pan >= colWidth {
-            appState.panShiftDays(-1)
-            pan -= colWidth
+        // Re-anchor a whole page at a time (the strip is 5 pages wide), so
+        // expensive re-renders happen once per page instead of once per day
+        let pageWidth = appState.weekPageWidth
+        let dayCount = max(1, appState.visibleDays.count)
+        if pageWidth > 0 {
+            while pan <= -pageWidth {
+                appState.panShiftDays(dayCount)
+                pan += pageWidth
+            }
+            while pan >= pageWidth {
+                appState.panShiftDays(-dayCount)
+                pan -= pageWidth
+            }
         }
         appState.weekPan = pan
         snapWork?.cancel()

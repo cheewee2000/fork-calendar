@@ -56,6 +56,15 @@ final class AppState: ObservableObject {
     var isPanning = false
     /// Transient status message.
     @Published var toast: String?
+    /// Time-grid vertical zoom (points per hour), pinch-adjustable.
+    @Published var hourHeight: CGFloat {
+        didSet { UserDefaults.standard.set(Double(hourHeight), forKey: "hourHeight") }
+    }
+
+    init() {
+        let stored = UserDefaults.standard.double(forKey: "hourHeight")
+        hourHeight = stored >= 28 && stored <= 160 ? CGFloat(stored) : 56
+    }
     @Published var panelContext: EditorContext?
     @Published var pendingSpanAction: PendingSpanAction?
     @Published var showSpanDialog = false

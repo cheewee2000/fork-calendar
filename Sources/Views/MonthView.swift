@@ -239,7 +239,7 @@ struct MonthChip: View {
             isDragging ? color.opacity(0.35) : color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)
         ))
         .overlay {
-            if event.needsMyResponse {
+            if store.awaitingResponse(event) {
                 RoundedRectangle(cornerRadius: 3)
                     .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }

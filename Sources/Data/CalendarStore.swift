@@ -192,6 +192,11 @@ final class CalendarStore: ObservableObject {
                     guard let self, self.fetchGeneration == generation else { return }
                     self.events = merged
                     self.dayIndexCache = nil
+                    // Drop RSVP overrides once EventKit reflects the answer
+                    self.rsvpOverrides = self.rsvpOverrides.filter { key, _ in
+                        guard let match = merged.first(where: { eventKey($0) == key }) else { return true }
+                        return match.needsMyResponse
+                    }
                 }
             }
         }
@@ -222,15 +227,14 @@ final class CalendarStore: ObservableObject {
         return true
     }
 
-    /// Visible events overlapping the given day, split into all-day/multi-day and timed.
+    /// Visible events overlapping the given day, split into all-day/multi-day
+    /// and timed. Backed by the per-day index so scrolling renders stay cheap.
     func events(on day: Date, calendar: Calendar) -> (allDay: [EKEvent], timed: [EKEvent]) {
-        guard let dayInterval = calendar.dateInterval(of: .day, for: day) else { return ([], []) }
+        let key = calendar.startOfDay(for: day)
         var allDay: [EKEvent] = []
         var timed: [EKEvent] = []
-        for event in events {
+        for event in dayIndex()[key] ?? [] {
             guard let start = event.startDate, let end = event.endDate else { continue }
-            guard start < dayInterval.end, end > dayInterval.start else { continue }
-            guard passesFilters(event) else { continue }
             if event.isAllDay || end.timeIntervalSince(start) >= 86400 {
                 allDay.append(event)
             } else {
@@ -238,6 +242,26 @@ final class CalendarStore: ObservableObject {
             }
         }
         return (allDay, timed)
+    }
+
+    // MARK: - RSVP overlay (optimistic, until CalDAV syncs Google's answer back)
+
+    @Published var rsvpOverrides: [String: EKParticipantStatus] = [:]
+
+    func setRSVPOverride(_ status: EKParticipantStatus, for event: EKEvent) {
+        rsvpOverrides[eventKey(event)] = status
+        eventStore.refreshSourcesIfNecessary()
+    }
+
+    /// True when the event still needs my response (accounting for a
+    /// just-sent RSVP that EventKit hasn't synced yet).
+    func awaitingResponse(_ event: EKEvent) -> Bool {
+        guard rsvpOverrides[eventKey(event)] == nil else { return false }
+        return event.needsMyResponse
+    }
+
+    func effectiveStatus(_ event: EKEvent) -> EKParticipantStatus? {
+        rsvpOverrides[eventKey(event)] ?? event.myParticipantStatus
     }
 
     /// All-day and multi-day events overlapping the interval (for span bars).

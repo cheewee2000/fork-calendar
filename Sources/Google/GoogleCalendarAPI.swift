@@ -256,7 +256,7 @@ enum GoogleSync {
 
     /// RSVP from the calendar. Google-calendar events only (EventKit has no
     /// public RSVP API, so other accounts show a toast explaining that).
-    static func respond(event: EKEvent, status: String, appState: AppState) async {
+    static func respond(event: EKEvent, status: String, appState: AppState, store: CalendarStore? = nil) async {
         guard let token = await GoogleAuth.shared.validToken() else {
             appState.toast = "RSVP needs Google connected (Settings ⌘,)"
             return
@@ -269,6 +269,10 @@ enum GoogleSync {
             try await GoogleCalendarAPI.respond(eventID: located.eventID, calendarID: located.calendarID, status: status, token: token)
             let label = ["accepted": "Going", "tentative": "Maybe", "declined": "Not going"][status] ?? status
             appState.toast = "RSVP sent: \(label)"
+            // Reflect the answer immediately; CalDAV sync-back can take minutes
+            let mapped: EKParticipantStatus = status == "accepted" ? .accepted
+                : status == "tentative" ? .tentative : .declined
+            store?.setRSVPOverride(mapped, for: event)
         } catch {
             appState.toast = "RSVP failed — \(error.localizedDescription)"
         }

@@ -50,12 +50,14 @@ enum SpanLayout {
 
 struct SpanBarView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var store: CalendarStore
     let event: EKEvent
     var compact = false
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
         let isSelected = appState.selectedKey == eventKey(event)
+        let awaiting = store.awaitingResponse(event)
         Text(event.title ?? "Untitled")
             .font(.system(size: compact ? 9 : 10, weight: .medium))
             .lineLimit(1)
@@ -64,10 +66,10 @@ struct SpanBarView: View {
             .padding(.vertical, compact ? 0 : 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(
-                event.needsMyResponse ? 0.06 : isSelected ? 0.32 : 0.18
+                awaiting ? 0.06 : isSelected ? 0.32 : 0.18
             )))
             .overlay {
-                if event.needsMyResponse {
+                if awaiting {
                     RoundedRectangle(cornerRadius: 4)
                         .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
