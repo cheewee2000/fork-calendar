@@ -27,30 +27,111 @@ enum KeyMonitor {
 
     // MARK: - Horizontal pan (smooth day-granular side-scroll)
 
+    /// Axis decision for the scroll gesture in flight. Latched once per
+    /// gesture: a horizontal gesture pans the grid until it (and its momentum)
+    /// ends; a vertical one passes through untouched — so vertical scrolling
+    /// never gets swallowed sample-by-sample the way per-event decisions did.
+    private enum ScrollCapture { case idle, deciding, horizontal, passthrough }
+    private static var capture: ScrollCapture = .idle
+    private static var decideX: CGFloat = 0
+    private static var decideAbsX: CGFloat = 0
+    private static var decideAbsY: CGFloat = 0
+    private static var panSession = 0
+
     private static func handleScroll(_ event: NSEvent, appState: AppState) -> Bool {
         switch appState.viewMode {
         case .day, .week, .days: break
         default: return false
         }
         guard !appState.paletteOpen else { return false }
+        guard appState.gridColumnWidth > 4 else { return false }
+
+        // Navigation (Today, go-to-date) invalidates the gesture in flight so
+        // leftover momentum can't re-anchor the grid it just left.
+        if panSession != appState.panSession {
+            panSession = appState.panSession
+            if capture == .horizontal || capture == .deciding { capture = .passthrough }
+        }
+        // Never start a pan mid-pinch (pinches leak small scroll deltas).
+        if appState.isZooming, capture != .horizontal { capture = .passthrough }
+
         let dx = event.scrollingDeltaX
         let dy = event.scrollingDeltaY
-        // Once panning, keep capturing even if a sample is vertical-dominant
-        let panning = appState.isPanning
-        guard abs(dx) > abs(dy) || (panning && abs(dx) > 0.01) else { return false }
-        let colWidth = appState.gridColumnWidth
-        guard colWidth > 4 else { return false }
+
+        // Classic scroll wheel: no gesture phases, decide per event.
+        if event.phase == [] && event.momentumPhase == [] {
+            guard abs(dx) > abs(dy) else { return false }
+            appState.isPanning = true
+            applyPan(dx, appState)
+            scheduleSettle(appState, delay: 0.25)
+            return true
+        }
+
+        // Momentum keeps whatever the gesture decided.
         if event.momentumPhase != [] {
-            // Let momentum glide keep panning, day by day
-            guard panning else { return false }
             if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
-                settlePan(appState)
+                let wasPan = capture == .horizontal
+                capture = .idle
+                if wasPan { settlePan(appState) }
+                return wasPan
+            }
+            guard capture == .horizontal else { return false }
+            snapWork?.cancel()
+            applyPan(dx, appState)
+            return true
+        }
+
+        switch event.phase {
+        case .began, .mayBegin:
+            if capture == .horizontal { settlePan(appState) } // momentum never arrived
+            capture = .deciding
+            decideX = 0
+            decideAbsX = 0
+            decideAbsY = 0
+            return false
+        case .ended, .cancelled:
+            if capture == .horizontal {
+                // Fingers lifted; momentum may still arrive — settle after a beat
+                scheduleSettle(appState, delay: 0.08)
                 return true
             }
+            capture = .idle
+            return false
+        case .changed:
+            break
+        default:
+            return false
         }
-        appState.isPanning = true
-        var pan = appState.weekPan + dx
-        // Re-anchor a whole page at a time (the strip is 5 pages wide), so
+
+        switch capture {
+        case .horizontal:
+            snapWork?.cancel()
+            applyPan(dx, appState)
+            return true
+        case .passthrough:
+            return false
+        case .idle, .deciding:
+            // Accumulate until the direction is unambiguous, then latch.
+            capture = .deciding
+            decideX += dx
+            decideAbsX += abs(dx)
+            decideAbsY += abs(dy)
+            guard decideAbsX + decideAbsY >= 5 else { return false }
+            if decideAbsX > decideAbsY * 1.2 {
+                capture = .horizontal
+                appState.isPanning = true
+                snapWork?.cancel()
+                applyPan(decideX, appState)
+                return true
+            }
+            if decideAbsY >= decideAbsX { capture = .passthrough }
+            return false
+        }
+    }
+
+    private static func applyPan(_ dx: CGFloat, _ appState: AppState) {
+        var pan = appState.pan.offset + dx
+        // Re-anchor a whole page at a time (the strip is 3 pages wide), so
         // expensive re-renders happen once per page instead of once per day
         let pageWidth = appState.weekPageWidth
         let dayCount = max(1, appState.visibleDays.count)
@@ -64,16 +145,9 @@ enum KeyMonitor {
                 pan -= pageWidth
             }
         }
-        appState.weekPan = pan
-        snapWork?.cancel()
-        if event.phase == .ended || event.phase == .cancelled {
-            // Trackpad fingers lifted; momentum may still arrive — settle after a beat
-            scheduleSettle(appState, delay: 0.08)
-        } else if event.phase == [] && event.momentumPhase == [] {
-            // Classic scroll wheel: no phases at all
-            scheduleSettle(appState, delay: 0.25)
-        }
-        return true
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { appState.pan.offset = pan }
     }
 
     private static func scheduleSettle(_ appState: AppState, delay: TimeInterval) {
@@ -89,11 +163,11 @@ enum KeyMonitor {
         snapWork?.cancel()
         let colWidth = appState.gridColumnWidth
         guard colWidth > 4 else {
-            appState.weekPan = 0
+            appState.pan.offset = 0
             appState.isPanning = false
             return
         }
-        var pan = appState.weekPan
+        var pan = appState.pan.offset
         // Nearest day boundary
         let dayShift = Int((-pan / colWidth).rounded())
         if dayShift != 0 {
@@ -115,10 +189,11 @@ enum KeyMonitor {
         }
         var t = Transaction()
         t.disablesAnimations = true
-        withTransaction(t) { appState.weekPan = pan }
-        withAnimation(.easeOut(duration: 0.2)) { appState.weekPan = 0 }
+        withTransaction(t) { appState.pan.offset = pan }
+        withAnimation(.easeOut(duration: 0.2)) { appState.pan.offset = 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            appState.isPanning = false
+            // A new pan gesture may have latched during the settle animation
+            if capture != .horizontal { appState.isPanning = false }
         }
     }
 

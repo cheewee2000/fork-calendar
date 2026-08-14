@@ -36,6 +36,14 @@ struct AvailabilitySlot: Identifiable, Equatable {
     var end: Date
 }
 
+/// Live horizontal pan offset for the time grid. Kept out of AppState so
+/// per-frame scroll updates only re-render the three paged strips, not every
+/// view observing AppState.
+@MainActor
+final class PanModel: ObservableObject {
+    @Published var offset: CGFloat = 0
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var currentDate = Date()
@@ -48,12 +56,23 @@ final class AppState: ObservableObject {
     /// (free side-scrolling can rest on any day).
     @Published var gridAnchor: Date?
     /// Live horizontal pan offset for the time grid (trackpad side-scroll).
-    @Published var weekPan: CGFloat = 0
+    let pan = PanModel()
     /// Layout metrics reported by the time grid, used for pan re-anchoring.
     var weekPageWidth: CGFloat = 0
     var gridColumnWidth: CGFloat = 0
     /// True while a side-scroll gesture (or its settling animation) is active.
     var isPanning = false
+    /// Bumped by navigation (Today, go-to-date) so an in-flight pan gesture or
+    /// its momentum stops re-anchoring the grid it just navigated away from.
+    var panSession = 0
+    /// True while a pinch-zoom gesture is active (suppresses pan capture).
+    var isZooming = false
+    /// Time-grid vertical scroll metrics (plain vars: written every scroll
+    /// frame, must not invalidate views).
+    var gridScrollY: CGFloat = 0
+    var gridViewportH: CGFloat = 0
+    /// Day range highlighted while drag-creating an all-day event in month view.
+    @Published var monthDragRange: ClosedRange<Date>?
     /// Transient status message.
     @Published var toast: String?
     /// Time-grid vertical zoom (points per hour), pinch-adjustable.
@@ -145,9 +164,19 @@ final class AppState: ObservableObject {
     func goToToday() { goTo(Date()) }
 
     func goTo(_ date: Date) {
+        cancelPan()
         gridAnchor = nil
         currentDate = date
         monthScrollTarget = date
+    }
+
+    /// Abort any in-flight side-scroll (gesture or momentum) before navigating.
+    func cancelPan() {
+        panSession += 1
+        isPanning = false
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { pan.offset = 0 }
     }
 
     func step(_ direction: Int) {

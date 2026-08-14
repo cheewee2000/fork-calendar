@@ -128,32 +128,160 @@ struct MonthWeekRow: View {
                 }
             }
             ForEach(bars) { bar in
-                SpanBarView(event: bar.event, compact: true)
-                    .frame(
-                        width: CGFloat(bar.endIndex - bar.startIndex + 1) * cellW - 6,
-                        height: 14
-                    )
-                    .offset(x: CGFloat(bar.startIndex) * cellW + 3, y: barsTop + CGFloat(bar.lane) * 16)
+                MonthSpanBar(bar: bar, cellW: cellW, rowH: rowH, barsTop: barsTop)
             }
         }
+    }
+}
+
+/// A span bar in the month grid: drag to move (horizontal = days, vertical =
+/// weeks), drag an edge to extend into a multi-day span.
+struct MonthSpanBar: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    let bar: SpanBar
+    let cellW: CGFloat
+    let rowH: CGFloat
+    let barsTop: CGFloat
+
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDragging = false
+    @State private var resizeCols = 0
+    @State private var resizingLead = false
+    @State private var isResizing = false
+
+    private var isEditable: Bool {
+        bar.event.calendar?.allowsContentModifications == true
+    }
+
+    var body: some View {
+        var startIdx = bar.startIndex
+        var endIdx = bar.endIndex
+        if isResizing {
+            if resizingLead {
+                startIdx = min(startIdx + resizeCols, endIdx)
+            } else {
+                endIdx = max(endIdx + resizeCols, startIdx)
+            }
+        }
+
+        return SpanBarView(event: bar.event, compact: true)
+            .frame(width: CGFloat(endIdx - startIdx + 1) * cellW - 6, height: 14)
+            .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }
+            .overlay(alignment: .trailing) { if isEditable { resizeHandle(lead: false) } }
+            .opacity(isDragging || isResizing ? 0.75 : 1)
+            .zIndex(isDragging ? 100 : 0)
+            .offset(
+                x: CGFloat(startIdx) * cellW + 3 + dragOffset.width,
+                y: barsTop + CGFloat(bar.lane) * 16 + dragOffset.height
+            )
+            .gesture(moveDrag)
+    }
+
+    private func shift(byDays delta: Int) {
+        guard delta != 0 else { return }
+        let cal = appState.calendar
+        let snapshot = EventSnapshot(bar.event)
+        bar.event.startDate = cal.date(byAdding: .day, value: delta, to: bar.event.startDate) ?? bar.event.startDate
+        bar.event.endDate = cal.date(byAdding: .day, value: delta, to: bar.event.endDate) ?? bar.event.endDate
+        appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+    }
+
+    private var moveDrag: some Gesture {
+        DragGesture(minimumDistance: 5)
+            .onChanged { value in
+                guard isEditable else { return }
+                isDragging = true
+                dragOffset = CGSize(
+                    width: (value.translation.width / cellW).rounded() * cellW,
+                    height: (value.translation.height / rowH).rounded() * rowH
+                )
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragOffset = .zero
+                }
+                guard isEditable else { return }
+                let delta = Int((value.translation.width / cellW).rounded())
+                    + 7 * Int((value.translation.height / rowH).rounded())
+                shift(byDays: delta)
+            }
+    }
+
+    private func resizeHandle(lead: Bool) -> some View {
+        Color.clear
+            .frame(width: 6)
+            .contentShape(Rectangle())
+            #if os(macOS)
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            #endif
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { value in
+                        isResizing = true
+                        resizingLead = lead
+                        resizeCols = Int((value.translation.width / cellW).rounded())
+                    }
+                    .onEnded { value in
+                        defer {
+                            isResizing = false
+                            resizeCols = 0
+                        }
+                        let delta = Int((value.translation.width / cellW).rounded())
+                            + 7 * Int((value.translation.height / rowH).rounded())
+                        guard delta != 0 else { return }
+                        let cal = appState.calendar
+                        let snapshot = EventSnapshot(bar.event)
+                        if lead {
+                            guard let newStart = cal.date(byAdding: .day, value: delta, to: bar.event.startDate),
+                                  newStart < bar.event.endDate else { return }
+                            bar.event.startDate = newStart
+                        } else {
+                            guard let newEnd = cal.date(byAdding: .day, value: delta, to: bar.event.endDate),
+                                  newEnd > bar.event.startDate else { return }
+                            bar.event.endDate = newEnd
+                        }
+                        appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+                    }
+            )
     }
 }
 
 struct MonthCell: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
     let day: Date
     let cellW: CGFloat
     let rowH: CGFloat
     var laneInset: CGFloat = 0
 
+    /// Highlighted while drag-creating an all-day span, or covered by a
+    /// drag-created event still open (unsaved) in the details panel.
+    private var isInDraftRange: Bool {
+        let cal = appState.calendar
+        let key = cal.startOfDay(for: day)
+        if let range = appState.monthDragRange { return range.contains(key) }
+        if let ctx = appState.panelContext, ctx.isNew, ctx.event.isAllDay,
+           let s = ctx.event.startDate, let e = ctx.event.endDate {
+            let startDay = cal.startOfDay(for: s)
+            let lastDay = cal.startOfDay(for: max(e.addingTimeInterval(-1), s))
+            return key >= startDay && key <= lastDay
+        }
+        return false
+    }
+
     var body: some View {
         let cal = appState.calendar
-        let events = store.events(on: day, calendar: cal).timed
+        let events = settings.monthAllDayOnly ? [] : store.events(on: day, calendar: cal).timed
         let isToday = day.isSameDay(as: Date(), calendar: cal)
         let dayOfMonth = cal.component(.day, from: day)
         let month = cal.component(.month, from: day)
         let evenMonth = month % 2 == 0
+        let isWeekend = cal.isDateInWeekend(day)
 
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
@@ -182,7 +310,11 @@ struct MonthCell: View {
         }
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(evenMonth ? Color.primary.opacity(0.03) : Color.clear)
+        .background(
+            (evenMonth ? Color.primary.opacity(0.03) : Color.clear)
+                .overlay(isWeekend ? Color.primary.opacity(0.035) : Color.clear)
+                .overlay(isInDraftRange ? Color.accentColor.opacity(0.14) : Color.clear)
+        )
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
         }
@@ -195,6 +327,29 @@ struct MonthCell: View {
             appState.viewMode = .day
         }
         .onTapGesture { appState.currentDate = day }
+        .gesture(createDrag)
+    }
+
+    /// Drag across cells to create a (multi-day) all-day event — horizontal =
+    /// days, vertical = weeks, mirroring how chips move.
+    private var createDrag: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let cal = appState.calendar
+                let delta = Int((value.translation.width / cellW).rounded())
+                    + 7 * Int((value.translation.height / rowH).rounded())
+                let anchor = cal.startOfDay(for: day)
+                let target = cal.date(byAdding: .day, value: delta, to: anchor) ?? anchor
+                appState.monthDragRange = min(anchor, target)...max(anchor, target)
+            }
+            .onEnded { _ in
+                if let range = appState.monthDragRange {
+                    let cal = appState.calendar
+                    let end = cal.date(byAdding: .day, value: 1, to: range.upperBound) ?? range.upperBound
+                    appState.newEvent(store: store, start: range.lowerBound, end: end, allDay: true)
+                }
+                appState.monthDragRange = nil
+            }
     }
 
     private var monthDayLabel: String {

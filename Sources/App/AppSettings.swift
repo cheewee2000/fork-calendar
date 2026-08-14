@@ -10,6 +10,8 @@ final class AppSettings: ObservableObject {
     @Published var defaultDuration: Int { didSet { UserDefaults.standard.set(defaultDuration, forKey: "defaultDuration") } }
     @Published var showDeclined: Bool { didSet { UserDefaults.standard.set(showDeclined, forKey: "showDeclined") } }
     @Published var showWeekends: Bool { didSet { UserDefaults.standard.set(showWeekends, forKey: "showWeekends") } }
+    /// Month view: hide timed-event chips, keep only all-day/multi-day bars
+    @Published var monthAllDayOnly: Bool { didSet { UserDefaults.standard.set(monthAllDayOnly, forKey: "monthAllDayOnly") } }
     /// TimeZone identifier, empty = none
     @Published var secondaryTZ: String { didSet { UserDefaults.standard.set(secondaryTZ, forKey: "secondaryTZ") } }
     /// Personal Zoom meeting URL, used by "Add conferencing"
@@ -26,6 +28,7 @@ final class AppSettings: ObservableObject {
         defaultDuration = d.object(forKey: "defaultDuration") as? Int ?? 60
         showDeclined = d.object(forKey: "showDeclined") as? Bool ?? true
         showWeekends = d.object(forKey: "showWeekends") as? Bool ?? true
+        monthAllDayOnly = d.object(forKey: "monthAllDayOnly") as? Bool ?? false
         secondaryTZ = d.string(forKey: "secondaryTZ") ?? ""
         zoomLink = d.string(forKey: "zoomLink") ?? ""
         calendarColors = d.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]

@@ -16,21 +16,22 @@ struct TimeGridView: View {
     private var gutterWidth: CGFloat { settings.secondaryTimeZone == nil ? 54 : 96 }
     private var hourHeight: CGFloat { appState.hourHeight }
     @State private var zoomBase: CGFloat?
+    @State private var zoomAnchorHours: CGFloat?
+    @State private var zoomAnchorY: CGFloat = 0
+    @State private var gridScroll = ScrollPosition(edge: .top)
 
     var body: some View {
         GeometryReader { outer in
             let pageWidth = max(outer.size.width - gutterWidth, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
-            let extDays = appState.visibleDays(pageOffset: -2) + appState.visibleDays(pageOffset: -1)
-                + days
-                + appState.visibleDays(pageOffset: 1) + appState.visibleDays(pageOffset: 2)
+            let extDays = appState.visibleDays(pageOffset: -1) + days + appState.visibleDays(pageOffset: 1)
             let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar)
             let laneCount = (bars.map(\.lane).max() ?? -1) + 1
 
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     Color.clear.frame(width: gutterWidth, height: 1)
-                    paged(pageWidth) {
+                    PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         HStack(spacing: 0) {
                             ForEach(extDays, id: \.self) { day in
                                 dayHeader(day)
@@ -44,47 +45,48 @@ struct TimeGridView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .frame(width: gutterWidth)
-                    paged(pageWidth) {
+                    PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         ZStack(alignment: .topLeading) {
-                            Color.clear
+                            AllDayCreateLayer(extDays: extDays, colWidth: colWidth)
                             ForEach(bars) { bar in
-                                SpanBarView(event: bar.event)
-                                    .frame(
-                                        width: CGFloat(bar.endIndex - bar.startIndex + 1) * colWidth - 4,
-                                        height: 16
-                                    )
-                                    .offset(x: CGFloat(bar.startIndex) * colWidth + 2, y: CGFloat(bar.lane) * 18)
+                                AllDaySpanBar(bar: bar, extDays: extDays, colWidth: colWidth)
                             }
+                            newAllDayGhost(extDays: extDays, colWidth: colWidth)
                         }
-                        .frame(width: pageWidth * 5, alignment: .topLeading)
+                        .frame(width: pageWidth * 3, alignment: .topLeading)
                     }
                 }
-                .frame(height: max(CGFloat(laneCount) * 18 + 2, 10))
+                .frame(height: max(CGFloat(laneCount) * 18 + 2, 20))
                 .padding(.bottom, 3)
                 Divider()
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        HStack(alignment: .top, spacing: 0) {
-                            timeGutter
-                            paged(pageWidth) {
-                                ZStack(alignment: .topLeading) {
-                                    hourLines
-                                    HStack(spacing: 0) {
-                                        ForEach(extDays, id: \.self) { day in
-                                            DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
-                                        }
+                ScrollView {
+                    HStack(alignment: .top, spacing: 0) {
+                        timeGutter
+                        PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
+                            ZStack(alignment: .topLeading) {
+                                hourLines
+                                HStack(spacing: 0) {
+                                    ForEach(extDays, id: \.self) { day in
+                                        DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
                                     }
                                 }
-                                .frame(width: pageWidth * 5)
                             }
+                            .frame(width: pageWidth * 3)
                         }
-                        .frame(height: hourHeight * 24)
-                        .padding(.bottom, 20)
                     }
-                    .simultaneousGesture(zoomGesture)
-                    .onAppear {
-                        proxy.scrollTo("hour-8", anchor: .top)
-                    }
+                    .frame(height: hourHeight * 24)
+                    .padding(.bottom, 20)
+                }
+                .scrollPosition($gridScroll)
+                .onScrollGeometryChange(for: CGRect.self, of: {
+                    CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
+                }) { _, new in
+                    appState.gridScrollY = new.origin.x
+                    appState.gridViewportH = new.origin.y
+                }
+                .simultaneousGesture(zoomGesture)
+                .onAppear {
+                    gridScroll.scrollTo(y: appState.hourHeight * 8)
                 }
             }
             .onAppear {
@@ -102,28 +104,56 @@ struct TimeGridView: View {
                 guard !appState.isPanning else { return }
                 var t = Transaction()
                 t.disablesAnimations = true
-                withTransaction(t) { appState.weekPan = 0 }
+                withTransaction(t) { appState.pan.offset = 0 }
             }
         }
     }
 
-    /// Clip a 5-page-wide strip to one page and apply the live pan offset.
-    private func paged<Content: View>(_ pageWidth: CGFloat, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .offset(x: -pageWidth * 2 + appState.weekPan)
-            .frame(width: pageWidth, alignment: .leading)
-            .clipped()
+    /// Ghost bar for a drag-created all-day event that hasn't been saved yet
+    /// (keeps the selection visible while the details panel is open).
+    @ViewBuilder
+    private func newAllDayGhost(extDays: [Date], colWidth: CGFloat) -> some View {
+        if let ctx = appState.panelContext, ctx.isNew, ctx.event.isAllDay,
+           let s = ctx.event.startDate, let e = ctx.event.endDate {
+            let cal = appState.calendar
+            let startDay = cal.startOfDay(for: s)
+            let lastDay = cal.startOfDay(for: max(e.addingTimeInterval(-1), s))
+            let keys = extDays.map { cal.startOfDay(for: $0) }
+            if let lo = keys.firstIndex(where: { $0 >= startDay }),
+               let hi = keys.lastIndex(where: { $0 <= lastDay }), hi >= lo {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.accentColor.opacity(0.22))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor.opacity(0.6)))
+                    .frame(width: CGFloat(hi - lo + 1) * colWidth - 4)
+                    .frame(maxHeight: .infinity)
+                    .offset(x: CGFloat(lo) * colWidth + 2)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
-    /// Pinch to zoom the hour scale (28–160 pt/hour).
+    /// Pinch to zoom the hour scale (28–160 pt/hour), anchored at the pinch
+    /// location so the hours under the fingers stay in view.
     private var zoomGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
-                if zoomBase == nil { zoomBase = appState.hourHeight }
-                appState.hourHeight = min(160, max(28, (zoomBase ?? 56) * value.magnification))
+                appState.isZooming = true
+                if zoomBase == nil {
+                    zoomBase = appState.hourHeight
+                    let viewportH = appState.gridViewportH > 0 ? appState.gridViewportH : 400
+                    zoomAnchorY = value.startAnchor.y * viewportH
+                    zoomAnchorHours = (appState.gridScrollY + zoomAnchorY) / appState.hourHeight
+                }
+                let newHeight = min(160, max(28, (zoomBase ?? 56) * value.magnification))
+                appState.hourHeight = newHeight
+                if let hours = zoomAnchorHours {
+                    gridScroll.scrollTo(y: max(0, hours * newHeight - zoomAnchorY))
+                }
             }
             .onEnded { _ in
                 zoomBase = nil
+                zoomAnchorHours = nil
+                appState.isZooming = false
             }
     }
 
@@ -205,6 +235,203 @@ struct TimeGridView: View {
     }
 }
 
+/// Clips a 3-page-wide strip to one page and applies the live pan offset.
+/// Observes only PanModel, so per-frame side-scroll updates re-render just
+/// these three thin wrappers instead of the whole grid.
+struct PagedStrip<Content: View>: View {
+    @ObservedObject var pan: PanModel
+    let pageWidth: CGFloat
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .offset(x: -pageWidth + pan.offset)
+            .frame(width: pageWidth, alignment: .leading)
+            .clipped()
+    }
+}
+
+/// Background of the all-day strip: click or drag across day columns to
+/// create (multi-day) all-day events, with a live snapped preview.
+struct AllDayCreateLayer: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    let extDays: [Date]
+    let colWidth: CGFloat
+
+    @State private var anchorIndex: Int?
+    @State private var currentIndex: Int?
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                if let a = anchorIndex, let c = currentIndex {
+                    let lo = min(a, c), hi = max(a, c)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.accentColor.opacity(0.22))
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor.opacity(0.6)))
+                        .frame(width: CGFloat(hi - lo + 1) * colWidth - 4, height: max(geo.size.height - 2, 14))
+                        .offset(x: CGFloat(lo) * colWidth + 2)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(createDrag)
+            .gesture(SpatialTapGesture().onEnded { value in
+                if appState.panelContext != nil {
+                    appState.closePanel()
+                } else {
+                    createAllDay(from: index(at: value.location.x), to: index(at: value.location.x))
+                }
+            })
+        }
+    }
+
+    private func index(at x: CGFloat) -> Int {
+        max(0, min(extDays.count - 1, Int(floor(x / max(colWidth, 1)))))
+    }
+
+    private var createDrag: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                if anchorIndex == nil { anchorIndex = index(at: value.startLocation.x) }
+                currentIndex = index(at: value.location.x)
+            }
+            .onEnded { _ in
+                if let a = anchorIndex, let c = currentIndex {
+                    createAllDay(from: min(a, c), to: max(a, c))
+                }
+                anchorIndex = nil
+                currentIndex = nil
+            }
+    }
+
+    private func createAllDay(from lo: Int, to hi: Int) {
+        let cal = appState.calendar
+        let start = cal.startOfDay(for: extDays[lo])
+        let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: extDays[hi])) ?? start
+        appState.newEvent(store: store, start: start, end: end, allDay: true)
+    }
+}
+
+/// An all-day/multi-day bar in the week strip: drag to move by days, drag an
+/// edge to extend into a multi-day span. Day deltas are read from the actual
+/// column dates so hidden weekends don't skew the math.
+struct AllDaySpanBar: View {
+    @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var appState: AppState
+    let bar: SpanBar
+    let extDays: [Date]
+    let colWidth: CGFloat
+
+    @State private var dragCols = 0
+    @State private var isDragging = false
+    @State private var resizeCols = 0
+    @State private var resizingLead = false
+    @State private var isResizing = false
+
+    private var isEditable: Bool {
+        bar.event.calendar?.allowsContentModifications == true
+    }
+
+    var body: some View {
+        var startIdx = bar.startIndex
+        var endIdx = bar.endIndex
+        if isDragging {
+            startIdx += dragCols
+            endIdx += dragCols
+        } else if isResizing {
+            if resizingLead {
+                startIdx = min(startIdx + resizeCols, endIdx)
+            } else {
+                endIdx = max(endIdx + resizeCols, startIdx)
+            }
+        }
+
+        return SpanBarView(event: bar.event)
+            .frame(width: CGFloat(endIdx - startIdx + 1) * colWidth - 4, height: 16)
+            .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }
+            .overlay(alignment: .trailing) { if isEditable { resizeHandle(lead: false) } }
+            .opacity(isDragging || isResizing ? 0.75 : 1)
+            .offset(x: CGFloat(startIdx) * colWidth + 2, y: CGFloat(bar.lane) * 18)
+            .gesture(moveDrag)
+    }
+
+    /// Calendar-day difference between two strip columns.
+    private func dayDelta(fromIndex: Int, toIndex: Int) -> Int {
+        let cal = appState.calendar
+        let from = cal.startOfDay(for: extDays[fromIndex])
+        let to = cal.startOfDay(for: extDays[toIndex])
+        return cal.dateComponents([.day], from: from, to: to).day ?? 0
+    }
+
+    private var moveDrag: some Gesture {
+        DragGesture(minimumDistance: 5)
+            .onChanged { value in
+                guard isEditable else { return }
+                isDragging = true
+                dragCols = Int((value.translation.width / colWidth).rounded())
+            }
+            .onEnded { value in
+                defer {
+                    isDragging = false
+                    dragCols = 0
+                }
+                guard isEditable else { return }
+                let cols = Int((value.translation.width / colWidth).rounded())
+                let target = max(0, min(extDays.count - 1, bar.startIndex + cols))
+                let delta = dayDelta(fromIndex: bar.startIndex, toIndex: target)
+                guard delta != 0 else { return }
+                let cal = appState.calendar
+                let snapshot = EventSnapshot(bar.event)
+                bar.event.startDate = cal.date(byAdding: .day, value: delta, to: bar.event.startDate) ?? bar.event.startDate
+                bar.event.endDate = cal.date(byAdding: .day, value: delta, to: bar.event.endDate) ?? bar.event.endDate
+                appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+            }
+    }
+
+    private func resizeHandle(lead: Bool) -> some View {
+        Color.clear
+            .frame(width: 7)
+            .contentShape(Rectangle())
+            #if os(macOS)
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            #endif
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { value in
+                        isResizing = true
+                        resizingLead = lead
+                        resizeCols = Int((value.translation.width / colWidth).rounded())
+                    }
+                    .onEnded { value in
+                        defer {
+                            isResizing = false
+                            resizeCols = 0
+                        }
+                        let cols = Int((value.translation.width / colWidth).rounded())
+                        guard cols != 0 else { return }
+                        let cal = appState.calendar
+                        let snapshot = EventSnapshot(bar.event)
+                        if lead {
+                            let target = max(0, min(bar.endIndex, bar.startIndex + cols))
+                            let delta = dayDelta(fromIndex: bar.startIndex, toIndex: target)
+                            guard delta != 0 else { return }
+                            bar.event.startDate = cal.date(byAdding: .day, value: delta, to: bar.event.startDate) ?? bar.event.startDate
+                        } else {
+                            let target = max(bar.startIndex, min(extDays.count - 1, bar.endIndex + cols))
+                            let delta = dayDelta(fromIndex: bar.endIndex, toIndex: target)
+                            guard delta != 0 else { return }
+                            bar.event.endDate = cal.date(byAdding: .day, value: delta, to: bar.event.endDate) ?? bar.event.endDate
+                        }
+                        appState.commitChange(to: bar.event, snapshot: snapshot, isNew: false, store: store)
+                    }
+            )
+    }
+}
+
 struct DayColumn: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
@@ -219,6 +446,10 @@ struct DayColumn: View {
         let timed = store.events(on: day, calendar: appState.calendar).timed
         let positioned = EventLayout.layout(timed)
         ZStack(alignment: .topLeading) {
+            if appState.calendar.isDateInWeekend(day) {
+                Color.primary.opacity(0.035)
+                    .allowsHitTesting(false)
+            }
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(createDrag)
@@ -239,6 +470,24 @@ struct DayColumn: View {
                     .frame(width: colWidth - 6, height: max(abs(e - s), 10))
                     .offset(x: 2, y: min(s, e))
                     .allowsHitTesting(false)
+            }
+
+            // Drag-created event awaiting save: keep its box visible while the
+            // details panel is open.
+            if let ctx = appState.panelContext, ctx.isNew, !ctx.event.isAllDay,
+               let s = ctx.event.startDate, let e = ctx.event.endDate {
+                let dayStart = appState.calendar.startOfDay(for: day)
+                let dayEnd = dayStart.addingTimeInterval(86400)
+                if s < dayEnd, e > dayStart {
+                    let y = CGFloat(max(s, dayStart).timeIntervalSince(dayStart) / 3600) * hourHeight
+                    let h = CGFloat(min(e, dayEnd).timeIntervalSince(max(s, dayStart)) / 3600) * hourHeight
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.accentColor.opacity(0.22))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor.opacity(0.6)))
+                        .frame(width: colWidth - 6, height: max(h, 10))
+                        .offset(x: 2, y: y)
+                        .allowsHitTesting(false)
+                }
             }
 
             ForEach(appState.availabilitySlots.filter { $0.start.isSameDay(as: day, calendar: appState.calendar) }) { slot in
