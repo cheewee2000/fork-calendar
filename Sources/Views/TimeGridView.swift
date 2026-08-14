@@ -484,12 +484,12 @@ struct DayColumn: View {
                 .contentShape(Rectangle())
                 .gesture(createDrag)
                 .gesture(SpatialTapGesture().onEnded { value in
+                    // Single click never creates a timed event — only drags do
+                    // (all-day events can still be made with one click up top).
                     if appState.availabilityMode {
                         addSlot(fromY: snap(value.location.y), toY: snap(value.location.y) + hourHeight / 2)
                     } else if appState.panelContext != nil {
                         appState.closePanel()
-                    } else {
-                        createEvent(fromY: snap(value.location.y), toY: snap(value.location.y) + hourHeight)
                     }
                 })
 
