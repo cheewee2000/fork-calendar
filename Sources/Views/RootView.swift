@@ -188,6 +188,15 @@ struct HeaderBar: View {
         #endif
     }
 
+    /// Compact controls on iOS keep the bar short.
+    private var barControlSize: ControlSize {
+        #if os(iOS)
+        return .mini
+        #else
+        return .small
+        #endif
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             if showsCalendarsButton {
@@ -197,24 +206,20 @@ struct HeaderBar: View {
                     Image(systemName: "sidebar.leading")
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .controlSize(barControlSize)
             }
             Text(Fmt.monthYear.string(from: appState.currentDate))
+                #if os(iOS)
+                .font(.subheadline.weight(.semibold))
+                #else
                 .font(.title3.weight(.semibold))
+                #endif
                 .lineLimit(1)
             Spacer()
-            HStack(spacing: 4) {
-                Button { appState.step(-1) } label: {
-                    Image(systemName: "chevron.left")
-                }
-                Button("Today") { appState.goToToday() }
-                    .help("Today (T)")
-                Button { appState.step(1) } label: {
-                    Image(systemName: "chevron.right")
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            Button("Today") { appState.goToToday() }
+                .buttonStyle(.bordered)
+                .controlSize(barControlSize)
+                .help("Today (T)")
             viewMenu
             Button {
                 appState.toggleAvailabilityMode()
@@ -222,7 +227,7 @@ struct HeaderBar: View {
                 Image(systemName: "square.and.arrow.up.on.square")
             }
             .buttonStyle(appState.availabilityMode ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
-            .controlSize(.small)
+            .controlSize(barControlSize)
             .help("Share availability (S)")
             Button {
                 appState.paletteOpen = true
@@ -230,7 +235,7 @@ struct HeaderBar: View {
                 Image(systemName: "magnifyingglass")
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(barControlSize)
             .help("Search & commands (⌘K)")
             Button {
                 appState.newEvent(store: store)
@@ -238,12 +243,17 @@ struct HeaderBar: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .controlSize(barControlSize)
             .disabled(store.accessState != .granted)
             .help("New event (C)")
         }
+        #if os(iOS)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        #else
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        #endif
     }
 
     private var viewMenu: some View {
@@ -263,7 +273,7 @@ struct HeaderBar: View {
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
-        .controlSize(.small)
+        .controlSize(barControlSize)
         .fixedSize()
         .help("Day (D) · Week (W) · Month (M) · 1–9 days")
     }
