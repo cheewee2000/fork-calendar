@@ -29,8 +29,15 @@ struct TimeGridView: View {
             let laneCount = (bars.map(\.lane).max() ?? -1) + 1
 
             VStack(spacing: 0) {
+                // The strip's clipped content still hit-tests one page beyond
+                // its bounds, so everything in the gutter column sits above it
+                // (zIndex) to keep clicks from landing on invisible columns.
                 HStack(spacing: 0) {
-                    Color.clear.frame(width: gutterWidth, height: 1)
+                    Color.clear
+                        .frame(width: gutterWidth)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .zIndex(1)
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         HStack(spacing: 0) {
                             ForEach(extDays, id: \.self) { day in
@@ -45,6 +52,9 @@ struct TimeGridView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .frame(width: gutterWidth)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .contentShape(Rectangle())
+                        .zIndex(1)
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         ZStack(alignment: .topLeading) {
                             AllDayCreateLayer(extDays: extDays, colWidth: colWidth)
@@ -62,6 +72,7 @@ struct TimeGridView: View {
                 ScrollView {
                     HStack(alignment: .top, spacing: 0) {
                         timeGutter
+                            .zIndex(1)
                         PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                             ZStack(alignment: .topLeading) {
                                 hourLines

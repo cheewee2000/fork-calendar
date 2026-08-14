@@ -151,9 +151,7 @@ private struct YearDayCell: View {
         let cal = appState.calendar
         let inYear = cal.component(.year, from: day) == year
         let isToday = day.isSameDay(as: Date(), calendar: cal)
-        let colors = inYear ? store.eventColors(on: day, calendar: cal) : []
         let evenMonth = cal.component(.month, from: day) % 2 == 0
-        let showDots = rowH >= 22
 
         HStack(spacing: 3) {
             Text(Fmt.dayNum.string(from: day))
@@ -161,15 +159,6 @@ private struct YearDayCell: View {
                 .frame(width: 16, height: 13)
                 .background { if isToday { Capsule().fill(Color.red) } }
                 .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : Color.secondary.opacity(0.35))
-            if showDots {
-                HStack(spacing: 2) {
-                    ForEach(Array(colors.enumerated()), id: \.offset) { _, color in
-                        Circle().fill(color).frame(width: 4, height: 4)
-                    }
-                }
-            } else if !colors.isEmpty {
-                Circle().fill(colors[0]).frame(width: 4, height: 4)
-            }
             Spacer(minLength: 0)
         }
         .padding(.leading, 3)
