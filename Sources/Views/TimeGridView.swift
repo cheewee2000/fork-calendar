@@ -33,11 +33,7 @@ struct TimeGridView: View {
                 // its bounds, so everything in the gutter column sits above it
                 // (zIndex) to keep clicks from landing on invisible columns.
                 HStack(spacing: 0) {
-                    Color.clear
-                        .frame(width: gutterWidth)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .zIndex(1)
+                    Color.clear.frame(width: gutterWidth, height: 1)
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         HStack(spacing: 0) {
                             ForEach(extDays, id: \.self) { day in
@@ -46,6 +42,14 @@ struct TimeGridView: View {
                             }
                         }
                     }
+                }
+                .overlay(alignment: .leading) {
+                    // Inert blocker: keeps clicks in the gutter column from
+                    // reaching the strip's invisible out-of-bounds headers.
+                    Color.clear
+                        .frame(width: gutterWidth)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
                 }
                 HStack(alignment: .top, spacing: 0) {
                     Text("all-day")
