@@ -102,6 +102,9 @@ struct TimeGridView: View {
                     }
                     .frame(height: hourHeight * 24)
                     .padding(.bottom, 20)
+                    #if os(iOS)
+                    .background { SideScrollPan(appState: appState) }
+                    #endif
                 }
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
