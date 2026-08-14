@@ -1,8 +1,24 @@
 import Foundation
 import EventKit
 
-enum GoogleAPIError: Error {
+enum GoogleAPIError: LocalizedError {
     case http(Int, String)
+
+    var errorDescription: String? {
+        switch self {
+        case .http(let code, let body):
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let error = json["error"] as? [String: Any],
+                  let message = error["message"] as? String
+            else { return "Google returned HTTP \(code)" }
+            if message.localizedCaseInsensitiveContains("has not been used")
+                || message.localizedCaseInsensitiveContains("is disabled") {
+                return "Google Calendar API is disabled for your OAuth project — enable it in console.cloud.google.com (APIs & Services → Library → Google Calendar API)"
+            }
+            return "Google: \(String(message.prefix(140)))"
+        }
+    }
 }
 
 /// Thin Google Calendar REST client.
@@ -121,6 +137,26 @@ enum GoogleCalendarAPI {
 enum GoogleSync {
     private static var cachedCalendars: [GoogleCalendarAPI.GCalendar]?
 
+    /// Find the Google (calendarID, eventID) for an EventKit event by iCal UID.
+    /// Tries the title-matched calendar first, then all other calendars — the
+    /// EKCalendar title doesn't always equal the Google calendar summary.
+    private static func locateEvent(uid: String, calendarTitle: String, token: String) async throws -> (calendarID: String, eventID: String)? {
+        if cachedCalendars == nil {
+            cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
+        }
+        let calendars = cachedCalendars ?? []
+        var ordered = calendars.filter {
+            $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
+        }
+        ordered += calendars.filter { cal in !ordered.contains(where: { $0.id == cal.id }) }
+        for cal in ordered where cal.accessRole != "freeBusyReader" {
+            if let eventID = ((try? await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token)) ?? nil) {
+                return (cal.id, eventID)
+            }
+        }
+        return nil
+    }
+
     /// Attach guests (and optionally a Meet link) to the Google copy of an
     /// EventKit event. Falls back to an emailed .ics invite when Google isn't
     /// connected or the event isn't on a Google calendar.
@@ -141,24 +177,14 @@ enum GoogleSync {
             return
         }
         do {
-            if cachedCalendars == nil {
-                cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
-            }
-            guard let gcal = (cachedCalendars ?? []).first(where: {
-                $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
-            }) else {
-                fallback(event: event, emails: cleanEmails, appState: appState,
-                         reason: "“\(calendarTitle)” isn't a calendar on the connected Google account")
-                return
-            }
             // The CalDAV push to Google may lag a few seconds for new events
-            var eventID: String?
+            var located: (calendarID: String, eventID: String)?
             for _ in 0..<8 {
-                eventID = try await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: gcal.id, token: token)
-                if eventID != nil { break }
+                located = try await locateEvent(uid: uid, calendarTitle: calendarTitle, token: token)
+                if located != nil { break }
                 try await Task.sleep(nanoseconds: 3_000_000_000)
             }
-            guard let eventID else {
+            guard let located else {
                 fallback(event: event, emails: cleanEmails, appState: appState,
                          reason: "Event hasn't synced to Google yet")
                 return
@@ -166,7 +192,7 @@ enum GoogleSync {
             var merged: [String]?
             if !cleanEmails.isEmpty {
                 let existing = (try? await GoogleCalendarAPI.eventAttendees(
-                    eventID: eventID, calendarID: gcal.id, token: token)) ?? []
+                    eventID: located.eventID, calendarID: located.calendarID, token: token)) ?? []
                 var set = existing
                 for email in cleanEmails where !set.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
                     set.append(email)
@@ -174,7 +200,7 @@ enum GoogleSync {
                 merged = set
             }
             try await GoogleCalendarAPI.patchEvent(
-                eventID: eventID, calendarID: gcal.id,
+                eventID: located.eventID, calendarID: located.calendarID,
                 attendees: merged, addMeet: addMeet, token: token
             )
             var note = "Google: "
@@ -183,7 +209,7 @@ enum GoogleSync {
             appState.toast = note
         } catch {
             fallback(event: event, emails: cleanEmails, appState: appState,
-                     reason: "Google error — \((error as? GoogleAPIError).map { String(describing: $0).prefix(80) } ?? "\(error.localizedDescription)")")
+                     reason: error.localizedDescription)
         }
     }
 
@@ -200,20 +226,11 @@ enum GoogleSync {
             return
         }
         do {
-            if cachedCalendars == nil {
-                cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
-            }
-            guard let gcal = (cachedCalendars ?? []).first(where: {
-                $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
-            }) else {
-                appState.toast = "RSVP works on connected Google calendars only"
+            guard let located = try await locateEvent(uid: uid, calendarTitle: calendarTitle, token: token) else {
+                appState.toast = "Event not found on the connected Google account"
                 return
             }
-            guard let eventID = try await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: gcal.id, token: token) else {
-                appState.toast = "Event not found on Google yet"
-                return
-            }
-            try await GoogleCalendarAPI.respond(eventID: eventID, calendarID: gcal.id, status: status, token: token)
+            try await GoogleCalendarAPI.respond(eventID: located.eventID, calendarID: located.calendarID, status: status, token: token)
             let label = ["accepted": "Going", "tentative": "Maybe", "declined": "Not going"][status] ?? status
             appState.toast = "RSVP sent: \(label)"
         } catch {
