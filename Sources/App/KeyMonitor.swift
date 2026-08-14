@@ -157,8 +157,10 @@ enum KeyMonitor {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// Settle on the nearest day boundary (no week alignment — the grid can
-    /// rest on any day).
+    /// End of a pan: no snap at all — the grid rests exactly where the scroll
+    /// ended. The anchor is still re-pointed at the nearest day (so the header
+    /// label and event fetching stay accurate), but with an exact pixel
+    /// compensation so nothing moves on screen.
     private static func settlePan(_ appState: AppState) {
         snapWork?.cancel()
         let colWidth = appState.gridColumnWidth
@@ -167,19 +169,17 @@ enum KeyMonitor {
             appState.isPanning = false
             return
         }
-        var pan = appState.pan.offset
-        // Nearest day boundary
+        let pan = appState.pan.offset
         let dayShift = Int((-pan / colWidth).rounded())
         if dayShift != 0 {
             appState.panShiftDays(dayShift)
-            pan += CGFloat(dayShift) * colWidth
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { appState.pan.offset = pan + CGFloat(dayShift) * colWidth }
         }
-        var t = Transaction()
-        t.disablesAnimations = true
-        withTransaction(t) { appState.pan.offset = pan }
-        withAnimation(.easeOut(duration: 0.2)) { appState.pan.offset = 0 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            // A new pan gesture may have latched during the settle animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // Keep isPanning through the re-anchor's onChange pass so the
+            // residual offset isn't reset; skip if a new pan already latched.
             if capture != .horizontal { appState.isPanning = false }
         }
     }
