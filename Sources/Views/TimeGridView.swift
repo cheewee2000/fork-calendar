@@ -302,9 +302,6 @@ struct AllDayCreateLayer: View {
 
     @State private var anchorIndex: Int?
     @State private var currentIndex: Int?
-    #if os(iOS)
-    @State private var touchX: CGFloat = 0
-    #endif
 
     var body: some View {
         GeometryReader { geo in
@@ -321,8 +318,6 @@ struct AllDayCreateLayer: View {
             }
             .contentShape(Rectangle())
             #if os(iOS)
-            .simultaneousGesture(DragGesture(minimumDistance: 0)
-                .onChanged { touchX = $0.location.x })
             .gesture(createLongPress)
             .gesture(SpatialTapGesture().onEnded { _ in
                 if appState.panelContext != nil { appState.closePanel() }
@@ -345,13 +340,12 @@ struct AllDayCreateLayer: View {
         LongPressGesture(minimumDuration: 0.35)
             .sequenced(before: DragGesture(minimumDistance: 0))
             .onChanged { value in
-                guard case .second(true, let drag) = value else { return }
+                guard case .second(true, let drag?) = value else { return }
                 if anchorIndex == nil {
                     Haptics.tap()
-                    anchorIndex = index(at: drag?.startLocation.x ?? touchX)
-                    currentIndex = anchorIndex
+                    anchorIndex = index(at: drag.startLocation.x)
                 }
-                if let drag { currentIndex = index(at: drag.location.x) }
+                currentIndex = index(at: drag.location.x)
             }
             .onEnded { _ in
                 if let a = anchorIndex, let c = currentIndex {
@@ -549,9 +543,6 @@ struct DayColumn: View {
 
     @State private var draftStart: CGFloat?
     @State private var draftEnd: CGFloat?
-    #if os(iOS)
-    @State private var touchY: CGFloat = 0
-    #endif
 
     var body: some View {
         let timed = store.events(on: day, calendar: appState.calendar).timed
@@ -564,8 +555,6 @@ struct DayColumn: View {
             Color.clear
                 .contentShape(Rectangle())
                 #if os(iOS)
-                .simultaneousGesture(DragGesture(minimumDistance: 0)
-                    .onChanged { touchY = $0.location.y })
                 .gesture(createLongPress)
                 #else
                 .gesture(createDrag)
@@ -666,13 +655,15 @@ struct DayColumn: View {
         LongPressGesture(minimumDuration: 0.35)
             .sequenced(before: DragGesture(minimumDistance: 0))
             .onChanged { value in
-                guard case .second(true, let drag) = value else { return }
+                // The sequenced drag reports as soon as the long press hands
+                // off, so its startLocation is where the finger held.
+                guard case .second(true, let drag?) = value else { return }
                 if draftStart == nil {
                     Haptics.tap()
-                    draftStart = snap(drag?.startLocation.y ?? touchY)
+                    draftStart = snap(drag.startLocation.y)
                     draftEnd = (draftStart ?? 0) + hourHeight
                 }
-                if let drag, abs(drag.translation.height) > 8 {
+                if abs(drag.translation.height) > 8 {
                     draftEnd = snap(drag.location.y)
                 }
             }
