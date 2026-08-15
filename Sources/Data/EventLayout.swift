@@ -14,13 +14,13 @@ struct PositionedEvent: Identifiable {
 }
 
 enum EventLayout {
-    /// Assigns overlapping events to side-by-side columns within clusters.
-    static func layout(_ events: [EKEvent]) -> [PositionedEvent] {
-        // Collapse identical events that appear on several calendars into one
-        // block. The primary copy is the one worth interacting with: an
-        // unanswered invite first (so needs-response styling and RSVP hit the
-        // right copy), then any copy where I'm an attendee, then an editable
-        // calendar's copy.
+    /// Collapse identical events (same title, start, end) that appear on
+    /// several calendars into (primary, duplicates) pairs, preserving input
+    /// order. The primary copy is the one worth interacting with: an
+    /// unanswered invite first (so needs-response styling and RSVP hit the
+    /// right copy), then any copy where I'm an attendee, then an editable
+    /// calendar's copy.
+    static func mergeDuplicates(_ events: [EKEvent]) -> [(primary: EKEvent, duplicates: [EKEvent])] {
         var groups: [String: [EKEvent]] = [:]
         var order: [String] = []
         for event in events {
@@ -40,6 +40,12 @@ enum EventLayout {
                 ?? copies[0]
             merged.append((primary, copies.filter { $0 !== primary }))
         }
+        return merged
+    }
+
+    /// Assigns overlapping events to side-by-side columns within clusters.
+    static func layout(_ events: [EKEvent]) -> [PositionedEvent] {
+        let merged = mergeDuplicates(events)
 
         // Full tiebreaker chain: Swift's sort is unstable, so ties must be
         // deterministic or same-time events swap columns between renders.

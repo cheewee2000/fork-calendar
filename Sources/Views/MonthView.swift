@@ -173,7 +173,7 @@ struct MonthSpanBar: View {
             }
         }
 
-        return SpanBarView(event: bar.event, compact: true)
+        return SpanBarView(event: bar.event, duplicates: bar.duplicates, compact: true)
             .frame(width: CGFloat(endIdx - startIdx + 1) * cellW - 6, height: 14)
             #if os(macOS)
             .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }
@@ -320,7 +320,9 @@ struct MonthCell: View {
 
     var body: some View {
         let cal = appState.calendar
-        let events = settings.monthAllDayOnly ? [] : store.events(on: day, calendar: cal).timed
+        let events = EventLayout.mergeDuplicates(
+            settings.monthAllDayOnly ? [] : store.events(on: day, calendar: cal).timed
+        )
         let isToday = day.isSameDay(as: Date(), calendar: cal)
         let dayOfMonth = cal.component(.day, from: day)
         let month = cal.component(.month, from: day)
@@ -341,8 +343,8 @@ struct MonthCell: View {
             if laneInset > 0 {
                 Color.clear.frame(height: laneInset)
             }
-            ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, event in
-                MonthChip(event: event, cellW: cellW, rowH: rowH)
+            ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, pair in
+                MonthChip(event: pair.primary, duplicates: pair.duplicates, cellW: cellW, rowH: rowH)
             }
             if events.count > 3 {
                 Text("\(events.count - 3) more")
@@ -444,6 +446,8 @@ struct MonthChip: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
     let event: EKEvent
+    /// Identical copies on other calendars, merged into this chip.
+    var duplicates: [EKEvent] = []
     var cellW: CGFloat = 120
     var rowH: CGFloat = 108
 
@@ -459,7 +463,19 @@ struct MonthChip: View {
         let color = event.calendar?.displayColor ?? Color.accentColor
         let isSelected = appState.selectedKey == eventKey(event)
         HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 5, height: 5)
+            if duplicates.isEmpty {
+                Circle().fill(color).frame(width: 5, height: 5)
+            } else {
+                // One strip per calendar this event lives on (merged copies).
+                HStack(spacing: 1) {
+                    ForEach(Array(([event] + duplicates).enumerated()), id: \.offset) { _, copy in
+                        Rectangle()
+                            .fill(copy.calendar?.displayColor ?? Color.accentColor)
+                            .frame(width: 3)
+                    }
+                }
+                .frame(height: 11)
+            }
             if !event.isAllDay, let s = event.startDate {
                 Text(Fmt.time.string(from: s))
                     .font(CWT.mono(9))

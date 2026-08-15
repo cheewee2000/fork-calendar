@@ -416,7 +416,7 @@ struct AllDaySpanBar: View {
             }
         }
 
-        return SpanBarView(event: bar.event)
+        return SpanBarView(event: bar.event, duplicates: bar.duplicates)
             .frame(width: CGFloat(endIdx - startIdx + 1) * colWidth - 4, height: 16)
             #if os(macOS)
             .overlay(alignment: .leading) { if isEditable { resizeHandle(lead: true) } }

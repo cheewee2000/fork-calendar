@@ -4,6 +4,8 @@ import SwiftUI
 /// A multi-day/all-day event drawn as one continuous bar across day columns.
 struct SpanBar: Identifiable {
     let event: EKEvent
+    /// Identical copies on other calendars, merged into this bar.
+    var duplicates: [EKEvent] = []
     let startIndex: Int
     let endIndex: Int // inclusive
     let lane: Int
@@ -31,13 +33,13 @@ enum SpanLayout {
         guard let rangeEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)) else { return [] }
         let dayKeys = days.map { calendar.startOfDay(for: $0) }
 
-        let events = store.spanningEvents(from: rangeStart, to: rangeEnd).sorted(by: byStart)
+        let events = EventLayout.mergeDuplicates(store.spanningEvents(from: rangeStart, to: rangeEnd).sorted(by: byStart))
 
         var globalLanes: [String: Int] = [:]
         if stableLanes {
             // Greedy sweep in calendar-day ordinals over the full fetched set;
             // an event's lane depends only on its neighbors, not the window.
-            let all = store.spanningEvents(from: .distantPast, to: .distantFuture).sorted(by: byStart)
+            let all = EventLayout.mergeDuplicates(store.spanningEvents(from: .distantPast, to: .distantFuture).sorted(by: byStart)).map(\.primary)
             var laneEnds: [Int] = []
             for event in all {
                 guard let start = event.startDate, let end = event.endDate else { continue }
@@ -55,7 +57,7 @@ enum SpanLayout {
 
         var laneEnds: [Int] = []
         var result: [SpanBar] = []
-        for event in events {
+        for (event, duplicates) in events {
             guard let start = event.startDate, let end = event.endDate else { continue }
             let eventStartDay = calendar.startOfDay(for: start)
             let lastMomentDay = calendar.startOfDay(for: max(end.addingTimeInterval(-1), start))
@@ -72,7 +74,7 @@ enum SpanLayout {
                 lane = laneEnds.count
                 laneEnds.append(endIndex)
             }
-            result.append(SpanBar(event: event, startIndex: startIndex, endIndex: endIndex, lane: lane))
+            result.append(SpanBar(event: event, duplicates: duplicates, startIndex: startIndex, endIndex: endIndex, lane: lane))
         }
         return result
     }
@@ -86,7 +88,13 @@ struct SpanBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
     let event: EKEvent
+    var duplicates: [EKEvent] = []
     var compact = false
+
+    /// Calendar colors for this bar: the primary copy plus merged duplicates.
+    private var stripColors: [Color] {
+        ([event] + duplicates).map { $0.calendar?.displayColor ?? Color.accentColor }
+    }
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
@@ -96,12 +104,24 @@ struct SpanBarView: View {
             .font(CWT.mono(compact ? 9 : 10, .medium))
             .lineLimit(1)
             .foregroundStyle(color)
-            .padding(.horizontal, 6)
+            .padding(.leading, duplicates.isEmpty ? 6 : CGFloat(3 + 4 * stripColors.count))
+            .padding(.trailing, 6)
             .padding(.vertical, compact ? 0 : 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(Rectangle().fill(color.opacity(
                 awaiting ? 0.06 : isSelected ? 0.32 : 0.18
             )))
+            .overlay(alignment: .leading) {
+                if !duplicates.isEmpty {
+                    // One strip per calendar this event lives on.
+                    HStack(spacing: 1) {
+                        ForEach(Array(stripColors.enumerated()), id: \.offset) { _, c in
+                            Rectangle().fill(c).frame(width: 3)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
             .overlay {
                 if awaiting {
                     Rectangle()
