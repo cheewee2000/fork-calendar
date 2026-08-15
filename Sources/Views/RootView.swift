@@ -35,15 +35,20 @@ struct RootView: View {
                     SidebarView()
                         .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
                 } detail: {
-                    HStack(spacing: 0) {
-                        CalendarDetailView()
-                        if let ctx = appState.panelContext {
-                            Divider()
-                            EventPanelView(context: ctx)
-                                .id(ctx.id)
-                                .frame(width: 320)
+                    // Drawer overlays the calendar instead of pushing it aside.
+                    CalendarDetailView()
+                        .overlay(alignment: .trailing) {
+                            if let ctx = appState.panelContext {
+                                EventPanelView(context: ctx)
+                                    .id(ctx.id)
+                                    .frame(width: 320)
+                                    .frame(maxHeight: .infinity)
+                                    .overlay(alignment: .leading) { Divider() }
+                                    .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
+                                    .transition(.move(edge: .trailing))
+                            }
                         }
-                    }
+                        .animation(.easeOut(duration: 0.2), value: appState.panelContext == nil)
                 }
             }
         }
