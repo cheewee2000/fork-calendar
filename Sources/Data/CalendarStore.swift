@@ -186,7 +186,12 @@ final class CalendarStore: ObservableObject {
                 let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
                 merged.append(contentsOf: store.events(matching: predicate))
             }
-            merged.sort { $0.startDate < $1.startDate }
+            // Deterministic tiebreaker — an unstable sort lets same-time events
+            // reorder across refetches (columns/colors jump while scrolling).
+            merged.sort {
+                if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
+                return ($0.eventIdentifier ?? "") < ($1.eventIdentifier ?? "")
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self, self.fetchGeneration == generation else { return }

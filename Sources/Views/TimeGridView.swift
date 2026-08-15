@@ -731,6 +731,12 @@ struct EventBlockView: View {
         item.event.calendar?.allowsContentModifications == true
     }
 
+    /// Calendar colors for this block: the primary copy plus any merged
+    /// duplicates from other calendars.
+    private var stripColors: [Color] {
+        ([item.event] + item.duplicates).map { $0.calendar?.displayColor ?? Color.accentColor }
+    }
+
     var body: some View {
         let cal = appState.calendar
         let dayStart = cal.startOfDay(for: day)
@@ -774,7 +780,7 @@ struct EventBlockView: View {
             }
         }
         .foregroundStyle(color)
-        .padding(.leading, 8)
+        .padding(.leading, CGFloat(4 + 4 * stripColors.count))
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .frame(width: max(subWidth - 2, 12), height: height, alignment: .topLeading)
@@ -783,7 +789,13 @@ struct EventBlockView: View {
         )))
         .overlay(alignment: .leading) {
             if !awaiting {
-                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 1)
+                // One strip per calendar this event lives on (merged copies).
+                HStack(spacing: 1) {
+                    ForEach(Array(stripColors.enumerated()), id: \.offset) { _, c in
+                        RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 3)
+                    }
+                }
+                .padding(.vertical, 1)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 5))
