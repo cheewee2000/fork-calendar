@@ -132,6 +132,7 @@ struct EventPanelView: View {
                         .font(CWT.mono(15, .bold))
                         .focused($titleFocused)
                         .lineLimit(3)
+                        .disabled(isReadOnly)
 
                     if let joinURL = currentJoinURL {
                         Button {
@@ -167,6 +168,7 @@ struct EventPanelView: View {
                             )
                             .font(CWT.mono(12))
                         }
+                        .disabled(isReadOnly)
                     }
 
                     row(icon: "repeat") {
@@ -177,6 +179,7 @@ struct EventPanelView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .disabled(isReadOnly)
                     }
 
                     row(icon: "calendar") {
@@ -187,6 +190,7 @@ struct EventPanelView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .disabled(isReadOnly)
                     }
 
                     if !context.isNew, context.event.attendees?.isEmpty == false {
@@ -229,6 +233,7 @@ struct EventPanelView: View {
                             TextField("Invite people (emails, comma-separated)", text: $inviteEmails)
                                 .textFieldStyle(.plain)
                                 .font(CWT.mono(12))
+                                .disabled(isReadOnly)
                                 #if os(iOS)
                                 .keyboardType(.emailAddress)
                                 .textInputAutocapitalization(.never)
@@ -244,15 +249,30 @@ struct EventPanelView: View {
                     }
 
                     row(icon: "mappin.and.ellipse") {
-                        TextField("Add location", text: $location)
-                            .textFieldStyle(.plain)
-                            .font(CWT.mono(12))
+                        HStack(spacing: 6) {
+                            TextField("Add location", text: $location)
+                                .textFieldStyle(.plain)
+                                .font(CWT.mono(12))
+                                .disabled(isReadOnly)
+                            if let maps = mapsURL {
+                                Button {
+                                    openURL(maps)
+                                } label: {
+                                    Image(systemName: "arrow.up.right.square")
+                                        .font(CWT.mono(12))
+                                        .foregroundStyle(CWT.inkSoft)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Open in Google Maps")
+                            }
+                        }
                     }
 
                     row(icon: "link") {
                         TextField("Add URL", text: $urlString)
                             .textFieldStyle(.plain)
                             .font(CWT.mono(12))
+                            .disabled(isReadOnly)
                     }
 
                     row(icon: "text.alignleft") {
@@ -261,11 +281,11 @@ struct EventPanelView: View {
                             .frame(minHeight: 70)
                             .scrollContentBackground(.hidden)
                             .background(CWT.paper2, in: Rectangle())
+                            .disabled(isReadOnly)
                     }
                 }
                 .padding(14)
             }
-            .disabled(isReadOnly)
 
             Divider()
             HStack {
@@ -293,6 +313,20 @@ struct EventPanelView: View {
         .onAppear {
             if context.isNew { titleFocused = true }
         }
+    }
+
+    /// Google Maps search link for the location text. A location that is
+    /// itself a URL (e.g. a pasted meeting link) gets no maps link.
+    private var mapsURL: URL? {
+        let trimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") { return nil }
+        var comps = URLComponents(string: "https://www.google.com/maps/search/")!
+        comps.queryItems = [
+            URLQueryItem(name: "api", value: "1"),
+            URLQueryItem(name: "query", value: trimmed),
+        ]
+        return comps.url
     }
 
     /// Join link considering unsaved edits to the URL field.
