@@ -252,6 +252,8 @@ struct HeaderBar: View {
             .disabled(store.accessState != .granted)
             .help("New event (C)")
         }
+        // Bordered controls don't inherit the root environment font.
+        .font(CWT.mono(11))
         #if os(iOS)
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
@@ -328,6 +330,7 @@ struct AvailabilityBar: View {
                 .controlSize(.small)
                 .help("Esc")
         }
+        .font(CWT.mono(11))
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(CWT.paper)

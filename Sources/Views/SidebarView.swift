@@ -13,10 +13,15 @@ struct SidebarView: View {
                     .listRowSeparator(.hidden)
             }
             ForEach(store.calendarsBySource, id: \.source) { group in
-                Section(group.source) {
+                Section {
                     ForEach(group.calendars, id: \.calendarIdentifier) { cal in
                         CalendarRow(cal: cal)
                     }
+                } header: {
+                    Text(group.source.uppercased())
+                        .font(CWT.mono(9, .bold))
+                        .kerning(0.4)
+                        .foregroundStyle(CWT.inkSoft)
                 }
             }
         }
@@ -63,6 +68,7 @@ struct CalendarRow: View {
                             }
                         }
                     Text(cal.title)
+                        .font(CWT.mono(12))
                         .foregroundStyle(store.isVisible(cal) ? AnyShapeStyle(CWT.ink) : AnyShapeStyle(CWT.inkSoft))
                         .lineLimit(1)
                     Spacer(minLength: 0)

@@ -284,6 +284,8 @@ struct EventPanelView: View {
             }
             .padding(12)
         }
+        // Controls (buttons, pickers, toggles) don't inherit the root font.
+        .font(CWT.mono(12))
         .background(BackgroundColor())
         .onChange(of: start) { oldValue, newValue in
             end = end.addingTimeInterval(newValue.timeIntervalSince(oldValue))
