@@ -48,12 +48,12 @@ struct MenuBarView: View {
         let all = dayEvents.allDay + dayEvents.timed
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(CWT.mono(10, .bold))
+                .foregroundStyle(CWT.inkSoft)
             if all.isEmpty {
                 Text("No events")
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .font(CWT.mono(12))
+                    .foregroundStyle(CWT.inkFaint)
             }
             ForEach(Array(all.prefix(6).enumerated()), id: \.offset) { _, event in
                 HStack(spacing: 6) {
@@ -61,13 +61,13 @@ struct MenuBarView: View {
                         .fill(event.calendar?.displayColor ?? .accentColor)
                         .frame(width: 6, height: 6)
                     Text(event.title ?? "Untitled")
-                        .font(.callout)
+                        .font(CWT.mono(12))
                         .lineLimit(1)
                     Spacer()
                     if !event.isAllDay, let s = event.startDate {
                         Text(Fmt.time.string(from: s))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(CWT.mono(10))
+                            .foregroundStyle(CWT.inkSoft)
                     }
                     if let url = MeetLink.url(for: event) {
                         Button("Join") { openURL(url) }

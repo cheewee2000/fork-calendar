@@ -41,7 +41,7 @@ struct SettingsView: View {
                     Button {
                         settings.secondaryTZs.removeAll { $0 == id }
                     } label: {
-                        Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                        Image(systemName: "minus.circle.fill").foregroundStyle(CWT.inkSoft)
                     }
                     .buttonStyle(.plain)
                 }
@@ -68,12 +68,12 @@ struct SettingsView: View {
                         .disabled(settings.googleClientID.isEmpty)
                     }
                     Text(googleAuth.isConnected ? "Connected" : googleAuth.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(CWT.mono(10))
+                        .foregroundStyle(CWT.inkSoft)
                 }
                 Text("Create a **Desktop app** OAuth client at console.cloud.google.com (APIs & Services → Credentials) with the Google Calendar API enabled, then paste its ID and secret here.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(CWT.mono(10))
+                    .foregroundStyle(CWT.inkFaint)
             }
         }
         .formStyle(.grouped)

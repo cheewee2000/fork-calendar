@@ -93,18 +93,18 @@ struct SpanBarView: View {
         let isSelected = appState.selectedKey == eventKey(event)
         let awaiting = store.awaitingResponse(event)
         Text(event.title ?? "Untitled")
-            .font(.system(size: compact ? 9 : 10, weight: .medium))
+            .font(CWT.mono(compact ? 9 : 10, .medium))
             .lineLimit(1)
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, compact ? 0 : 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(
+            .background(Rectangle().fill(color.opacity(
                 awaiting ? 0.06 : isSelected ? 0.32 : 0.18
             )))
             .overlay {
                 if awaiting {
-                    RoundedRectangle(cornerRadius: 4)
+                    Rectangle()
                         .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }

@@ -12,6 +12,8 @@ struct ForkCalendarApp: App {
                 .environmentObject(store)
                 .environmentObject(appState)
                 .environmentObject(settings)
+                .font(CWT.mono(12))
+                .tint(CWT.ink)
                 #if os(macOS)
                 .frame(minWidth: 960, minHeight: 600)
                 #endif
@@ -65,6 +67,7 @@ struct ForkCalendarApp: App {
         Settings {
             SettingsView()
                 .environmentObject(settings)
+                .tint(CWT.ink)
         }
         #endif
     }

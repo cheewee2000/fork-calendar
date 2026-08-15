@@ -18,8 +18,8 @@ struct YearView: View {
                 Color.clear.frame(width: gutter, height: 1)
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .font(CWT.mono(9, .semibold))
+                        .foregroundStyle(CWT.inkSoft)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -69,8 +69,8 @@ private struct YearWeekRow: View {
         let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
         HStack(spacing: 0) {
             Text(monthLabel(calendar: cal))
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(CWT.mono(9, .semibold))
+                .foregroundStyle(CWT.inkSoft)
                 .frame(width: gutter, alignment: .leading)
                 .padding(.leading, 6)
             ZStack(alignment: .topLeading) {
@@ -125,14 +125,14 @@ private struct YearSpanChip: View {
         Group {
             if showTitle {
                 Text(event.title ?? "Untitled")
-                    .font(.system(size: 7, weight: .medium))
+                    .font(CWT.mono(7, .medium))
                     .lineLimit(1)
                     .foregroundStyle(color)
                     .padding(.horizontal, 3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 2).fill(color.opacity(0.22)))
+                    .background(Rectangle().fill(color.opacity(0.22)))
             } else {
-                Capsule().fill(color.opacity(0.7))
+                Rectangle().fill(color.opacity(0.7))
             }
         }
         .contentShape(Rectangle())
@@ -155,20 +155,20 @@ private struct YearDayCell: View {
 
         HStack(spacing: 3) {
             Text(Fmt.dayNum.string(from: day))
-                .font(.system(size: 9, weight: isToday ? .bold : .regular))
+                .font(CWT.mono(9, isToday ? .bold : .regular))
                 .frame(width: 16, height: 13)
-                .background { if isToday { Capsule().fill(Color.red) } }
-                .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : Color.secondary.opacity(0.35))
+                .background { if isToday { Rectangle().fill(CWT.signalRed) } }
+                .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : CWT.inkSoft.opacity(0.35))
             Spacer(minLength: 0)
         }
         .padding(.leading, 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(inYear && evenMonth ? Color.primary.opacity(0.035) : Color.clear)
+        .background(inYear && evenMonth ? CWT.paper3.opacity(0.55) : Color.clear)
         .overlay(alignment: .top) {
-            Rectangle().fill(Color.primary.opacity(0.05)).frame(height: 0.5)
+            Rectangle().fill(CWT.ruleSoft).frame(height: 0.5)
         }
         .overlay(alignment: .leading) {
-            Rectangle().fill(Color.primary.opacity(0.04)).frame(width: 0.5)
+            Rectangle().fill(CWT.ruleSoft).frame(width: 0.5)
         }
         .contentShape(Rectangle())
         .onTapGesture {

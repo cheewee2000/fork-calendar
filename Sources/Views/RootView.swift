@@ -43,8 +43,7 @@ struct RootView: View {
                                     .id(ctx.id)
                                     .frame(width: 320)
                                     .frame(maxHeight: .infinity)
-                                    .overlay(alignment: .leading) { Divider() }
-                                    .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
+                                    .overlay(alignment: .leading) { CWT.rule.frame(width: 1) }
                                     .transition(.move(edge: .trailing))
                             }
                         }
@@ -81,11 +80,11 @@ struct RootView: View {
         .overlay(alignment: .bottomTrailing) {
             if let toast = appState.toast {
                 Text(toast)
-                    .font(.callout)
+                    .font(CWT.mono(12))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+                    .background(CWT.paper)
+                    .overlay(Rectangle().strokeBorder(CWT.ink, lineWidth: 1))
                     .padding(14)
                     .task {
                         try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -167,6 +166,7 @@ struct CalendarDetailView: View {
                 TimeGridView(days: appState.visibleDays)
             }
         }
+        .background(CWT.paper)
         .onAppear {
             #if os(iOS)
             if !didSetInitialMode, sizeClass == .compact {
@@ -215,9 +215,9 @@ struct HeaderBar: View {
             }
             Text(Fmt.monthYear.string(from: appState.currentDate))
                 #if os(iOS)
-                .font(.subheadline.weight(.semibold))
+                .font(CWT.mono(12, .bold))
                 #else
-                .font(.title3.weight(.semibold))
+                .font(CWT.mono(15, .bold))
                 #endif
                 .lineLimit(1)
             Spacer()
@@ -313,7 +313,7 @@ struct AvailabilityBar: View {
             Text(appState.availabilitySlots.isEmpty
                  ? "Drag on the calendar to select available times"
                  : "\(appState.availabilitySlots.count) slot\(appState.availabilitySlots.count == 1 ? "" : "s") selected")
-                .font(.callout)
+                .font(CWT.mono(12))
             if !appState.availabilitySlots.isEmpty {
                 Button("Copy availability") {
                     Clipboard.copy(appState.availabilityText())
@@ -330,8 +330,8 @@ struct AvailabilityBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+        .background(CWT.paper)
+        .overlay(Rectangle().strokeBorder(CWT.ink, lineWidth: 1))
     }
 }
 
@@ -341,13 +341,13 @@ struct AccessDeniedView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "calendar.badge.exclamationmark")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+                .font(CWT.mono(40))
+                .foregroundStyle(CWT.inkSoft)
             Text("Calendar access is off")
-                .font(.headline)
+                .font(CWT.mono(13, .bold))
             Text("Fork Calendar needs calendar access to show your events.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(CWT.mono(12))
+                .foregroundStyle(CWT.inkSoft)
             Button("Open Settings") {
                 #if os(macOS)
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {

@@ -129,7 +129,7 @@ struct EventPanelView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField("Add title", text: $title, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(.title3.weight(.semibold))
+                        .font(CWT.mono(15, .bold))
                         .focused($titleFocused)
                         .lineLimit(3)
 
@@ -143,8 +143,8 @@ struct EventPanelView: View {
                         .buttonStyle(.borderedProminent)
                     } else if addMeetOnSave {
                         Label("Google Meet will be created on save", systemImage: "video.badge.checkmark")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .font(CWT.mono(12))
+                            .foregroundStyle(CWT.inkSoft)
                     } else if !isReadOnly {
                         conferencingMenu
                     }
@@ -152,20 +152,20 @@ struct EventPanelView: View {
                     row(icon: "clock") {
                         VStack(alignment: .leading, spacing: 6) {
                             Toggle("All day", isOn: $isAllDay)
-                                .font(.callout)
+                                .font(CWT.mono(12))
                             DatePicker(
                                 "Starts",
                                 selection: $start,
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
-                            .font(.callout)
+                            .font(CWT.mono(12))
                             DatePicker(
                                 "Ends",
                                 selection: $end,
                                 in: start...,
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
-                            .font(.callout)
+                            .font(CWT.mono(12))
                         }
                     }
 
@@ -193,8 +193,8 @@ struct EventPanelView: View {
                         row(icon: "envelope.badge") {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Your response")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(CWT.mono(10))
+                                    .foregroundStyle(CWT.inkSoft)
                                 HStack(spacing: 6) {
                                     rsvpButton("Going", status: "accepted", current: .accepted)
                                     rsvpButton("Maybe", status: "tentative", current: .tentative)
@@ -210,13 +210,13 @@ struct EventPanelView: View {
                                 ForEach(Array(attendees.enumerated()), id: \.offset) { _, attendee in
                                     HStack(spacing: 6) {
                                         Image(systemName: statusIcon(attendee.participantStatus))
-                                            .font(.system(size: 10))
+                                            .font(CWT.mono(10))
                                             .foregroundStyle(statusColor(attendee.participantStatus))
                                         Text(attendee.name ?? "Unknown")
-                                            .font(.callout)
+                                            .font(CWT.mono(12))
                                             .lineLimit(1)
                                         if attendee.isCurrentUser {
-                                            Text("(you)").font(.caption).foregroundStyle(.secondary)
+                                            Text("(you)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
                                         }
                                     }
                                 }
@@ -228,7 +228,7 @@ struct EventPanelView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             TextField("Invite people (emails, comma-separated)", text: $inviteEmails)
                                 .textFieldStyle(.plain)
-                                .font(.callout)
+                                .font(CWT.mono(12))
                                 #if os(iOS)
                                 .keyboardType(.emailAddress)
                                 .textInputAutocapitalization(.never)
@@ -237,8 +237,8 @@ struct EventPanelView: View {
                                 Text(GoogleAuth.shared.isConnected
                                      ? "Added to the Google event's guest list on save"
                                      : "Sent as an email invite (.ics) on save")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .font(CWT.mono(9))
+                                    .foregroundStyle(CWT.inkFaint)
                             }
                         }
                     }
@@ -246,21 +246,21 @@ struct EventPanelView: View {
                     row(icon: "mappin.and.ellipse") {
                         TextField("Add location", text: $location)
                             .textFieldStyle(.plain)
-                            .font(.callout)
+                            .font(CWT.mono(12))
                     }
 
                     row(icon: "link") {
                         TextField("Add URL", text: $urlString)
                             .textFieldStyle(.plain)
-                            .font(.callout)
+                            .font(CWT.mono(12))
                     }
 
                     row(icon: "text.alignleft") {
                         TextEditor(text: $notes)
-                            .font(.callout)
+                            .font(CWT.mono(12))
                             .frame(minHeight: 70)
                             .scrollContentBackground(.hidden)
-                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                            .background(CWT.paper2, in: Rectangle())
                     }
                 }
                 .padding(14)
@@ -271,8 +271,8 @@ struct EventPanelView: View {
             HStack {
                 if isReadOnly {
                     Text("Read-only calendar")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(CWT.mono(10))
+                        .foregroundStyle(CWT.inkSoft)
                 }
                 Spacer()
                 Button("Cancel") { close() }
@@ -342,8 +342,8 @@ struct EventPanelView: View {
     private func row(icon: String, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+                .font(CWT.mono(13))
+                .foregroundStyle(CWT.inkSoft)
                 .frame(width: 18)
                 .padding(.top, 3)
             content()
@@ -374,10 +374,10 @@ struct EventPanelView: View {
 
     private func statusColor(_ status: EKParticipantStatus) -> Color {
         switch status {
-        case .accepted: return .green
-        case .declined: return .red
-        case .tentative: return .orange
-        default: return .secondary
+        case .accepted: return CWT.signalGreen
+        case .declined: return CWT.signalRed
+        case .tentative: return CWT.signalOrange
+        default: return CWT.inkSoft
         }
     }
 
@@ -418,10 +418,6 @@ struct EventPanelView: View {
 
 private struct BackgroundColor: View {
     var body: some View {
-        #if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color(uiColor: .systemBackground)
-        #endif
+        CWT.paper
     }
 }

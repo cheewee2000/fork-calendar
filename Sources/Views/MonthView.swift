@@ -44,8 +44,8 @@ struct MonthView: View {
             HStack(spacing: 0) {
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .font(CWT.mono(10, .semibold))
+                        .foregroundStyle(CWT.inkSoft)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -330,10 +330,10 @@ struct MonthCell: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(dayOfMonth == 1 ? monthDayLabel : Fmt.dayNum.string(from: day))
-                    .font(.system(size: 11, weight: isToday || dayOfMonth == 1 ? .bold : .regular))
+                    .font(CWT.mono(11, isToday || dayOfMonth == 1 ? .bold : .regular))
                     .padding(.horizontal, isToday ? 5 : 0)
                     .frame(height: 20)
-                    .background { if isToday { Capsule().fill(Color.red) } }
+                    .background { if isToday { Rectangle().fill(CWT.signalRed) } }
                     .foregroundStyle(isToday ? Color.white : Color.primary)
                 Spacer(minLength: 0)
             }
@@ -346,8 +346,8 @@ struct MonthCell: View {
             }
             if events.count > 3 {
                 Text("\(events.count - 3) more")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .font(CWT.mono(9))
+                    .foregroundStyle(CWT.inkSoft)
                     .padding(.leading, 4)
             }
             Spacer(minLength: 0)
@@ -355,15 +355,15 @@ struct MonthCell: View {
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
-            (evenMonth ? Color.primary.opacity(0.03) : Color.clear)
-                .overlay(isWeekend ? Color.primary.opacity(0.035) : Color.clear)
+            (evenMonth ? CWT.paper2 : Color.clear)
+                .overlay(isWeekend ? CWT.paper3.opacity(0.55) : Color.clear)
                 .overlay(isInDraftRange ? Color.accentColor.opacity(0.14) : Color.clear)
         )
         .overlay(alignment: .top) {
-            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
+            Rectangle().fill(CWT.rule).frame(height: 1)
         }
         .overlay(alignment: .leading) {
-            Rectangle().fill(Color.primary.opacity(0.05)).frame(width: 1)
+            Rectangle().fill(CWT.ruleSoft).frame(width: 1)
         }
         .contentShape(Rectangle())
         #if os(iOS)
@@ -462,22 +462,22 @@ struct MonthChip: View {
             Circle().fill(color).frame(width: 5, height: 5)
             if !event.isAllDay, let s = event.startDate {
                 Text(Fmt.time.string(from: s))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .font(CWT.mono(9))
+                    .foregroundStyle(CWT.inkSoft)
             }
             Text(event.title ?? "Untitled")
-                .font(.system(size: 9, weight: .medium))
+                .font(CWT.mono(9, .medium))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 3)
         .padding(.vertical, 1)
-        .background(RoundedRectangle(cornerRadius: 3).fill(
+        .background(Rectangle().fill(
             isDragging ? color.opacity(0.35) : color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)
         ))
         .overlay {
             if store.awaitingResponse(event) {
-                RoundedRectangle(cornerRadius: 3)
+                Rectangle()
                     .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }
         }

@@ -64,18 +64,18 @@ private struct PaletteBody: View {
             footer
         }
         .frame(width: 560)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.3), radius: 24, y: 8)
+        .background(CWT.paper)
+        .overlay(Rectangle().strokeBorder(CWT.ink, lineWidth: 1))
         .padding(.top, 80)
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CWT.inkSoft)
             TextField("Search events or type a command…", text: $model.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16))
+                .font(CWT.mono(16))
                 .focused($focused)
         }
         .padding(14)
@@ -98,8 +98,8 @@ private struct PaletteBody: View {
                     }
                     if items.isEmpty {
                         Text("No results")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .font(CWT.mono(12))
+                            .foregroundStyle(CWT.inkSoft)
                             .padding(20)
                     }
                 }
@@ -119,8 +119,8 @@ private struct PaletteBody: View {
             Text("esc close")
             Spacer()
         }
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
+        .font(CWT.mono(9))
+        .foregroundStyle(CWT.inkFaint)
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
     }
@@ -239,31 +239,31 @@ private struct PaletteRow: View {
         HStack(spacing: 10) {
             Image(systemName: item.icon)
                 .frame(width: 18)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CWT.inkSoft)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title)
-                    .font(.system(size: 13))
+                    .font(CWT.mono(13))
                     .lineLimit(1)
                 if let subtitle = item.subtitle {
                     Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .font(CWT.mono(11))
+                        .foregroundStyle(CWT.inkSoft)
                         .lineLimit(1)
                 }
             }
             Spacer()
             if let shortcut = item.shortcut {
                 Text(shortcut)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(CWT.mono(11, .medium))
+                    .foregroundStyle(CWT.inkSoft)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.08)))
+                    .background(Rectangle().fill(Color.primary.opacity(0.08)))
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Color.accentColor.opacity(0.15) : .clear))
+        .background(Rectangle().fill(selected ? Color.accentColor.opacity(0.15) : .clear))
         .contentShape(Rectangle())
     }
 }

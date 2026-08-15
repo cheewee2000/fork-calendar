@@ -50,8 +50,8 @@ struct TimeGridView: View {
                     HStack(spacing: 0) {
                         ForEach(settings.secondaryTZs, id: \.self) { id in
                             Text(TimeZone(identifier: id)?.abbreviation() ?? AppSettings.timeZoneLabel(id))
-                                .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(.tertiary)
+                                .font(CWT.mono(8, .semibold))
+                                .foregroundStyle(CWT.inkFaint)
                                 .lineLimit(1)
                                 .frame(width: 42, alignment: .trailing)
                         }
@@ -150,9 +150,9 @@ struct TimeGridView: View {
             let keys = extDays.map { cal.startOfDay(for: $0) }
             if let lo = keys.firstIndex(where: { $0 >= startDay }),
                let hi = keys.lastIndex(where: { $0 <= lastDay }), hi >= lo {
-                RoundedRectangle(cornerRadius: 4)
+                Rectangle()
                     .fill(Color.accentColor.opacity(0.22))
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor.opacity(0.6)))
+                    .overlay(Rectangle().strokeBorder(Color.accentColor.opacity(0.6)))
                     .frame(width: CGFloat(hi - lo + 1) * colWidth - 4)
                     .frame(maxHeight: .infinity)
                     .offset(x: CGFloat(lo) * colWidth + 2)
@@ -190,12 +190,12 @@ struct TimeGridView: View {
         let isToday = day.isSameDay(as: Date(), calendar: appState.calendar)
         return VStack(spacing: 2) {
             Text(Fmt.weekdayShort.string(from: day).uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(isToday ? Color.red : Color.secondary)
+                .font(CWT.mono(10, .semibold))
+                .foregroundStyle(isToday ? CWT.signalRed : CWT.inkSoft)
             Text(Fmt.dayNum.string(from: day))
-                .font(.system(size: 15, weight: isToday ? .bold : .regular))
+                .font(CWT.mono(15, isToday ? .bold : .regular))
                 .frame(width: 26, height: 26)
-                .background { if isToday { Circle().fill(Color.red) } }
+                .background { if isToday { Rectangle().fill(CWT.signalRed) } }
                 .foregroundStyle(isToday ? Color.white : Color.primary)
         }
         .frame(maxWidth: .infinity)
@@ -215,8 +215,8 @@ struct TimeGridView: View {
                         Group {
                             if hour > 0, let tz = TimeZone(identifier: id) {
                                 Text(hourLabel(hour, timeZone: tz))
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.tertiary)
+                                    .font(CWT.mono(9))
+                                    .foregroundStyle(CWT.inkFaint)
                                     .offset(y: -6)
                             }
                         }
@@ -225,8 +225,8 @@ struct TimeGridView: View {
                     Group {
                         if hour > 0 {
                             Text(hourLabel(hour, timeZone: nil))
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                                .font(CWT.mono(10))
+                                .foregroundStyle(CWT.inkSoft)
                                 .padding(.trailing, 8)
                                 .offset(y: -6)
                         }
@@ -261,7 +261,7 @@ struct TimeGridView: View {
                 Color.clear
                     .frame(height: hourHeight)
                     .overlay(alignment: .top) {
-                        Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
+                        Rectangle().fill(CWT.rule).frame(height: 1)
                     }
             }
         }
@@ -312,9 +312,9 @@ struct AllDayCreateLayer: View {
                 Color.clear
                 if let a = anchorIndex, let c = currentIndex {
                     let lo = min(a, c), hi = max(a, c)
-                    RoundedRectangle(cornerRadius: 4)
+                    Rectangle()
                         .fill(Color.accentColor.opacity(0.22))
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor.opacity(0.6)))
+                        .overlay(Rectangle().strokeBorder(Color.accentColor.opacity(0.6)))
                         .frame(width: CGFloat(hi - lo + 1) * colWidth - 4, height: max(geo.size.height - 2, 14))
                         .offset(x: CGFloat(lo) * colWidth + 2)
                 }
@@ -546,7 +546,7 @@ struct DayColumn: View {
         let positioned = EventLayout.layout(timed)
         ZStack(alignment: .topLeading) {
             if appState.calendar.isDateInWeekend(day) {
-                Color.primary.opacity(0.035)
+                CWT.paper3.opacity(0.55)
                     .allowsHitTesting(false)
             }
             Color.clear
@@ -591,9 +591,9 @@ struct DayColumn: View {
             #endif
 
             if let s = draftStart, let e = draftEnd {
-                RoundedRectangle(cornerRadius: 5)
+                Rectangle()
                     .fill(draftColor.opacity(0.22))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(draftColor.opacity(0.6)))
+                    .overlay(Rectangle().strokeBorder(draftColor.opacity(0.6)))
                     .frame(width: colWidth - 6, height: max(abs(e - s), 10))
                     .offset(x: 2, y: min(s, e))
                     .allowsHitTesting(false)
@@ -608,9 +608,9 @@ struct DayColumn: View {
                 if s < dayEnd, e > dayStart {
                     let y = CGFloat(max(s, dayStart).timeIntervalSince(dayStart) / 3600) * hourHeight
                     let h = CGFloat(min(e, dayEnd).timeIntervalSince(max(s, dayStart)) / 3600) * hourHeight
-                    RoundedRectangle(cornerRadius: 5)
+                    Rectangle()
                         .fill(Color.accentColor.opacity(0.22))
-                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor.opacity(0.6)))
+                        .overlay(Rectangle().strokeBorder(Color.accentColor.opacity(0.6)))
                         .frame(width: colWidth - 6, height: max(h, 10))
                         .offset(x: 2, y: y)
                         .allowsHitTesting(false)
@@ -621,9 +621,9 @@ struct DayColumn: View {
                 let dayStart = appState.calendar.startOfDay(for: day)
                 let y = CGFloat(slot.start.timeIntervalSince(dayStart) / 3600) * hourHeight
                 let h = CGFloat(slot.end.timeIntervalSince(slot.start) / 3600) * hourHeight
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.green.opacity(0.25))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.green.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4])))
+                Rectangle()
+                    .fill(CWT.signalGreen.opacity(0.25))
+                    .overlay(Rectangle().strokeBorder(CWT.signalGreen.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4])))
                     .frame(width: colWidth - 6, height: max(h, 8))
                     .offset(x: 2, y: y)
                     .onTapGesture {
@@ -641,12 +641,12 @@ struct DayColumn: View {
         }
         .frame(width: colWidth, height: hourHeight * 24)
         .overlay(alignment: .leading) {
-            Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 1)
+            Rectangle().fill(CWT.rule).frame(width: 1)
         }
     }
 
     private var draftColor: Color {
-        appState.availabilityMode ? .green : .accentColor
+        appState.availabilityMode ? CWT.signalGreen : .accentColor
     }
 
     private var createDrag: some Gesture {
@@ -702,10 +702,10 @@ struct NowLine: View {
             let start = Calendar.autoupdatingCurrent.startOfDay(for: context.date)
             let y = CGFloat(context.date.timeIntervalSince(start) / 3600) * hourHeight
             HStack(spacing: 0) {
-                Circle().fill(Color.red).frame(width: 7, height: 7)
-                Rectangle().fill(Color.red).frame(height: 1.5)
+                Rectangle().fill(CWT.signalRed).frame(width: 5, height: 5)
+                Rectangle().fill(CWT.signalRed).frame(height: 1)
             }
-            .offset(y: y - 3.5)
+            .offset(y: y - 2.5)
         }
         .allowsHitTesting(false)
     }
@@ -765,16 +765,16 @@ struct EventBlockView: View {
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 3) {
                 Text(item.event.title ?? "Untitled")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(CWT.mono(11, .semibold))
                     .lineLimit(height > 32 ? 2 : 1)
                 if joinURL != nil, height > 20, subWidth > 60 {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 8))
+                        .font(CWT.mono(8))
                 }
             }
             if height > 34, let s = item.event.startDate, let e = item.event.endDate {
                 Text(Fmt.interval.string(from: s, to: e))
-                    .font(.system(size: 9))
+                    .font(CWT.mono(9))
                     .opacity(0.75)
                     .lineLimit(1)
             }
@@ -784,7 +784,7 @@ struct EventBlockView: View {
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .frame(width: max(subWidth - 2, 12), height: height, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(
+        .background(Rectangle().fill(color.opacity(
             awaiting ? 0.07 : isSelected ? 0.28 : 0.16
         )))
         .overlay(alignment: .leading) {
@@ -792,19 +792,19 @@ struct EventBlockView: View {
                 // One strip per calendar this event lives on (merged copies).
                 HStack(spacing: 1) {
                     ForEach(Array(stripColors.enumerated()), id: \.offset) { _, c in
-                        RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 3)
+                        Rectangle().fill(c).frame(width: 3)
                     }
                 }
                 .padding(.vertical, 1)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .clipShape(Rectangle())
         .overlay {
             if awaiting {
-                RoundedRectangle(cornerRadius: 5)
+                Rectangle()
                     .strokeBorder(color, style: StrokeStyle(lineWidth: isSelected ? 1.8 : 1.2, dash: [4, 3]))
             } else if isSelected {
-                RoundedRectangle(cornerRadius: 5).strokeBorder(color, lineWidth: 1.5)
+                Rectangle().strokeBorder(color, lineWidth: 1.5)
             }
         }
         .overlay(alignment: .top) {
