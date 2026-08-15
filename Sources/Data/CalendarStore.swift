@@ -61,6 +61,7 @@ final class CalendarStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(Array(hiddenCalendarIDs), forKey: "hiddenCalendarIDs")
             dayIndexCache = nil
+            WidgetBridge.mirror(hiddenCalendarIDs: hiddenCalendarIDs)
         }
     }
 
@@ -73,6 +74,11 @@ final class CalendarStore: ObservableObject {
     init() {
         hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: "hiddenCalendarIDs") ?? [])
         allStores = [eventStore]
+        WidgetBridge.mirror(
+            hiddenCalendarIDs: hiddenCalendarIDs,
+            calendarColors: AppSettings.shared.calendarColors,
+            showDeclined: AppSettings.shared.showDeclined
+        )
         // object: nil so changes from delegate stores are caught too
         NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: nil, queue: .main
@@ -147,6 +153,7 @@ final class CalendarStore: ObservableObject {
         searchCache = nil
         dayIndexCache = nil
         if let interval = fetchedInterval { fetch(interval) }
+        WidgetBridge.reload()
     }
 
     func owner(of event: EKEvent) -> EKEventStore {

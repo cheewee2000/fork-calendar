@@ -8,7 +8,12 @@ final class AppSettings: ObservableObject {
     @Published var firstWeekday: Int { didSet { UserDefaults.standard.set(firstWeekday, forKey: "firstWeekday") } }
     /// Minutes
     @Published var defaultDuration: Int { didSet { UserDefaults.standard.set(defaultDuration, forKey: "defaultDuration") } }
-    @Published var showDeclined: Bool { didSet { UserDefaults.standard.set(showDeclined, forKey: "showDeclined") } }
+    @Published var showDeclined: Bool {
+        didSet {
+            UserDefaults.standard.set(showDeclined, forKey: "showDeclined")
+            WidgetBridge.mirror(showDeclined: showDeclined)
+        }
+    }
     @Published var showWeekends: Bool { didSet { UserDefaults.standard.set(showWeekends, forKey: "showWeekends") } }
     /// Month view: hide timed-event chips, keep only all-day/multi-day bars
     @Published var monthAllDayOnly: Bool { didSet { UserDefaults.standard.set(monthAllDayOnly, forKey: "monthAllDayOnly") } }
@@ -17,7 +22,12 @@ final class AppSettings: ObservableObject {
     /// Personal Zoom meeting URL, used by "Add conferencing"
     @Published var zoomLink: String { didSet { UserDefaults.standard.set(zoomLink, forKey: "zoomLink") } }
     /// Per-calendar color overrides (calendarIdentifier → hex "RRGGBB")
-    @Published var calendarColors: [String: String] { didSet { UserDefaults.standard.set(calendarColors, forKey: "calendarColors") } }
+    @Published var calendarColors: [String: String] {
+        didSet {
+            UserDefaults.standard.set(calendarColors, forKey: "calendarColors")
+            WidgetBridge.mirror(calendarColors: calendarColors)
+        }
+    }
     /// Google OAuth desktop-app client (user-supplied, from console.cloud.google.com)
     @Published var googleClientID: String { didSet { UserDefaults.standard.set(googleClientID, forKey: "googleClientID") } }
     @Published var googleClientSecret: String { didSet { UserDefaults.standard.set(googleClientSecret, forKey: "googleClientSecret") } }

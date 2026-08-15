@@ -27,8 +27,8 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.12.5"
-        CFBundleVersion: "37"
+        CFBundleShortVersionString: "0.13.0"
+        CFBundleVersion: "38"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSHumanReadableCopyright: © 2026 CW&T
@@ -47,7 +47,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Fork Calendar
-        PRODUCT_BUNDLE_IDENTIFIER: com.cwandt.forkcalendar.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.cwandt.forkcalendar.app
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: L6DVQR8JB9
@@ -56,8 +56,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.12.5"
-        CFBundleVersion: "37"
+        CFBundleShortVersionString: "0.13.0"
+        CFBundleVersion: "38"
         NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
         NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
         UIAppFonts:
@@ -68,3 +68,44 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: Support/ForkCalendar-iOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cwandt.forkcalendar
+    dependencies:
+      - target: ForkCalendarWidgets
+  ForkCalendarWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Sources/App/Theme.swift
+      - Sources/Utilities/ColorUtils.swift
+      - Sources/Fonts
+    settings:
+      base:
+        PRODUCT_NAME: ForkCalendarWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.cwandt.forkcalendar.app.widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        DEVELOPMENT_TEAM: L6DVQR8JB9
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: true
+    info:
+      path: Support/Info-Widgets.plist
+      properties:
+        CFBundleDisplayName: Fork Calendar
+        CFBundleShortVersionString: "0.13.0"
+        CFBundleVersion: "38"
+        NSCalendarsFullAccessUsageDescription: Fork Calendar shows your events in widgets.
+        NSCalendarsUsageDescription: Fork Calendar shows your events in widgets.
+        UIAppFonts:
+          - SpaceMono-Regular.ttf
+          - SpaceMono-Bold.ttf
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Support/ForkCalendarWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.cwandt.forkcalendar
