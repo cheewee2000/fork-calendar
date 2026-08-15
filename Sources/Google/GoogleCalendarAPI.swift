@@ -175,11 +175,16 @@ enum GoogleSync {
     /// Find the Google (calendarID, eventID) for an EventKit event. Tries all
     /// UID forms on the title-matched calendar first, then every calendar,
     /// then falls back to a time-window + exact-title search.
-    private static func locateEvent(event: EKEvent, token: String) async throws -> (calendarID: String, eventID: String)? {
+    private static func locateEvent(event: EKEvent, token: String, writableOnly: Bool = false) async throws -> (calendarID: String, eventID: String)? {
         if cachedCalendars == nil {
             cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
         }
-        let calendars = (cachedCalendars ?? []).filter { $0.accessRole != "freeBusyReader" }
+        // Writes (RSVP, guest patches) must land on a copy this account can
+        // modify — a UID match on a read-only shared calendar 403s.
+        let calendars = (cachedCalendars ?? []).filter {
+            writableOnly ? ($0.accessRole == "owner" || $0.accessRole == "writer")
+                         : $0.accessRole != "freeBusyReader"
+        }
         let calendarTitle = event.calendar?.title ?? ""
         var ordered = calendars.filter {
             $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
@@ -221,7 +226,7 @@ enum GoogleSync {
             // The CalDAV push to Google may lag a few seconds for new events
             var located: (calendarID: String, eventID: String)?
             for _ in 0..<8 {
-                located = try await locateEvent(event: event, token: token)
+                located = try await locateEvent(event: event, token: token, writableOnly: true)
                 if located != nil { break }
                 try await Task.sleep(nanoseconds: 3_000_000_000)
             }
@@ -262,8 +267,8 @@ enum GoogleSync {
             return
         }
         do {
-            guard let located = try await locateEvent(event: event, token: token) else {
-                appState.toast = "Event not found on the connected Google account"
+            guard let located = try await locateEvent(event: event, token: token, writableOnly: true) else {
+                appState.toast = "RSVP failed — the invited calendar isn't writable from the connected Google account"
                 return
             }
             try await GoogleCalendarAPI.respond(eventID: located.eventID, calendarID: located.calendarID, status: status, token: token)
@@ -273,6 +278,8 @@ enum GoogleSync {
             let mapped: EKParticipantStatus = status == "accepted" ? .accepted
                 : status == "tentative" ? .tentative : .declined
             store?.setRSVPOverride(mapped, for: event)
+        } catch GoogleAPIError.http(403, _) {
+            appState.toast = "RSVP forbidden — the connected Google account isn't the invited guest (check Settings ⌘,)"
         } catch {
             appState.toast = "RSVP failed — \(error.localizedDescription)"
         }
