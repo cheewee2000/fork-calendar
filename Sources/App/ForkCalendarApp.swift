@@ -1,10 +1,25 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 @main
 struct ForkCalendarApp: App {
     @StateObject private var store = CalendarStore()
     @StateObject private var appState = AppState()
     @StateObject private var settings = AppSettings.shared
+
+    init() {
+        #if os(iOS)
+        // UIKit-drawn navigation bar titles don't see SwiftUI fonts.
+        if let bold16 = UIFont(name: "SpaceMono-Bold", size: 16) {
+            UINavigationBar.appearance().titleTextAttributes = [.font: bold16]
+        }
+        if let bold26 = UIFont(name: "SpaceMono-Bold", size: 26) {
+            UINavigationBar.appearance().largeTitleTextAttributes = [.font: bold26]
+        }
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup("Fork Calendar", id: "main") {
