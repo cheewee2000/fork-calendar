@@ -163,7 +163,27 @@ final class AppState: ObservableObject {
 
     // MARK: - Navigation
 
-    func goToToday() { goTo(Date()) }
+    /// Jump to today. In multi-day grids, frame today as the second column
+    /// (one day of context before it) instead of the calendar-week start.
+    func goToToday() {
+        let today = Date()
+        switch viewMode {
+        case .days, .week:
+            // Anchored framing shows consecutive days; with weekends hidden
+            // that would surface them, so keep classic week framing there.
+            if case .week = viewMode, !settings.showWeekends {
+                goTo(today)
+                return
+            }
+            cancelPan()
+            let cal = calendar
+            gridAnchor = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: today))
+            currentDate = today
+            monthScrollTarget = today
+        default:
+            goTo(today)
+        }
+    }
 
     func goTo(_ date: Date) {
         cancelPan()
