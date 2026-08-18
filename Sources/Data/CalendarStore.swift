@@ -143,6 +143,9 @@ final class CalendarStore: ObservableObject {
     func refresh() {
         guard accessState == .granted else { return }
         isRefreshing = true
+        // Google's calendar list is cached for the process; a share whose role
+        // changed (reader → writer) stays stale until this is dropped.
+        GoogleSync.clearCache()
         for store in allStores { store.refreshSourcesIfNecessary() }
         reload()
         Task { @MainActor [weak self] in
@@ -275,20 +278,28 @@ final class CalendarStore: ObservableObject {
 
     @Published var rsvpOverrides: [String: EKParticipantStatus] = [:]
 
+    /// Keyed on the invite's shared UID + this occurrence's start, so an RSVP
+    /// answered on one calendar's copy shows on every copy of that occurrence
+    /// (eventIdentifier differs per copy) without leaking across a series.
+    private func rsvpKey(_ event: EKEvent) -> String {
+        let id = event.calendarItemExternalIdentifier ?? event.eventIdentifier ?? "new"
+        return id + "-" + String(event.startDate?.timeIntervalSinceReferenceDate ?? 0)
+    }
+
     func setRSVPOverride(_ status: EKParticipantStatus, for event: EKEvent) {
-        rsvpOverrides[eventKey(event)] = status
+        rsvpOverrides[rsvpKey(event)] = status
         eventStore.refreshSourcesIfNecessary()
     }
 
     /// True when the event still needs my response (accounting for a
     /// just-sent RSVP that EventKit hasn't synced yet).
     func awaitingResponse(_ event: EKEvent) -> Bool {
-        guard rsvpOverrides[eventKey(event)] == nil else { return false }
+        guard rsvpOverrides[rsvpKey(event)] == nil else { return false }
         return event.needsMyResponse
     }
 
     func effectiveStatus(_ event: EKEvent) -> EKParticipantStatus? {
-        rsvpOverrides[eventKey(event)] ?? event.myParticipantStatus
+        rsvpOverrides[rsvpKey(event)] ?? event.myParticipantStatus
     }
 
     /// All-day and multi-day events overlapping the interval (for span bars).

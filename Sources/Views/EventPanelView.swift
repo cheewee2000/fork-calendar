@@ -212,10 +212,15 @@ struct EventPanelView: View {
                         row(icon: "person.2") {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(attendees.enumerated()), id: \.offset) { _, attendee in
+                                    // My own row reflects a just-sent RSVP; CalDAV
+                                    // sync-back can take minutes.
+                                    let status = attendee.isCurrentUser
+                                        ? (store.effectiveStatus(context.event) ?? attendee.participantStatus)
+                                        : attendee.participantStatus
                                     HStack(spacing: 6) {
-                                        Image(systemName: statusIcon(attendee.participantStatus))
+                                        Image(systemName: statusIcon(status))
                                             .font(CWT.mono(10))
-                                            .foregroundStyle(statusColor(attendee.participantStatus))
+                                            .foregroundStyle(statusColor(status))
                                         Text(attendee.name ?? "Unknown")
                                             .font(CWT.mono(12))
                                             .lineLimit(1)
