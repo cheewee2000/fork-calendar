@@ -231,6 +231,7 @@ enum KeyMonitor {
         case "y": appState.viewMode = .year; return true
         case "c": appState.newEvent(store: store); return true
         case "s": appState.toggleAvailabilityMode(); return true
+        case "r": store.refresh(); return true
         case "1", "2", "3", "4", "5", "6", "7", "8", "9":
             if let n = Int(event.charactersIgnoringModifiers ?? "") {
                 appState.setDayCount(n)

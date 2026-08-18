@@ -57,6 +57,7 @@ final class CalendarStore: ObservableObject {
     @Published var accessState: AccessState = .unknown
     @Published var calendars: [EKCalendar] = []
     @Published var events: [EKEvent] = []
+    @Published var isRefreshing = false
     @Published var hiddenCalendarIDs: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(hiddenCalendarIDs), forKey: "hiddenCalendarIDs")
@@ -134,6 +135,20 @@ final class CalendarStore: ObservableObject {
             allStores = [eventStore, EKEventStore(sources: delegates)]
         }
         reload()
+    }
+
+    /// Ask every source to sync with its server, then re-read locally.
+    /// EventKit posts .EKEventStoreChanged when remote changes land, which
+    /// triggers another reload() on its own.
+    func refresh() {
+        guard accessState == .granted else { return }
+        isRefreshing = true
+        for store in allStores { store.refreshSourcesIfNecessary() }
+        reload()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            self?.isRefreshing = false
+        }
     }
 
     func reload() {

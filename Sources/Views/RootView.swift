@@ -221,6 +221,11 @@ struct HeaderBar: View {
                 #endif
                 .lineLimit(1)
             Spacer()
+            if store.isRefreshing {
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(.trailing, 2)
+            }
             Button("Today") { appState.goToToday() }
                 .buttonStyle(.bordered)
                 .controlSize(barControlSize)

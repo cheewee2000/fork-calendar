@@ -49,6 +49,10 @@ struct ForkCalendarApp: App {
                 }
                 .keyboardShortcut("\\", modifiers: [.command])
             }
+            CommandGroup(after: .toolbar) {
+                Button("Refresh Calendars") { store.refresh() }
+                    .keyboardShortcut("r", modifiers: [.command])
+            }
             CommandMenu("Go") {
                 Button("Today") { appState.goToToday() }
                     .keyboardShortcut("t", modifiers: [.command])
