@@ -266,6 +266,7 @@ struct HeaderBar: View {
                 Image(systemName: "square.and.arrow.up.on.square")
             }
             .buttonStyle(appState.availabilityMode ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+            .prominentLabel(appState.availabilityMode)
             .controlSize(barControlSize)
             .help("Share availability (S)")
             Button {
@@ -292,6 +293,7 @@ struct HeaderBar: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(store.accessState == .granted ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+            .prominentLabel(store.accessState == .granted)
             .controlSize(barControlSize)
             .help(store.accessState == .granted ? "New event (C)" : "Add a Google account in Settings")
         }
@@ -365,6 +367,7 @@ struct AvailabilityBar: View {
                     appState.toggleAvailabilityMode()
                 }
                 .buttonStyle(.borderedProminent)
+                .prominentLabel()
                 .controlSize(.small)
                 Button("Clear") { appState.availabilitySlots.removeAll() }
                     .controlSize(.small)
@@ -409,6 +412,7 @@ struct AccessDeniedView: View {
                     Task { await accounts.addAccount() }
                 }
                 .buttonStyle(.borderedProminent)
+                .prominentLabel()
                 .disabled(accounts.isSigningIn)
             }
             if !accounts.statusMessage.isEmpty {

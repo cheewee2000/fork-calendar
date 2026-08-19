@@ -136,6 +136,7 @@ struct EventPanelView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
+                        .prominentLabel()
                     } else if addMeetOnSave {
                         Label("Google Meet will be created on save", systemImage: "video.badge.checkmark")
                             .font(CWT.mono(12))
@@ -316,6 +317,7 @@ struct EventPanelView: View {
                 Button(context.isNew ? "Create" : "Save") { save() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
+                    .prominentLabel()
                     .disabled(isReadOnly)
             }
             .padding(12)

@@ -59,3 +59,16 @@ enum CWT {
         return .custom(name, fixedSize: size)
     }
 }
+
+extension View {
+    /// iOS paints `.borderedProminent` labels white regardless of tint, which is
+    /// invisible on our paper-white dark-mode tint. Pair with every prominent button.
+    @ViewBuilder
+    func prominentLabel(_ active: Bool = true) -> some View {
+        #if os(iOS)
+        if active { self.foregroundStyle(CWT.paper) } else { self }
+        #else
+        self
+        #endif
+    }
+}
