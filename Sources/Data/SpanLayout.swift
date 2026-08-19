@@ -90,10 +90,7 @@ struct SpanBarView: View {
     var duplicates: [CalEvent] = []
     var compact = false
 
-    /// Calendar colors for this bar: the primary copy plus merged duplicates.
-    private var stripColors: [Color] {
-        ([event] + duplicates).map { $0.calendar?.displayColor ?? Color.accentColor }
-    }
+    private var copies: [CalEvent] { [event] + duplicates }
 
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
@@ -103,7 +100,7 @@ struct SpanBarView: View {
             .font(CWT.mono(compact ? 9 : 10, .medium))
             .lineLimit(1)
             .foregroundStyle(color)
-            .padding(.leading, duplicates.isEmpty ? 6 : CGFloat(3 + 4 * stripColors.count))
+            .padding(.leading, 3 + CalendarStrips.totalWidth(count: copies.count) + 3)
             .padding(.trailing, 6)
             .padding(.vertical, compact ? 0 : 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -111,15 +108,9 @@ struct SpanBarView: View {
                 awaiting ? 0.06 : isSelected ? 0.32 : 0.18
             )))
             .overlay(alignment: .leading) {
-                if !duplicates.isEmpty {
-                    // One strip per calendar this event lives on.
-                    HStack(spacing: 1) {
-                        ForEach(Array(stripColors.enumerated()), id: \.offset) { _, c in
-                            Rectangle().fill(c).frame(width: 3)
-                        }
-                    }
+                // One strip per calendar this event lives on; dashed = awaiting my RSVP.
+                CalendarStrips(copies: copies)
                     .padding(.vertical, 1)
-                }
             }
             .overlay {
                 if awaiting {
@@ -129,5 +120,43 @@ struct SpanBarView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { appState.select(event) }
+    }
+}
+
+/// Left-edge color strips for an event and its merged copies from other
+/// calendars: one strip per calendar, solid when that copy needs no answer
+/// from me, dashed while its invite is still awaiting my RSVP.
+struct CalendarStrips: View {
+    let copies: [CalEvent]
+    var width: CGFloat = 3
+
+    static func totalWidth(count: Int, width: CGFloat = 3) -> CGFloat {
+        CGFloat(count) * width + CGFloat(max(count - 1, 0))
+    }
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(Array(copies.enumerated()), id: \.offset) { _, copy in
+                let color = copy.calendar?.displayColor ?? Color.accentColor
+                if copy.needsMyResponse {
+                    DashedStrip()
+                        .stroke(color, style: StrokeStyle(lineWidth: width, dash: [3, 2]))
+                        .frame(width: width)
+                } else {
+                    Rectangle()
+                        .fill(color.opacity(copy.myParticipantStatus == .declined ? 0.35 : 1))
+                        .frame(width: width)
+                }
+            }
+        }
+    }
+
+    private struct DashedStrip: Shape {
+        func path(in rect: CGRect) -> Path {
+            var p = Path()
+            p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            return p
+        }
     }
 }

@@ -2,7 +2,7 @@
 
 A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI on the Google Calendar API. Sign in to each Google account directly — no dependency on the system Calendar app, its accounts, or its sync.
 
-**v0.14.1**
+**v0.14.2**
 
 ## Google accounts & sync
 
@@ -34,7 +34,7 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 - Week/day views side-scroll smoothly day-by-day (trackpad); a light snap engages only within a day of full-week framing
 - Custom per-calendar colors (hover a sidebar calendar → palette, presets or any color)
 - Guest lists, auto-created Google Meet links, and RSVP (Going/Maybe/No) from the event panel or right-click — per account, so invites to any signed-in account can be answered
-- Events awaiting your RSVP show a dotted outline
+- Events awaiting your RSVP show a dotted outline; merged copies across calendars get one color strip per calendar, dashed while that copy awaits your RSVP
 - Undo (⌘Z) for moves, edits, deletes, and creates
 - macOS menu bar agenda with next event + Join buttons
 - Settings (⌘,): accounts, sync cadence, guest/RSVP emails, default calendar, week start, default duration, weekends, declined events, secondary time zones in the gutter

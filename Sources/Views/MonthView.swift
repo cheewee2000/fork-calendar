@@ -462,18 +462,12 @@ struct MonthChip: View {
         let color = event.calendar?.displayColor ?? Color.accentColor
         let isSelected = appState.selectedKey == eventKey(event)
         HStack(spacing: 4) {
-            if duplicates.isEmpty {
+            if duplicates.isEmpty, !event.needsMyResponse {
                 Circle().fill(color).frame(width: 5, height: 5)
             } else {
-                // One strip per calendar this event lives on (merged copies).
-                HStack(spacing: 1) {
-                    ForEach(Array(([event] + duplicates).enumerated()), id: \.offset) { _, copy in
-                        Rectangle()
-                            .fill(copy.calendar?.displayColor ?? Color.accentColor)
-                            .frame(width: 3)
-                    }
-                }
-                .frame(height: 11)
+                // One strip per calendar this event lives on; dashed = awaiting my RSVP.
+                CalendarStrips(copies: [event] + duplicates)
+                    .frame(height: 11)
             }
             if !event.isAllDay, let s = event.startDate {
                 Text(Fmt.time.string(from: s))
