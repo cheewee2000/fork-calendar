@@ -82,29 +82,46 @@ final class AppSettings: ObservableObject {
         defaultCalendarID = d.string(forKey: "defaultCalendarID") ?? ""
     }
 
-    // MARK: - OAuth client transfer (Mac → iPhone via Universal Clipboard)
+    // MARK: - Setup transfer (Mac → iPhone via Universal Clipboard)
 
-    private static let transferPrefix = "forkcal-oauth:"
+    private static let transferPrefix = "forkcal-setup:"
 
-    /// Encodes the OAuth client fields as one pasteable string.
-    func oauthClientTransferString() -> String {
-        let payload = ["id": googleClientID, "secret": googleClientSecret, "ios": googleIOSClientID]
-        let data = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+    struct SetupTransfer: Codable {
+        var clientID: String
+        var clientSecret: String
+        var iosClientID: String
+        var accounts: [GoogleAccount]
+        var hiddenCalendarIDs: [String]
+        var calendarColors: [String: String]
+        var defaultCalendarID: String
+    }
+
+    /// Encodes OAuth client, signed-in accounts and calendar visibility/colors as one pasteable string.
+    func setupTransferString(accounts: [GoogleAccount], hiddenCalendarIDs: Set<String>) -> String {
+        let payload = SetupTransfer(
+            clientID: googleClientID, clientSecret: googleClientSecret, iosClientID: googleIOSClientID,
+            accounts: accounts, hiddenCalendarIDs: Array(hiddenCalendarIDs),
+            calendarColors: calendarColors, defaultCalendarID: defaultCalendarID)
+        let data = (try? JSONEncoder().encode(payload)) ?? Data()
         return Self.transferPrefix + data.base64EncodedString()
     }
 
-    /// Applies a string produced by `oauthClientTransferString()`. Returns false if unrecognized.
-    @discardableResult
-    func applyOAuthClientTransfer(_ string: String?) -> Bool {
+    /// Decodes a string produced by `setupTransferString`; nil if unrecognized.
+    static func decodeSetupTransfer(_ string: String?) -> SetupTransfer? {
         guard let string = string?.trimmingCharacters(in: .whitespacesAndNewlines),
-              string.hasPrefix(Self.transferPrefix),
-              let data = Data(base64Encoded: String(string.dropFirst(Self.transferPrefix.count))),
-              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: String]
-        else { return false }
-        if let v = payload["id"], !v.isEmpty { googleClientID = v }
-        if let v = payload["secret"] { googleClientSecret = v }
-        if let v = payload["ios"], !v.isEmpty { googleIOSClientID = v }
-        return true
+              string.hasPrefix(transferPrefix),
+              let data = Data(base64Encoded: String(string.dropFirst(transferPrefix.count)))
+        else { return nil }
+        return try? JSONDecoder().decode(SetupTransfer.self, from: data)
+    }
+
+    /// Applies the settings half of a transfer (accounts/visibility are applied by the caller).
+    func applySetupTransfer(_ t: SetupTransfer) {
+        if !t.clientID.isEmpty { googleClientID = t.clientID }
+        googleClientSecret = t.clientSecret
+        if !t.iosClientID.isEmpty { googleIOSClientID = t.iosClientID }
+        calendarColors.merge(t.calendarColors) { _, new in new }
+        if !t.defaultCalendarID.isEmpty { defaultCalendarID = t.defaultCalendarID }
     }
 
     var secondaryTimeZones: [TimeZone] {

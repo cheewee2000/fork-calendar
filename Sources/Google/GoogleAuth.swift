@@ -105,6 +105,17 @@ final class AccountManager: ObservableObject {
         persist()
     }
 
+    /// Import accounts transferred from another device (same OAuth client, so the
+    /// refresh tokens keep working). Existing accounts with the same email are replaced.
+    func importAccounts(_ list: [GoogleAccount]) {
+        for var a in list where a.email != AccountManager.legacyPlaceholder {
+            a.accessToken = nil
+            a.tokenExpiry = nil
+            a.needsReauth = false
+            update(a)
+        }
+    }
+
     func setSyncEnabled(_ enabled: Bool, for id: String) {
         guard var a = account(id) else { return }
         a.syncEnabled = enabled

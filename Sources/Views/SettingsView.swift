@@ -90,18 +90,26 @@ struct SettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 HStack {
-                    Button("Paste from Mac") {
-                        transferStatus = settings.applyOAuthClientTransfer(Clipboard.paste())
-                            ? "Pasted ✓" : "Clipboard has no Fork Calendar OAuth client"
+                    Button("Paste setup from Mac") {
+                        if let t = AppSettings.decodeSetupTransfer(Clipboard.paste()) {
+                            settings.applySetupTransfer(t)
+                            accounts.importAccounts(t.accounts)
+                            store.hiddenCalendarIDs = Set(t.hiddenCalendarIDs)
+                            transferStatus = "Imported \(t.accounts.count) account(s) — syncing…"
+                            Task { await store.requestAccess() }
+                        } else {
+                            transferStatus = "Clipboard has no Fork Calendar setup"
+                        }
                     }
                     Spacer()
                     Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
                 }
                 #else
                 HStack {
-                    Button("Copy for iPhone") {
-                        Clipboard.copy(settings.oauthClientTransferString())
-                        transferStatus = "Copied — on the iPhone, Settings → OAuth client → Paste from Mac"
+                    Button("Copy setup for iPhone") {
+                        Clipboard.copy(settings.setupTransferString(
+                            accounts: accounts.accounts, hiddenCalendarIDs: store.hiddenCalendarIDs))
+                        transferStatus = "Copied (OAuth client, \(accounts.accounts.count) account(s), calendar visibility) — on the iPhone: Settings → OAuth client → Paste setup from Mac"
                     }
                     Spacer()
                     Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
