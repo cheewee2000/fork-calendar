@@ -2,7 +2,7 @@
 
 A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI on the Google Calendar API. Sign in to each Google account directly — no dependency on the system Calendar app, its accounts, or its sync.
 
-**v0.14.4**
+**v0.14.5**
 
 ## Google accounts & sync
 

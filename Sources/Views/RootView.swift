@@ -210,6 +210,8 @@ struct HeaderBar: View {
     @EnvironmentObject var appState: AppState
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #else
+    @Environment(\.openSettings) private var openSettings
     #endif
 
     private var showsCalendarsButton: Bool {
@@ -274,15 +276,24 @@ struct HeaderBar: View {
             .buttonStyle(.bordered)
             .controlSize(barControlSize)
             .help("Search & commands (⌘K)")
+            // No accounts yet: a disabled prominent button renders nearly invisible
+            // on iOS, so show a plain one that leads to Settings instead.
             Button {
-                appState.newEvent(store: store)
+                if store.accessState == .granted {
+                    appState.newEvent(store: store)
+                } else {
+                    #if os(iOS)
+                    appState.showSettingsSheet = true
+                    #else
+                    openSettings()
+                    #endif
+                }
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(store.accessState == .granted ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
             .controlSize(barControlSize)
-            .disabled(store.accessState != .granted)
-            .help("New event (C)")
+            .help(store.accessState == .granted ? "New event (C)" : "Add a Google account in Settings")
         }
         // Bordered controls don't inherit the root environment font.
         .font(CWT.mono(11))
