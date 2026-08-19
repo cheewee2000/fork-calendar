@@ -69,6 +69,7 @@ struct EventPanelView: View {
     @State private var recurrence: RecurrenceChoice
     @State private var inviteEmails: String = ""
     @State private var addMeetOnSave = false
+    @State private var editingNotes = false
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
 
@@ -272,12 +273,31 @@ struct EventPanelView: View {
                     }
 
                     row(icon: "text.alignleft") {
-                        TextEditor(text: $notes)
-                            .font(CWT.mono(12))
-                            .frame(minHeight: 70)
-                            .scrollContentBackground(.hidden)
-                            .background(CWT.paper2, in: Rectangle())
-                            .disabled(isReadOnly)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !editingNotes, let rendered = HTMLNotes.render(notes) {
+                                // Google descriptions are usually HTML; show
+                                // them formatted, with links tappable.
+                                Text(rendered)
+                                    .font(CWT.mono(12))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(6)
+                                    .background(CWT.paper2, in: Rectangle())
+                                if !isReadOnly {
+                                    Button("Edit notes") { editingNotes = true }
+                                        .buttonStyle(.plain)
+                                        .font(CWT.mono(10))
+                                        .foregroundStyle(CWT.inkSoft)
+                                }
+                            } else {
+                                TextEditor(text: $notes)
+                                    .font(CWT.mono(12))
+                                    .frame(minHeight: 70)
+                                    .scrollContentBackground(.hidden)
+                                    .background(CWT.paper2, in: Rectangle())
+                                    .disabled(isReadOnly)
+                            }
+                        }
                     }
                 }
                 .padding(14)
@@ -451,6 +471,56 @@ struct EventPanelView: View {
         appState.commitChange(to: event, snapshot: originalSnapshot, isNew: context.isNew, store: store)
         appState.closePanel()
         if isSheet { dismiss() }
+    }
+}
+
+/// Renders HTML descriptions into an AttributedString in the app's type.
+enum HTMLNotes {
+    private static let tagPattern = try! NSRegularExpression(pattern: "<(/?)(a|b|i|u|p|br|div|span|ul|ol|li|strong|em|h[1-6]|table|tr|td|font)\\b[^>]*>", options: [.caseInsensitive])
+
+    static func looksLikeHTML(_ text: String) -> Bool {
+        tagPattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// nil when the text isn't HTML (the plain editor is used instead).
+    static func render(_ text: String) -> AttributedString? {
+        guard looksLikeHTML(text), let data = text.data(using: .utf8) else { return nil }
+        guard let ns = try? NSAttributedString(
+            data: data,
+            options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue],
+            documentAttributes: nil
+        ) else { return nil }
+        var attr = AttributedString(ns)
+        for run in attr.runs {
+            var bold = false
+            var italic = false
+            #if os(macOS)
+            if let f = run.appKit.font {
+                bold = f.fontDescriptor.symbolicTraits.contains(.bold)
+                italic = f.fontDescriptor.symbolicTraits.contains(.italic)
+            }
+            #else
+            if let f = run.uiKit.font {
+                bold = f.fontDescriptor.symbolicTraits.contains(.traitBold)
+                italic = f.fontDescriptor.symbolicTraits.contains(.traitItalic)
+            }
+            #endif
+            let range = run.range
+            attr[range].font = CWT.mono(12, bold ? .bold : .regular)
+            if italic { attr[range].font = CWT.mono(12, bold ? .bold : .regular).italic() }
+            attr[range].foregroundColor = run.link != nil ? Color.accentColor : CWT.ink
+            attr[range].backgroundColor = nil
+            #if os(macOS)
+            attr[range].appKit.paragraphStyle = nil
+            #else
+            attr[range].uiKit.paragraphStyle = nil
+            #endif
+        }
+        // Trim the trailing newline the HTML importer adds
+        while attr.characters.last?.isNewline == true {
+            attr.characters.removeLast()
+        }
+        return attr
     }
 }
 
