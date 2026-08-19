@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 /// Whole year as a stack of weeks — one row per week, 7 columns, event dots.
 struct YearView: View {
@@ -117,7 +116,7 @@ private struct YearWeekRow: View {
 
 private struct YearSpanChip: View {
     @EnvironmentObject var appState: AppState
-    let event: EKEvent
+    let event: CalEvent
     let showTitle: Bool
 
     var body: some View {

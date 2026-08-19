@@ -1,11 +1,14 @@
 import Foundation
-import EventKit
 
 enum GoogleAPIError: LocalizedError {
     case http(Int, String)
+    case syncTokenExpired
+    case notFound
 
     var errorDescription: String? {
         switch self {
+        case .syncTokenExpired: return "Sync token expired"
+        case .notFound: return "Google: event not found"
         case .http(let code, let body):
             guard let data = body.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -16,123 +19,276 @@ enum GoogleAPIError: LocalizedError {
                 || message.localizedCaseInsensitiveContains("is disabled") {
                 return "Google Calendar API is disabled for your OAuth project — enable it in console.cloud.google.com (APIs & Services → Library → Google Calendar API)"
             }
-            return "Google: \(String(message.prefix(140)))"
+            return "Google: \(String(message.prefix(160)))"
         }
+    }
+
+    var statusCode: Int? {
+        if case .http(let code, _) = self { return code }
+        return nil
     }
 }
 
-/// Thin Google Calendar REST client.
-enum GoogleCalendarAPI {
-    struct GCalendar: Decodable {
-        let id: String
-        let summary: String
-        let accessRole: String?
+/// Google Calendar v3 wire formats.
+struct GCalendarListEntry: Decodable {
+    let id: String
+    let summary: String?
+    let summaryOverride: String?
+    let backgroundColor: String?
+    let accessRole: String?
+    let primary: Bool?
+    let timeZone: String?
+    let deleted: Bool?
+    let hidden: Bool?
+
+    var title: String { summaryOverride ?? summary ?? id }
+}
+
+struct GEventTime: Decodable {
+    let date: String?
+    let dateTime: String?
+    let timeZone: String?
+}
+
+struct GAttendee: Decodable {
+    let email: String?
+    let displayName: String?
+    let responseStatus: String?
+    let isSelf: Bool?
+    let organizer: Bool?
+    let optional: Bool?
+    let resource: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case email, displayName, responseStatus, organizer, optional, resource
+        case isSelf = "self"
+    }
+}
+
+struct GEvent: Decodable {
+    struct Person: Decodable {
+        let email: String?
+        let displayName: String?
+        let isSelf: Bool?
+        enum CodingKeys: String, CodingKey { case email, displayName, isSelf = "self" }
+    }
+    struct Source: Decodable { let url: String?; let title: String? }
+
+    let id: String
+    let etag: String?
+    let status: String?
+    let iCalUID: String?
+    let summary: String?
+    let description: String?
+    let location: String?
+    let start: GEventTime?
+    let end: GEventTime?
+    let recurrence: [String]?
+    let recurringEventId: String?
+    let originalStartTime: GEventTime?
+    let attendees: [GAttendee]?
+    let organizer: Person?
+    let hangoutLink: String?
+    let htmlLink: String?
+    let updated: String?
+    let colorId: String?
+    let transparency: String?
+    let guestsCanModify: Bool?
+    let source: Source?
+
+    /// Nil when the payload can't describe a dated event (cancelled stubs).
+    func record(calendarKey: String) -> EventRecord? {
+        guard let s = start, let e = end,
+              let startDate = GoogleDates.parse(s), let endDate = GoogleDates.parse(e)
+        else { return nil }
+        let attendees = (self.attendees ?? []).compactMap { a -> CalAttendee? in
+            guard let email = a.email else { return nil }
+            return CalAttendee(
+                email: email, displayName: a.displayName,
+                responseStatus: ParticipantStatus(google: a.responseStatus),
+                isSelf: a.isSelf ?? false, isOrganizer: a.organizer ?? false,
+                isOptional: a.optional ?? false, isResource: a.resource ?? false
+            )
+        }
+        return EventRecord(
+            id: id,
+            calendarKey: calendarKey,
+            iCalUID: iCalUID,
+            status: status ?? "confirmed",
+            title: summary,
+            notes: description,
+            location: location,
+            start: startDate,
+            end: endDate,
+            isAllDay: s.date != nil,
+            timeZone: s.timeZone,
+            url: source?.url,
+            recurrence: recurrence,
+            recurringEventId: recurringEventId,
+            originalStart: originalStartTime.flatMap(GoogleDates.parse),
+            attendees: attendees.isEmpty ? nil : attendees,
+            organizerEmail: organizer?.email,
+            organizerSelf: organizer?.isSelf ?? false,
+            hangoutLink: hangoutLink,
+            htmlLink: htmlLink,
+            etag: etag,
+            updated: updated.flatMap { GoogleDates.rfc3339.date(from: $0) ?? GoogleDates.rfc3339Plain.date(from: $0) },
+            colorId: colorId,
+            transparency: transparency,
+            guestsCanModify: guestsCanModify ?? false
+        )
+    }
+}
+
+enum GoogleDates {
+    static let rfc3339: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    static let rfc3339Plain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone.autoupdatingCurrent
+        return f
+    }()
+    static let rruleUTC: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
+    static func parse(_ t: GEventTime) -> Date? {
+        if let dt = t.dateTime {
+            return rfc3339.date(from: dt) ?? rfc3339Plain.date(from: dt)
+        }
+        if let d = t.date {
+            dayFormatter.timeZone = TimeZone.autoupdatingCurrent
+            return dayFormatter.date(from: d)
+        }
+        return nil
     }
 
+    static func json(_ date: Date, allDay: Bool, timeZone: String?) -> [String: Any] {
+        if allDay {
+            dayFormatter.timeZone = TimeZone.autoupdatingCurrent
+            return ["date": dayFormatter.string(from: date)]
+        }
+        var d: [String: Any] = ["dateTime": rfc3339Plain.string(from: date)]
+        d["timeZone"] = timeZone ?? TimeZone.autoupdatingCurrent.identifier
+        return d
+    }
+
+    static func iso(_ date: Date) -> String { rfc3339Plain.string(from: date) }
+}
+
+/// Thin Google Calendar REST client. Stateless; every call takes a token.
+enum GoogleCalendarAPI {
     private static let base = "https://www.googleapis.com/calendar/v3"
 
-    static func calendarList(token: String) async throws -> [GCalendar] {
-        struct ListResponse: Decodable { let items: [GCalendar]? }
-        let data = try await get("\(base)/users/me/calendarList?maxResults=250", token: token)
-        return (try JSONDecoder().decode(ListResponse.self, from: data)).items ?? []
+    struct EventsPage {
+        let items: [GEvent]
+        let nextPageToken: String?
+        let nextSyncToken: String?
     }
 
-    /// Google's event id for a CalDAV-synced event, found via its iCal UID.
-    static func findEventID(iCalUID: String, calendarID: String, token: String) async throws -> String? {
-        struct EventsResponse: Decodable {
-            struct Item: Decodable { let id: String; let status: String? }
-            let items: [Item]?
-        }
-        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
-        let uid = iCalUID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? iCalUID
-        let data = try await get("\(base)/calendars/\(cal)/events?iCalUID=\(uid)", token: token)
-        let response = try JSONDecoder().decode(EventsResponse.self, from: data)
-        return response.items?.first(where: { $0.status != "cancelled" })?.id
+    static func calendarList(token: String) async throws -> [GCalendarListEntry] {
+        struct ListResponse: Decodable { let items: [GCalendarListEntry]?; let nextPageToken: String? }
+        var all: [GCalendarListEntry] = []
+        var page: String?
+        repeat {
+            var url = "\(base)/users/me/calendarList?maxResults=250&showHidden=true"
+            if let page { url += "&pageToken=\(page)" }
+            let data = try await get(url, token: token)
+            let response = try JSONDecoder().decode(ListResponse.self, from: data)
+            all += response.items ?? []
+            page = response.nextPageToken
+        } while page != nil
+        return all
     }
 
-    /// Fallback lookup: exact title within ±36h of the event start.
-    static func findEventIDByTime(title: String, start: Date, calendarID: String, token: String) async throws -> String? {
-        struct SearchResponse: Decodable {
-            struct Item: Decodable { let id: String; let summary: String?; let status: String? }
-            let items: [Item]?
+    /// One page of events. Pass `syncToken` for incremental sync (no time
+    /// bounds allowed then); otherwise a bounded full listing.
+    static func events(
+        calendarID: String, token: String,
+        syncToken: String?, pageToken: String?,
+        timeMin: Date?, timeMax: Date?
+    ) async throws -> EventsPage {
+        struct Response: Decodable {
+            let items: [GEvent]?
+            let nextPageToken: String?
+            let nextSyncToken: String?
         }
-        let iso = ISO8601DateFormatter()
-        let timeMin = iso.string(from: start.addingTimeInterval(-36 * 3600))
-        let timeMax = iso.string(from: start.addingTimeInterval(36 * 3600))
-        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
-        let q = title.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? title
-        let data = try await get("\(base)/calendars/\(cal)/events?q=\(q)&timeMin=\(timeMin)&timeMax=\(timeMax)&maxResults=25", token: token)
-        let items = (try JSONDecoder().decode(SearchResponse.self, from: data)).items ?? []
-        let matches = items.filter { $0.status != "cancelled" && $0.summary == title }
-        // Prefer the series master (no occurrence suffix) so RSVPs cover the series
-        return matches.first(where: { !$0.id.contains("_") })?.id ?? matches.first?.id
+        var comps = URLComponents(string: "\(base)/calendars/\(enc(calendarID))/events")!
+        var items = [
+            URLQueryItem(name: "singleEvents", value: "true"),
+            URLQueryItem(name: "maxResults", value: "2500"),
+        ]
+        if let syncToken {
+            items.append(URLQueryItem(name: "syncToken", value: syncToken))
+        } else {
+            if let timeMin { items.append(URLQueryItem(name: "timeMin", value: GoogleDates.iso(timeMin))) }
+            if let timeMax { items.append(URLQueryItem(name: "timeMax", value: GoogleDates.iso(timeMax))) }
+        }
+        if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
+        comps.queryItems = items
+        let data: Data
+        do {
+            data = try await get(comps.url!.absoluteString, token: token)
+        } catch GoogleAPIError.http(410, _) {
+            throw GoogleAPIError.syncTokenExpired
+        }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        return EventsPage(items: response.items ?? [], nextPageToken: response.nextPageToken, nextSyncToken: response.nextSyncToken)
     }
 
-    static func eventAttendees(eventID: String, calendarID: String, token: String) async throws -> [String] {
-        struct Event: Decodable {
-            struct Attendee: Decodable { let email: String? }
-            let attendees: [Attendee]?
-        }
-        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
-        let data = try await get("\(base)/calendars/\(cal)/events/\(eventID)", token: token)
-        let event = try JSONDecoder().decode(Event.self, from: data)
-        return event.attendees?.compactMap(\.email) ?? []
+    static func getEvent(calendarID: String, eventID: String, token: String) async throws -> GEvent {
+        let data = try await get("\(base)/calendars/\(enc(calendarID))/events/\(enc(eventID))", token: token)
+        return try JSONDecoder().decode(GEvent.self, from: data)
     }
 
-    /// Patch attendees (and optionally request a Meet link); notifies guests.
-    static func patchEvent(
-        eventID: String,
-        calendarID: String,
-        attendees: [String]?,
-        addMeet: Bool,
-        token: String
-    ) async throws {
-        var body: [String: Any] = [:]
-        if let attendees {
-            body["attendees"] = attendees.map { ["email": $0] }
-        }
-        if addMeet {
-            body["conferenceData"] = [
-                "createRequest": [
-                    "requestId": UUID().uuidString,
-                    "conferenceSolutionKey": ["type": "hangoutsMeet"],
-                ],
-            ]
-        }
-        guard !body.isEmpty else { return }
-        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
-        let url = "\(base)/calendars/\(cal)/events/\(eventID)?sendUpdates=all&conferenceDataVersion=1"
-        var request = URLRequest(url: URL(string: url)!)
-        request.httpMethod = "PATCH"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try check(response, data: data)
+    static func insert(calendarID: String, body: [String: Any], sendUpdates: String, token: String) async throws -> GEvent {
+        let url = "\(base)/calendars/\(enc(calendarID))/events?sendUpdates=\(sendUpdates)&conferenceDataVersion=1"
+        let data = try await send("POST", url: url, body: body, token: token)
+        return try JSONDecoder().decode(GEvent.self, from: data)
     }
 
-    /// RSVP: set my responseStatus on the event's attendee list and notify.
-    static func respond(eventID: String, calendarID: String, status: String, token: String) async throws {
-        let cal = calendarID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? calendarID
-        let data = try await get("\(base)/calendars/\(cal)/events/\(eventID)", token: token)
-        guard var event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              var attendees = event["attendees"] as? [[String: Any]]
-        else { throw GoogleAPIError.http(0, "event has no attendees") }
-        var found = false
-        for i in attendees.indices where (attendees[i]["self"] as? Bool) == true {
-            attendees[i]["responseStatus"] = status
-            found = true
+    static func patch(calendarID: String, eventID: String, body: [String: Any], sendUpdates: String, token: String) async throws -> GEvent {
+        let url = "\(base)/calendars/\(enc(calendarID))/events/\(enc(eventID))?sendUpdates=\(sendUpdates)&conferenceDataVersion=1"
+        let data = try await send("PATCH", url: url, body: body, token: token)
+        return try JSONDecoder().decode(GEvent.self, from: data)
+    }
+
+    static func delete(calendarID: String, eventID: String, sendUpdates: String, token: String) async throws {
+        let url = "\(base)/calendars/\(enc(calendarID))/events/\(enc(eventID))?sendUpdates=\(sendUpdates)"
+        do {
+            _ = try await send("DELETE", url: url, body: nil, token: token)
+        } catch GoogleAPIError.http(410, _) {
+            // already gone
+        } catch GoogleAPIError.notFound {
+            // already gone
         }
-        guard found else { throw GoogleAPIError.http(0, "you are not on the guest list") }
-        event = ["attendees": attendees]
-        let url = "\(base)/calendars/\(cal)/events/\(eventID)?sendUpdates=all"
-        var request = URLRequest(url: URL(string: url)!)
-        request.httpMethod = "PATCH"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: event)
-        let (respData, response) = try await URLSession.shared.data(for: request)
-        try check(response, data: respData)
+    }
+
+    /// Move between calendars of the same account.
+    static func move(calendarID: String, eventID: String, to destination: String, sendUpdates: String, token: String) async throws -> GEvent {
+        let url = "\(base)/calendars/\(enc(calendarID))/events/\(enc(eventID))/move?destination=\(enc(destination))&sendUpdates=\(sendUpdates)"
+        let data = try await send("POST", url: url, body: nil, token: token)
+        return try JSONDecoder().decode(GEvent.self, from: data)
+    }
+
+    // MARK: - plumbing
+
+    private static func enc(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s
     }
 
     private static func get(_ url: String, token: String) async throws -> Data {
@@ -143,214 +299,23 @@ enum GoogleCalendarAPI {
         return data
     }
 
+    private static func send(_ method: String, url: String, body: [String: Any]?, token: String) async throws -> Data {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try check(response, data: data)
+        return data
+    }
+
     private static func check(_ response: URLResponse, data: Data) throws {
         if let http = response as? HTTPURLResponse, http.statusCode >= 300 {
+            if http.statusCode == 404 { throw GoogleAPIError.notFound }
             throw GoogleAPIError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
-        }
-    }
-}
-
-/// Bridges EventKit events to Google-side guest lists / Meet links.
-@MainActor
-enum GoogleSync {
-    private static var cachedCalendars: [GoogleCalendarAPI.GCalendar]?
-
-    /// UID forms worth trying: EventKit's external identifier can carry
-    /// occurrence suffixes ("…/RID=…") or omit Google's "@google.com".
-    static func uidCandidates(for event: EKEvent) -> [String] {
-        guard let raw = event.calendarItemExternalIdentifier, !raw.isEmpty else { return [] }
-        var forms = [raw]
-        if let slash = raw.firstIndex(of: "/") {
-            forms.append(String(raw[..<slash]))
-        }
-        var result: [String] = []
-        for form in forms {
-            result.append(form)
-            if !form.contains("@") { result.append(form + "@google.com") }
-        }
-        var seen = Set<String>()
-        return result.filter { seen.insert($0).inserted }
-    }
-
-    /// Find the Google (calendarID, eventID) for an EventKit event. Tries all
-    /// UID forms on the title-matched calendar first, then every calendar,
-    /// then falls back to a time-window + exact-title search.
-    private static func locateEvent(event: EKEvent, token: String, writableOnly: Bool = false) async throws -> (calendarID: String, eventID: String)? {
-        if cachedCalendars == nil {
-            cachedCalendars = try await GoogleCalendarAPI.calendarList(token: token)
-        }
-        // Writes (RSVP, guest patches) must land on a copy this account can
-        // modify — a UID match on a read-only shared calendar 403s.
-        let calendars = (cachedCalendars ?? []).filter {
-            writableOnly ? ($0.accessRole == "owner" || $0.accessRole == "writer")
-                         : $0.accessRole != "freeBusyReader"
-        }
-        let calendarTitle = event.calendar?.title ?? ""
-        var ordered = calendars.filter {
-            $0.summary.caseInsensitiveCompare(calendarTitle) == .orderedSame || $0.id == calendarTitle
-        }
-        ordered += calendars.filter { cal in !ordered.contains(where: { $0.id == cal.id }) }
-
-        for cal in ordered {
-            for uid in uidCandidates(for: event) {
-                if let eventID = ((try? await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token)) ?? nil) {
-                    return (cal.id, eventID)
-                }
-            }
-        }
-        if let title = event.title, !title.isEmpty, let start = event.startDate {
-            for cal in ordered {
-                if let eventID = ((try? await GoogleCalendarAPI.findEventIDByTime(title: title, start: start, calendarID: cal.id, token: token)) ?? nil) {
-                    return (cal.id, eventID)
-                }
-            }
-        }
-        return nil
-    }
-
-    /// Attach guests (and optionally a Meet link) to the Google copy of an
-    /// EventKit event. Falls back to an emailed .ics invite when Google isn't
-    /// connected or the event isn't on a Google calendar.
-    static func attachGuests(event: EKEvent, emails: [String], addMeet: Bool, appState: AppState) async {
-        let cleanEmails = emails
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { $0.contains("@") }
-        guard !cleanEmails.isEmpty || addMeet else { return }
-
-        guard let token = await GoogleAuth.shared.validToken() else {
-            fallback(event: event, emails: cleanEmails, appState: appState,
-                     reason: "Google not connected")
-            return
-        }
-        do {
-            // The CalDAV push to Google may lag a few seconds for new events
-            var located: (calendarID: String, eventID: String)?
-            for _ in 0..<8 {
-                located = try await locateEvent(event: event, token: token, writableOnly: true)
-                if located != nil { break }
-                try await Task.sleep(nanoseconds: 3_000_000_000)
-            }
-            guard let located else {
-                fallback(event: event, emails: cleanEmails, appState: appState,
-                         reason: "Event hasn't synced to Google yet")
-                return
-            }
-            var merged: [String]?
-            if !cleanEmails.isEmpty {
-                let existing = (try? await GoogleCalendarAPI.eventAttendees(
-                    eventID: located.eventID, calendarID: located.calendarID, token: token)) ?? []
-                var set = existing
-                for email in cleanEmails where !set.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) {
-                    set.append(email)
-                }
-                merged = set
-            }
-            try await GoogleCalendarAPI.patchEvent(
-                eventID: located.eventID, calendarID: located.calendarID,
-                attendees: merged, addMeet: addMeet, token: token
-            )
-            var note = "Google: "
-            if !cleanEmails.isEmpty { note += "guests invited" }
-            if addMeet { note += cleanEmails.isEmpty ? "Meet link added" : " + Meet link added" }
-            appState.toast = note
-        } catch {
-            fallback(event: event, emails: cleanEmails, appState: appState,
-                     reason: error.localizedDescription)
-        }
-    }
-
-    /// RSVP from the calendar. Google-calendar events only (EventKit has no
-    /// public RSVP API, so other accounts show a toast explaining that).
-    static func respond(event: EKEvent, status: String, appState: AppState, store: CalendarStore? = nil) async {
-        guard let token = await GoogleAuth.shared.validToken() else {
-            appState.toast = "RSVP needs Google connected (Settings ⌘,)"
-            return
-        }
-        do {
-            guard let located = try await locateEvent(event: event, token: token, writableOnly: true) else {
-                appState.toast = "RSVP failed — the invited calendar isn't writable from the connected Google account"
-                return
-            }
-            try await GoogleCalendarAPI.respond(eventID: located.eventID, calendarID: located.calendarID, status: status, token: token)
-            let label = ["accepted": "Going", "tentative": "Maybe", "declined": "Not going"][status] ?? status
-            appState.toast = "RSVP sent: \(label)"
-            // Reflect the answer immediately; CalDAV sync-back can take minutes
-            let mapped: EKParticipantStatus = status == "accepted" ? .accepted
-                : status == "tentative" ? .tentative : .declined
-            store?.setRSVPOverride(mapped, for: event)
-        } catch GoogleAPIError.http(403, _) {
-            appState.toast = "RSVP forbidden — the connected Google account isn't the invited guest (check Settings ⌘,)"
-        } catch {
-            appState.toast = "RSVP failed — \(error.localizedDescription)"
-        }
-    }
-
-    private static func fallback(event: EKEvent, emails: [String], appState: AppState, reason: String) {
-        if emails.isEmpty {
-            appState.toast = reason
-            return
-        }
-        Invites.send(event: event, emails: emails)
-        appState.toast = "\(reason) — sent .ics email invite instead"
-    }
-
-    static func clearCache() {
-        cachedCalendars = nil
-    }
-
-    /// Dump Google-lookup diagnostics for upcoming attendee events to a file.
-    static func runDiagnostics(store: CalendarStore, appState: AppState) async {
-        var lines: [String] = ["Fork Calendar Google diagnostics — \(Date())"]
-        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("forkcal-google-diag.txt")
-        defer {
-            try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
-            appState.toast = "Diagnostics written"
-        }
-        guard let token = await GoogleAuth.shared.validToken() else {
-            lines.append("NO TOKEN — not connected")
-            return
-        }
-        lines.append("token: ok")
-        do {
-            let calendars = try await GoogleCalendarAPI.calendarList(token: token)
-            lines.append("google calendars:")
-            for cal in calendars {
-                lines.append("  \(cal.summary) | id=\(cal.id) | role=\(cal.accessRole ?? "?")")
-            }
-            let now = Date()
-            let candidates = store.events
-                .filter { $0.attendees?.isEmpty == false && ($0.startDate ?? now) > now.addingTimeInterval(-7 * 86400) }
-                .prefix(5)
-            lines.append("candidate events with attendees: \(candidates.count)")
-            for event in candidates {
-                lines.append("EVENT \"\(event.title ?? "?")\"")
-                lines.append("  ekCalendar=\(event.calendar?.title ?? "?") source=\(event.calendar?.source?.title ?? "?")")
-                lines.append("  externalID=\(event.calendarItemExternalIdentifier ?? "nil")")
-                lines.append("  eventIdentifier=\(event.eventIdentifier ?? "nil")")
-                let uids = uidCandidates(for: event)
-                lines.append("  uid candidates: \(uids)")
-                var hits = 0
-                for cal in calendars {
-                    for uid in uids {
-                        do {
-                            if let found = try await GoogleCalendarAPI.findEventID(iCalUID: uid, calendarID: cal.id, token: token) {
-                                lines.append("  FOUND in \(cal.summary) via \(uid): eventID=\(found)")
-                                hits += 1
-                            }
-                        } catch {
-                            lines.append("  lookup error in \(cal.summary): \(error.localizedDescription)")
-                        }
-                    }
-                    if hits == 0, let title = event.title, let start = event.startDate,
-                       let found = ((try? await GoogleCalendarAPI.findEventIDByTime(title: title, start: start, calendarID: cal.id, token: token)) ?? nil) {
-                        lines.append("  FOUND by time+title in \(cal.summary): eventID=\(found)")
-                        hits += 1
-                    }
-                }
-                if hits == 0 { lines.append("  NOT FOUND in any calendar") }
-            }
-        } catch {
-            lines.append("calendarList error: \(error.localizedDescription)")
         }
     }
 }

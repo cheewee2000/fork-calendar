@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 #if os(iOS)
 import UIKit
 #endif
@@ -100,6 +99,34 @@ struct RootView: View {
             Button("This event only") { appState.resolveSpanAction(span: .thisEvent, store: store) }
             Button("This and all future events") { appState.resolveSpanAction(span: .futureEvents, store: store) }
             Button("Cancel", role: .cancel) { appState.resolveSpanAction(span: nil, store: store) }
+        }
+        .confirmationDialog(
+            store.notifyPrompt.map { "\($0.title) — email \($0.guestCount == 1 ? "the guest" : "\($0.guestCount) guests")?" } ?? "",
+            isPresented: Binding(get: { store.notifyPrompt != nil }, set: { if !$0 { store.resolveNotifyPrompt(false) } }),
+            titleVisibility: .visible
+        ) {
+            Button("Send email") { store.resolveNotifyPrompt(true) }
+            Button("Don't send") { store.resolveNotifyPrompt(false) }
+        } message: {
+            Text("Google notifies guests by email. You can change the default in Settings.")
+        }
+        .onChange(of: store.toast) { _, message in
+            if let message { appState.toast = message; store.toast = nil }
+        }
+        .sheet(isPresented: $appState.showSettingsSheet) {
+            NavigationStack {
+                SettingsView()
+                    .environmentObject(settings)
+                    .environmentObject(store)
+                    .navigationTitle("Settings")
+                    #if os(iOS)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { appState.showSettingsSheet = false }
+                        }
+                    }
+                    #endif
+            }
         }
     }
 
@@ -344,28 +371,39 @@ struct AvailabilityBar: View {
 }
 
 struct AccessDeniedView: View {
-    @Environment(\.openURL) private var openURL
+    @EnvironmentObject var appState: AppState
+    @ObservedObject private var accounts = AccountManager.shared
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: "person.crop.circle.badge.plus")
                 .font(CWT.mono(40))
                 .foregroundStyle(CWT.inkSoft)
-            Text("Calendar access is off")
+            Text("No Google account connected")
                 .font(CWT.mono(13, .bold))
-            Text("Fork Calendar needs calendar access to show your events.")
+            Text("Fork Calendar talks to Google Calendar directly. Sign in with each account you want to see.")
                 .font(CWT.mono(12))
                 .foregroundStyle(CWT.inkSoft)
-            Button("Open Settings") {
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            if settings.googleClientID.isEmpty {
                 #if os(macOS)
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                    openURL(url)
-                }
+                SettingsLink { Text("Open Settings to add an OAuth client…") }
                 #else
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    openURL(url)
-                }
+                Button("Open Settings to add an OAuth client…") { appState.showSettingsSheet = true }
                 #endif
+            } else {
+                Button(accounts.isSigningIn ? "Waiting for Google…" : "Add Google account…") {
+                    Task { await accounts.addAccount() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(accounts.isSigningIn)
+            }
+            if !accounts.statusMessage.isEmpty {
+                Text(accounts.statusMessage)
+                    .font(CWT.mono(10))
+                    .foregroundStyle(CWT.inkSoft)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

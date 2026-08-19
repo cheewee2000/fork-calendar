@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 enum RecurrenceChoice: String, CaseIterable, Identifiable {
     case none = "Does not repeat"
@@ -12,42 +11,36 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var rule: EKRecurrenceRule? {
+    /// RFC 5545 lines as Google stores them.
+    var rules: [String]? {
         switch self {
-        case .none:
-            return nil
-        case .daily:
-            return EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)
-        case .weekdays:
-            let days: [EKRecurrenceDayOfWeek] = [.monday, .tuesday, .wednesday, .thursday, .friday]
-                .map { EKRecurrenceDayOfWeek($0) }
-            return EKRecurrenceRule(
-                recurrenceWith: .weekly, interval: 1, daysOfTheWeek: days,
-                daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil,
-                daysOfTheYear: nil, setPositions: nil, end: nil
-            )
-        case .weekly:
-            return EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: nil)
-        case .biweekly:
-            return EKRecurrenceRule(recurrenceWith: .weekly, interval: 2, end: nil)
-        case .monthly:
-            return EKRecurrenceRule(recurrenceWith: .monthly, interval: 1, end: nil)
-        case .yearly:
-            return EKRecurrenceRule(recurrenceWith: .yearly, interval: 1, end: nil)
+        case .none: return nil
+        case .daily: return ["RRULE:FREQ=DAILY"]
+        case .weekdays: return ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]
+        case .weekly: return ["RRULE:FREQ=WEEKLY"]
+        case .biweekly: return ["RRULE:FREQ=WEEKLY;INTERVAL=2"]
+        case .monthly: return ["RRULE:FREQ=MONTHLY"]
+        case .yearly: return ["RRULE:FREQ=YEARLY"]
         }
     }
 
-    static func from(_ event: EKEvent) -> RecurrenceChoice {
-        guard let rule = event.recurrenceRules?.first else { return .none }
-        switch rule.frequency {
-        case .daily: return .daily
-        case .weekly:
-            if rule.interval == 2 { return .biweekly }
-            if (rule.daysOfTheWeek?.count ?? 0) == 5 { return .weekdays }
+    static func from(_ event: CalEvent) -> RecurrenceChoice {
+        guard let line = event.recurrence?.first(where: { $0.hasPrefix("RRULE:") }) else { return .none }
+        var parts: [String: String] = [:]
+        for kv in line.dropFirst(6).split(separator: ";") {
+            let pair = kv.split(separator: "=", maxSplits: 1).map(String.init)
+            if pair.count == 2 { parts[pair[0]] = pair[1] }
+        }
+        let interval = Int(parts["INTERVAL"] ?? "1") ?? 1
+        switch parts["FREQ"] {
+        case "DAILY": return .daily
+        case "WEEKLY":
+            if interval == 2 { return .biweekly }
+            if (parts["BYDAY"]?.split(separator: ",").count ?? 0) == 5 { return .weekdays }
             return .weekly
-        case .monthly: return .monthly
-        case .yearly: return .yearly
-        @unknown default: return .none
+        case "MONTHLY": return .monthly
+        case "YEARLY": return .yearly
+        default: return .none
         }
     }
 }
@@ -98,7 +91,7 @@ struct EventPanelView: View {
         !context.isNew && !(context.event.calendar?.allowsContentModifications ?? true)
     }
 
-    private var selectedCalendar: EKCalendar? {
+    private var selectedCalendar: CalCalendar? {
         store.calendars.first { $0.calendarIdentifier == calendarID }
     }
 
@@ -200,9 +193,9 @@ struct EventPanelView: View {
                                     .font(CWT.mono(10))
                                     .foregroundStyle(CWT.inkSoft)
                                 HStack(spacing: 6) {
-                                    rsvpButton("Going", status: "accepted", current: .accepted)
-                                    rsvpButton("Maybe", status: "tentative", current: .tentative)
-                                    rsvpButton("No", status: "declined", current: .declined)
+                                    rsvpButton("Going", status: .accepted)
+                                    rsvpButton("Maybe", status: .tentative)
+                                    rsvpButton("No", status: .declined)
                                 }
                             }
                         }
@@ -212,11 +205,7 @@ struct EventPanelView: View {
                         row(icon: "person.2") {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(attendees.enumerated()), id: \.offset) { _, attendee in
-                                    // My own row reflects a just-sent RSVP; CalDAV
-                                    // sync-back can take minutes.
-                                    let status = attendee.isCurrentUser
-                                        ? (store.effectiveStatus(context.event) ?? attendee.participantStatus)
-                                        : attendee.participantStatus
+                                    let status = attendee.participantStatus
                                     HStack(spacing: 6) {
                                         Image(systemName: statusIcon(status))
                                             .font(CWT.mono(10))
@@ -226,6 +215,8 @@ struct EventPanelView: View {
                                             .lineLimit(1)
                                         if attendee.isCurrentUser {
                                             Text("(you)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                                        } else if attendee.isOrganizer {
+                                            Text("(organizer)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
                                         }
                                     }
                                 }
@@ -244,9 +235,9 @@ struct EventPanelView: View {
                                 .textInputAutocapitalization(.never)
                                 #endif
                             if !inviteEmails.isEmpty {
-                                Text(GoogleAuth.shared.isConnected
-                                     ? "Added to the Google event's guest list on save"
-                                     : "Sent as an email invite (.ics) on save")
+                                Text(settings.guestNotifyPolicy == .never
+                                     ? "Added to the guest list on save (no email — see Settings)"
+                                     : "Added to the guest list and emailed on save")
                                     .font(CWT.mono(9))
                                     .foregroundStyle(CWT.inkFaint)
                             }
@@ -342,12 +333,10 @@ struct EventPanelView: View {
 
     private var conferencingMenu: some View {
         Menu {
-            if GoogleAuth.shared.isConnected {
-                Button {
-                    addMeetOnSave = true
-                } label: {
-                    Label("Google Meet (created on save)", systemImage: "video.badge.plus")
-                }
+            Button {
+                addMeetOnSave = true
+            } label: {
+                Label("Google Meet (created on save)", systemImage: "video.badge.plus")
             }
             if let zoomURL = URL(string: settings.zoomLink), !settings.zoomLink.isEmpty {
                 Button {
@@ -359,11 +348,6 @@ struct EventPanelView: View {
             } else {
                 Button("Zoom — set your personal link in Settings…") {}
                     .disabled(true)
-            }
-            Button {
-                if let url = URL(string: "https://meet.google.com/new") { openURL(url) }
-            } label: {
-                Label("Google Meet — create, then paste link", systemImage: "video.badge.plus")
             }
             Button {
                 if let pasted = Clipboard.paste(),
@@ -391,20 +375,19 @@ struct EventPanelView: View {
         }
     }
 
-    private func rsvpButton(_ label: String, status: String, current: EKParticipantStatus) -> some View {
-        let isCurrent = store.effectiveStatus(context.event) == current
+    private func rsvpButton(_ label: String, status: ParticipantStatus) -> some View {
+        let isCurrent = store.effectiveStatus(context.event) == status
         return Button(label) {
             let event = context.event
-            let state = appState
             let s = store
-            Task { await GoogleSync.respond(event: event, status: status, appState: state, store: s) }
+            Task { await s.respond(event, status: status) }
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
         .tint(isCurrent ? .accentColor : nil)
     }
 
-    private func statusIcon(_ status: EKParticipantStatus) -> String {
+    private func statusIcon(_ status: ParticipantStatus) -> String {
         switch status {
         case .accepted: return "checkmark.circle.fill"
         case .declined: return "xmark.circle.fill"
@@ -413,7 +396,7 @@ struct EventPanelView: View {
         }
     }
 
-    private func statusColor(_ status: EKParticipantStatus) -> Color {
+    private func statusColor(_ status: ParticipantStatus) -> Color {
         switch status {
         case .accepted: return CWT.signalGreen
         case .declined: return CWT.signalRed
@@ -437,7 +420,7 @@ struct EventPanelView: View {
         event.notes = notes.isEmpty ? nil : notes
         event.url = urlString.isEmpty ? nil : URL(string: urlString)
         if RecurrenceChoice.from(event) != recurrence {
-            event.recurrenceRules = recurrence.rule.map { [$0] }
+            event.recurrence = recurrence.rules
         }
         if let cal = store.writableCalendars.first(where: { $0.calendarIdentifier == calendarID }),
            cal.calendarIdentifier != event.calendar?.calendarIdentifier {
@@ -445,13 +428,27 @@ struct EventPanelView: View {
         } else if event.calendar == nil {
             event.calendar = store.defaultCalendar
         }
-        appState.commitChange(to: event, snapshot: originalSnapshot, isNew: context.isNew, store: store)
-        let emails = inviteEmails.split(separator: ",").map(String.init)
-        if !emails.isEmpty || addMeetOnSave {
-            let meet = addMeetOnSave
-            let state = appState
-            Task { await GoogleSync.attachGuests(event: event, emails: emails, addMeet: meet, appState: state) }
+        // Guests + Meet ride along with the save (one Google write).
+        let emails = inviteEmails.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { $0.contains("@") }
+        if !emails.isEmpty {
+            var list = event.attendees ?? []
+            let me = event.calendar?.accountID.lowercased()
+            if list.isEmpty, let me {
+                // First guest: Google adds the organizer automatically, but
+                // listing myself keeps RSVP state visible right away.
+                list.append(CalAttendee(email: me, displayName: nil, responseStatus: .accepted,
+                                        isSelf: true, isOrganizer: true, isOptional: false, isResource: false))
+            }
+            for email in emails where !list.contains(where: { $0.email.caseInsensitiveCompare(email) == .orderedSame }) {
+                list.append(CalAttendee(email: email, displayName: nil, responseStatus: .needsAction,
+                                        isSelf: false, isOrganizer: false, isOptional: false, isResource: false))
+            }
+            event.attendees = list
         }
+        event.wantsMeet = addMeetOnSave
+        appState.commitChange(to: event, snapshot: originalSnapshot, isNew: context.isNew, store: store)
         appState.closePanel()
         if isSheet { dismiss() }
     }

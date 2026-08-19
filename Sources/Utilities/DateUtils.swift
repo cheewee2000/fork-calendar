@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import EventKit
 
 extension Calendar {
     func startOfWeek(for date: Date) -> Date {
@@ -65,30 +64,4 @@ enum Fmt {
         f.setLocalizedDateFormatFromTemplate("EEE")
         return f
     }()
-}
-
-extension EKEvent {
-    var myParticipantStatus: EKParticipantStatus? {
-        attendees?.first(where: { $0.isCurrentUser })?.participantStatus
-    }
-
-    /// True when I'm invited but haven't responded yet.
-    var needsMyResponse: Bool {
-        myParticipantStatus == .pending
-    }
-}
-
-extension EKCalendar {
-    var displayColor: Color {
-        if let hex = AppSettings.shared.calendarColors[calendarIdentifier],
-           let override = Color(hex: hex) {
-            return override
-        }
-        #if os(macOS)
-        if let c = color { return Color(nsColor: c) }
-        #else
-        if let cg = cgColor { return Color(cgColor: cg) }
-        #endif
-        return .accentColor
-    }
 }

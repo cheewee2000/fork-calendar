@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
@@ -28,14 +27,31 @@ struct SidebarView: View {
         .navigationTitle("Fork Calendar")
         .safeAreaInset(edge: .bottom) {
             // CW&T ID label: the codename is the logo.
-            VStack(alignment: .leading, spacing: 1) {
-                Text("CWT_STE0GW1_2607")
-                    .font(CWT.mono(9, .bold))
-                    .kerning(0.5)
-                    .foregroundStyle(CWT.inkSoft)
-                Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")")
-                    .font(CWT.mono(9))
-                    .foregroundStyle(CWT.inkFaint)
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("CWT_STE0GW1_2607")
+                        .font(CWT.mono(9, .bold))
+                        .kerning(0.5)
+                        .foregroundStyle(CWT.inkSoft)
+                    Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")")
+                        .font(CWT.mono(9))
+                        .foregroundStyle(CWT.inkFaint)
+                }
+                Spacer()
+                #if os(macOS)
+                SettingsLink {
+                    Image(systemName: "gearshape").font(CWT.mono(11)).foregroundStyle(CWT.inkSoft)
+                }
+                .buttonStyle(.plain)
+                .help("Accounts & settings (⌘,)")
+                #else
+                Button {
+                    appState.showSettingsSheet = true
+                } label: {
+                    Image(systemName: "gearshape").font(CWT.mono(13)).foregroundStyle(CWT.inkSoft)
+                }
+                .buttonStyle(.plain)
+                #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -47,7 +63,7 @@ struct SidebarView: View {
 struct CalendarRow: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var settings: AppSettings
-    let cal: EKCalendar
+    let cal: CalCalendar
     @State private var showColorPicker = false
     @State private var hovering = false
 
@@ -102,7 +118,7 @@ struct CalendarRow: View {
 
 struct CalendarColorPicker: View {
     @EnvironmentObject var settings: AppSettings
-    let cal: EKCalendar
+    let cal: CalCalendar
     @State private var custom: Color = .blue
 
     private static let presets = [

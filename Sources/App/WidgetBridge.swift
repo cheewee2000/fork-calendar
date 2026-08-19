@@ -20,6 +20,18 @@ enum WidgetBridge {
         #endif
     }
 
+    /// Write the upcoming-events snapshot the widget renders.
+    static func publish(_ items: [WidgetItem]) {
+        #if os(iOS)
+        guard let url = WidgetData.fileURL else { return }
+        let sorted = items.sorted { $0.start != $1.start ? $0.start < $1.start : $0.id < $1.id }
+        if let data = try? JSONEncoder().encode(sorted) {
+            try? data.write(to: url, options: .atomic)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+
     static func reload() {
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()

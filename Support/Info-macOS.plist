@@ -19,13 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.13.4</string>
+	<string>0.14.0</string>
 	<key>CFBundleVersion</key>
-	<string>42</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Fork Calendar shows and edits events from your calendars.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Fork Calendar shows and edits events from your calendars.</string>
+	<string>43</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 CW&amp;T</string>
 </dict>

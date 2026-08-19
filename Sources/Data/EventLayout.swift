@@ -1,11 +1,10 @@
-import EventKit
 import Foundation
 
 struct PositionedEvent: Identifiable {
-    let event: EKEvent
+    let event: CalEvent
     /// Identical copies of this event living on other calendars (merged into
     /// this one block; each contributes a color strip).
-    let duplicates: [EKEvent]
+    let duplicates: [CalEvent]
     let column: Int
     let columnCount: Int
     var id: String {
@@ -20,8 +19,8 @@ enum EventLayout {
     /// unanswered invite first (so needs-response styling and RSVP hit the
     /// right copy), then any copy where I'm an attendee, then an editable
     /// calendar's copy.
-    static func mergeDuplicates(_ events: [EKEvent]) -> [(primary: EKEvent, duplicates: [EKEvent])] {
-        var groups: [String: [EKEvent]] = [:]
+    static func mergeDuplicates(_ events: [CalEvent]) -> [(primary: CalEvent, duplicates: [CalEvent])] {
+        var groups: [String: [CalEvent]] = [:]
         var order: [String] = []
         for event in events {
             let key = (event.title ?? "") + "|"
@@ -30,7 +29,7 @@ enum EventLayout {
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(event)
         }
-        var merged: [(primary: EKEvent, duplicates: [EKEvent])] = []
+        var merged: [(primary: CalEvent, duplicates: [CalEvent])] = []
         for key in order {
             var copies = groups[key] ?? []
             copies.sort { ($0.calendar?.calendarIdentifier ?? "") < ($1.calendar?.calendarIdentifier ?? "") }
@@ -44,7 +43,7 @@ enum EventLayout {
     }
 
     /// Assigns overlapping events to side-by-side columns within clusters.
-    static func layout(_ events: [EKEvent]) -> [PositionedEvent] {
+    static func layout(_ events: [CalEvent]) -> [PositionedEvent] {
         let merged = mergeDuplicates(events)
 
         // Full tiebreaker chain: Swift's sort is unstable, so ties must be
@@ -55,7 +54,7 @@ enum EventLayout {
             return ($0.primary.eventIdentifier ?? "") < ($1.primary.eventIdentifier ?? "")
         }
         var result: [PositionedEvent] = []
-        var clusterAssignments: [(EKEvent, [EKEvent], Int)] = []
+        var clusterAssignments: [(CalEvent, [CalEvent], Int)] = []
         var columnEnds: [Date] = []
         var clusterEnd = Date.distantPast
 

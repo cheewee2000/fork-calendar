@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 private struct WeekPosition: Equatable {
     let week: Date
@@ -445,9 +444,9 @@ struct MonthCell: View {
 struct MonthChip: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
-    let event: EKEvent
+    let event: CalEvent
     /// Identical copies on other calendars, merged into this chip.
-    var duplicates: [EKEvent] = []
+    var duplicates: [CalEvent] = []
     var cellW: CGFloat = 120
     var rowH: CGFloat = 108
 

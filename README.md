@@ -1,8 +1,18 @@
 # Fork Calendar
 
-A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI + EventKit. Reads and edits your real system calendars (iCloud, Google via macOS/iOS accounts, etc.).
+A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftUI on the Google Calendar API. Sign in to each Google account directly — no dependency on the system Calendar app, its accounts, or its sync.
 
-**v0.12.5**
+**v0.14.0**
+
+## Google accounts & sync
+
+- Settings (⌘, / gear in the sidebar) → **Add Google account…** opens Google's sign-in page; add as many accounts as you like, each with its own calendars and its own token. Toggle sync per account, remove accounts any time.
+- You supply the OAuth client (console.cloud.google.com → APIs & Services → Credentials, with the Calendar API enabled). macOS uses a **Desktop app** client (loopback redirect); iOS uses an **iOS** client for bundle ID `com.cwandt.forkcalendar.app` (falls back to the desktop client).
+- Everything is cached locally (JSON in Application Support / the app group) and kept fresh with Google's incremental sync tokens. Launch shows the cache instantly, then syncs.
+- **Sync control:** pick the background interval (manual / 1 / 2 / 5 / 15 min), whether to sync when the app becomes active, ⌘R (or R) for a full pass right now, and "clear cache and re-download" if something looks off. Edits go to Google immediately.
+- **RSVP & notification control:** choose whether RSVPs email the organizer, and whether changes to events with guests (create, move, edit, delete, invite) email the guests — always, never, or ask each time. Guests and Google Meet links are part of the same save.
+- Recurring events: "this event" patches the instance; "this and all future" patches the series when it's the first occurrence, otherwise ends the old series and starts a new one.
+- iOS widget reads the app's published snapshot (today + 2 days).
 
 ## Features
 
@@ -19,16 +29,15 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 - Recurring events (daily/weekdays/weekly/biweekly/monthly/yearly) with "this event / all future" prompts
 - Attendees with RSVP status; join-meeting detection (Zoom, Meet, Teams, Webex, …)
 - Add conferencing: Zoom personal room (set in Settings), Google Meet create-and-paste, or paste any link
-- Invite people by email — sends a standards-compliant .ics invite via Mail/share sheet
-- Gmail shared calendars via delegate calendar sources
+- Invite people by email — added to the Google guest list on save (email per your notification setting)
 - Multi-day/all-day events render as single continuous bars across days (week + month views)
 - Week/day views side-scroll smoothly day-by-day (trackpad); a light snap engages only within a day of full-week framing
 - Custom per-calendar colors (hover a sidebar calendar → palette, presets or any color)
-- Google account connection (your own OAuth client): real Google-side guest lists with email invites, auto-created Google Meet links, and RSVP (Going/Maybe/No) from the event panel or right-click
+- Guest lists, auto-created Google Meet links, and RSVP (Going/Maybe/No) from the event panel or right-click — per account, so invites to any signed-in account can be answered
 - Events awaiting your RSVP show a dotted outline
 - Undo (⌘Z) for moves, edits, deletes, and creates
 - macOS menu bar agenda with next event + Join buttons
-- Settings (⌘,): week start, default duration, weekends, declined events, secondary time zone in the gutter
+- Settings (⌘,): accounts, sync cadence, guest/RSVP emails, default calendar, week start, default duration, weekends, declined events, secondary time zones in the gutter
 
 ## Keyboard shortcuts
 
@@ -59,4 +68,4 @@ xcodebuild -project ForkCalendar.xcodeproj -scheme ForkCalendar build
 xcodebuild -project ForkCalendar.xcodeproj -scheme ForkCalendar-iOS -destination 'generic/platform=iOS Simulator' build
 ```
 
-Targets: macOS 14+, iOS 17+. Grant calendar access on first launch.
+Targets: macOS 15+, iOS 18+. Add a Google account on first launch.

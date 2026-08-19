@@ -1,11 +1,10 @@
-import EventKit
 import SwiftUI
 
 /// A multi-day/all-day event drawn as one continuous bar across day columns.
 struct SpanBar: Identifiable {
-    let event: EKEvent
+    let event: CalEvent
     /// Identical copies on other calendars, merged into this bar.
-    var duplicates: [EKEvent] = []
+    var duplicates: [CalEvent] = []
     let startIndex: Int
     let endIndex: Int // inclusive
     let lane: Int
@@ -13,7 +12,7 @@ struct SpanBar: Identifiable {
 }
 
 enum SpanLayout {
-    private static let byStart: (EKEvent, EKEvent) -> Bool = {
+    private static let byStart: (CalEvent, CalEvent) -> Bool = {
         if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
         return $0.endDate > $1.endDate
     }
@@ -87,8 +86,8 @@ enum SpanLayout {
 struct SpanBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
-    let event: EKEvent
-    var duplicates: [EKEvent] = []
+    let event: CalEvent
+    var duplicates: [CalEvent] = []
     var compact = false
 
     /// Calendar colors for this bar: the primary copy plus merged duplicates.

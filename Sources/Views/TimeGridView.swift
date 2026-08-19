@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 #if os(macOS)
 import AppKit
 #endif
@@ -867,9 +866,9 @@ struct EventBlockView: View {
     private func contextMenuItems(joinURL: URL?) -> some View {
         if item.event.attendees?.isEmpty == false {
             Menu("RSVP") {
-                Button("Going") { rsvp("accepted") }
-                Button("Maybe") { rsvp("tentative") }
-                Button("Not going") { rsvp("declined") }
+                Button("Going") { rsvp(.accepted) }
+                Button("Maybe") { rsvp(.tentative) }
+                Button("Not going") { rsvp(.declined) }
             }
         }
         if let joinURL {
@@ -911,11 +910,10 @@ struct EventBlockView: View {
         }
     }
 
-    private func rsvp(_ status: String) {
+    private func rsvp(_ status: ParticipantStatus) {
         let event = item.event
-        let state = appState
         let s = store
-        Task { await GoogleSync.respond(event: event, status: status, appState: state, store: s) }
+        Task { await s.respond(event, status: status) }
     }
 
     private func resizeHandle(top: Bool) -> some View {

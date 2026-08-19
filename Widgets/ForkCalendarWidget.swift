@@ -1,6 +1,5 @@
 import WidgetKit
 import SwiftUI
-import EventKit
 
 // MARK: - Model
 
@@ -63,57 +62,26 @@ struct UpNextProvider: TimelineProvider {
         completion(Timeline(entries: Array(entries), policy: .atEnd))
     }
 
+    /// Reads the snapshot the app publishes (today + 2 days, already filtered).
     private func load(at date: Date) -> UpNextEntry {
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+        guard let items = WidgetData.read() else {
             return UpNextEntry(date: date, hasAccess: false, events: [])
         }
-        let store = EKEventStore()
-        var stores = [store]
-        let delegates = store.delegateSources
-        if !delegates.isEmpty { stores.append(EKEventStore(sources: delegates)) }
-
-        let shared = UserDefaults(suiteName: "group.com.cwandt.forkcalendar")
-        let hidden = Set(shared?.stringArray(forKey: "hiddenCalendarIDs") ?? [])
-        let colorOverrides = shared?.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]
-        let showDeclined = shared?.object(forKey: "showDeclined") as? Bool ?? true
-
         let cal = Calendar.autoupdatingCurrent
         let start = cal.startOfDay(for: date)
         let end = cal.date(byAdding: .day, value: 2, to: start) ?? start.addingTimeInterval(172800)
 
-        var merged: [EKEvent] = []
-        for s in stores {
-            let predicate = s.predicateForEvents(withStart: start, end: end, calendars: nil)
-            merged.append(contentsOf: s.events(matching: predicate))
-        }
-        merged.sort {
-            if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
-            return ($0.eventIdentifier ?? "") < ($1.eventIdentifier ?? "")
-        }
-
         var seen = Set<String>()
         var events: [WidgetEvent] = []
-        for e in merged {
-            guard let calendar = e.calendar, let startDate = e.startDate, let endDate = e.endDate else { continue }
-            if hidden.contains(calendar.calendarIdentifier) { continue }
-            if !showDeclined,
-               e.attendees?.first(where: { $0.isCurrentUser })?.participantStatus == .declined { continue }
-            // Same event mirrored across calendars/stores collapses to one row.
-            let title = e.title ?? "Untitled"
-            let key = "\(title)|\(startDate.timeIntervalSince1970)|\(endDate.timeIntervalSince1970)"
+        for e in items where e.start < end && e.end > start {
+            // Same event mirrored across calendars collapses to one row.
+            let key = "\(e.title)|\(e.start.timeIntervalSince1970)|\(e.end.timeIntervalSince1970)"
             guard seen.insert(key).inserted else { continue }
-
-            var color = Color(hex: "7D6378")!
-            if let hex = colorOverrides[calendar.calendarIdentifier], let c = Color(hex: hex) {
-                color = c
-            } else if let cg = calendar.cgColor {
-                color = Color(cgColor: cg)
-            }
             events.append(WidgetEvent(
-                id: (e.eventIdentifier ?? key) + String(startDate.timeIntervalSince1970),
-                title: title, start: startDate, end: endDate,
-                isAllDay: e.isAllDay || endDate.timeIntervalSince(startDate) >= 86400,
-                color: color
+                id: e.id + String(e.start.timeIntervalSince1970),
+                title: e.title, start: e.start, end: e.end,
+                isAllDay: e.isAllDay || e.end.timeIntervalSince(e.start) >= 86400,
+                color: Color(hex: e.colorHex) ?? Color(hex: "7D6378")!
             ))
         }
         return UpNextEntry(date: date, hasAccess: true, events: events)
@@ -371,7 +339,7 @@ struct AccessView: View {
             Text("FORK CALENDAR")
                 .font(CWT.mono(10, .bold))
                 .foregroundStyle(CWT.ink)
-            Text("Open the app to allow calendar access")
+            Text("Open the app to sign in to Google")
                 .font(CWT.mono(10))
                 .foregroundStyle(CWT.inkFaint)
                 .multilineTextAlignment(.center)

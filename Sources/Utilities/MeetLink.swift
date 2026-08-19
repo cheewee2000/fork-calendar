@@ -1,5 +1,4 @@
 import Foundation
-import EventKit
 #if os(macOS)
 import AppKit
 #else
@@ -13,7 +12,8 @@ enum MeetLink {
     ]
 
     /// First video-call link found in url, location, or notes.
-    static func url(for event: EKEvent) -> URL? {
+    static func url(for event: CalEvent) -> URL? {
+        if let link = event.hangoutLink, let u = URL(string: link) { return u }
         if let u = event.url, isMeetingURL(u) { return u }
         for text in [event.location, event.notes].compactMap({ $0 }) {
             if let u = firstMeetingURL(in: text) { return u }

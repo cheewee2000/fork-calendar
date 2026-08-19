@@ -1,4 +1,3 @@
-import EventKit
 import SwiftUI
 import Combine
 
@@ -11,8 +10,10 @@ struct EventSnapshot {
     var location: String?
     var notes: String?
     var url: URL?
+    var recurrence: [String]?
+    var attendees: [CalAttendee]?
 
-    init(_ event: EKEvent) {
+    init(_ event: CalEvent) {
         title = event.title
         start = event.startDate ?? Date()
         end = event.endDate ?? Date()
@@ -21,10 +22,12 @@ struct EventSnapshot {
         location = event.location
         notes = event.notes
         url = event.url
+        recurrence = event.recurrence
+        attendees = event.attendees
     }
 
     @MainActor
-    func apply(to event: EKEvent, in store: CalendarStore) {
+    func apply(to event: CalEvent, in store: CalendarStore) {
         event.title = title
         event.startDate = start
         event.endDate = end
@@ -32,6 +35,8 @@ struct EventSnapshot {
         event.location = location
         event.notes = notes
         event.url = url
+        event.recurrence = recurrence
+        event.attendees = attendees
         if let calendarID, let cal = store.calendars.first(where: { $0.calendarIdentifier == calendarID }) {
             event.calendar = cal
         }
@@ -44,138 +49,182 @@ enum UndoAction {
     case remove(id: String)
 }
 
+/// "Email the guests about this change?" — shown when the policy is Ask.
+struct NotifyPrompt: Identifiable {
+    let id = UUID()
+    let title: String
+    let guestCount: Int
+    let continuation: CheckedContinuation<Bool, Never>
+}
+
 @MainActor
 final class CalendarStore: ObservableObject {
+    /// `.denied` now means "no Google account connected".
     enum AccessState { case unknown, granted, denied }
 
-    /// Primary store — used for new events and write operations on own calendars.
-    let eventStore = EKEventStore()
-    /// Primary + delegate stores (Gmail shared calendars surface as delegate sources).
-    private(set) var allStores: [EKEventStore] = []
-    private var calendarOwner: [String: EKEventStore] = [:]
+    let engine = SyncEngine()
+    private let accounts = AccountManager.shared
 
     @Published var accessState: AccessState = .unknown
-    @Published var calendars: [EKCalendar] = []
-    @Published var events: [EKEvent] = []
+    @Published var calendars: [CalCalendar] = []
+    @Published var events: [CalEvent] = []
     @Published var isRefreshing = false
+    @Published var lastSync: Date?
+    @Published var toast: String?
+    @Published var notifyPrompt: NotifyPrompt?
     @Published var hiddenCalendarIDs: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(hiddenCalendarIDs), forKey: "hiddenCalendarIDs")
             dayIndexCache = nil
+            publishWidgetData()
             WidgetBridge.mirror(hiddenCalendarIDs: hiddenCalendarIDs)
         }
     }
 
     private var fetchedInterval: DateInterval?
     private var undoStack: [UndoAction] = []
-    private var searchCache: [EKEvent]?
-    private var dayIndexCache: [Date: [EKEvent]]?
+    private var dayIndexCache: [Date: [CalEvent]]?
     private var bag = Set<AnyCancellable>()
+    private var timerTask: Task<Void, Never>?
 
     init() {
         hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: "hiddenCalendarIDs") ?? [])
-        allStores = [eventStore]
         WidgetBridge.mirror(
             hiddenCalendarIDs: hiddenCalendarIDs,
             calendarColors: AppSettings.shared.calendarColors,
             showDeclined: AppSettings.shared.showDeclined
         )
-        // object: nil so changes from delegate stores are caught too
-        NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.reload() }
-        }
+        engine.onChange = { [weak self] in self?.reload() }
+        engine.$isSyncing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] syncing in self?.isRefreshing = syncing }
+            .store(in: &bag)
+        engine.$lastSync
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] date in self?.lastSync = date }
+            .store(in: &bag)
+        engine.$lastError
+            .receive(on: DispatchQueue.main)
+            .compactMap { $0 }
+            .sink { [weak self] message in self?.toast = "Sync: \(message)" }
+            .store(in: &bag)
         AppSettings.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.dayIndexCache = nil
                 self?.objectWillChange.send()
+                self?.restartTimer()
             }
             .store(in: &bag)
-    }
-
-    var defaultCalendar: EKCalendar? {
-        eventStore.defaultCalendarForNewEvents
-            ?? eventStore.calendars(for: .event).first { $0.allowsContentModifications }
-    }
-
-    /// Writable calendars on the primary store (new events / move targets).
-    var writableCalendars: [EKCalendar] {
-        eventStore.calendars(for: .event).filter { $0.allowsContentModifications }
-    }
-
-    var calendarsBySource: [(source: String, calendars: [EKCalendar])] {
-        let groups = Dictionary(grouping: calendars) { $0.source?.title ?? "Other" }
-        return groups.keys.sorted().map { ($0, groups[$0]!.sorted { $0.title < $1.title }) }
-    }
-
-    func requestAccess() async {
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess:
-            accessState = .granted
-        case .denied, .restricted, .writeOnly:
-            accessState = .denied
-        default:
-            do {
-                accessState = try await eventStore.requestFullAccessToEvents() ? .granted : .denied
-            } catch {
-                accessState = .denied
+        accounts.$accounts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] list in
+                self?.accessState = list.isEmpty ? .denied : .granted
             }
-        }
-        if accessState == .granted { setupStores() }
+            .store(in: &bag)
+        calendars = engine.calendars
     }
 
-    /// Include delegate sources (how Gmail/Exchange shared calendars appear).
-    private func setupStores() {
-        let delegates = eventStore.delegateSources
-        if delegates.isEmpty {
-            allStores = [eventStore]
-        } else {
-            allStores = [eventStore, EKEventStore(sources: delegates)]
+    // MARK: - Calendars
+
+    var defaultCalendar: CalCalendar? {
+        let preferred = AppSettings.shared.defaultCalendarID
+        if !preferred.isEmpty, let cal = writableCalendars.first(where: { $0.calendarIdentifier == preferred }) {
+            return cal
         }
+        let order = accounts.accounts.map(\.email)
+        return writableCalendars
+            .sorted { a, b in
+                let ia = order.firstIndex(of: a.accountID) ?? 99
+                let ib = order.firstIndex(of: b.accountID) ?? 99
+                if ia != ib { return ia < ib }
+                if a.isPrimary != b.isPrimary { return a.isPrimary }
+                return a.title < b.title
+            }
+            .first
+    }
+
+    /// Calendars this app can write to (new events / move targets).
+    var writableCalendars: [CalCalendar] {
+        calendars.filter { $0.allowsContentModifications }
+    }
+
+    var calendarsBySource: [(source: String, calendars: [CalCalendar])] {
+        let order = accounts.accounts.map(\.email)
+        let groups = Dictionary(grouping: calendars) { $0.accountID }
+        return groups.keys
+            .sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
+            .map { key in
+                (key, groups[key]!.sorted {
+                    if $0.isPrimary != $1.isPrimary { return $0.isPrimary }
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                })
+            }
+    }
+
+    // MARK: - Lifecycle
+
+    /// Called once at launch: show the cache immediately, then sync.
+    func requestAccess() async {
+        accessState = accounts.accounts.isEmpty ? .denied : .granted
         reload()
+        restartTimer()
+        if accessState == .granted {
+            engine.syncAll()
+        }
     }
 
-    /// Ask every source to sync with its server, then re-read locally.
-    /// EventKit posts .EKEventStoreChanged when remote changes land, which
-    /// triggers another reload() on its own.
+    /// ⌘R: full pass over every account.
     func refresh() {
         guard accessState == .granted else { return }
-        isRefreshing = true
-        // Google's calendar list is cached for the process; a share whose role
-        // changed (reader → writer) stays stale until this is dropped.
-        GoogleSync.clearCache()
-        for store in allStores { store.refreshSourcesIfNecessary() }
-        reload()
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            self?.isRefreshing = false
-        }
+        engine.syncAll()
     }
 
-    func reload() {
-        guard accessState == .granted else { return }
-        var merged: [EKCalendar] = []
-        var owners: [String: EKEventStore] = [:]
-        for store in allStores {
-            for cal in store.calendars(for: .event) {
-                merged.append(cal)
-                if owners[cal.calendarIdentifier] == nil {
-                    owners[cal.calendarIdentifier] = store
-                }
+    /// Foreground / window-activation sync (if enabled).
+    func syncIfDue() {
+        guard accessState == .granted, AppSettings.shared.syncOnActivate else { return }
+        if let last = engine.lastSync, Date().timeIntervalSince(last) < 20 { return }
+        engine.syncAll()
+    }
+
+    private func restartTimer() {
+        let interval = AppSettings.shared.syncInterval
+        timerTask?.cancel()
+        guard interval > 0 else { timerTask = nil; return }
+        timerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                guard self.accessState == .granted else { continue }
+                self.engine.syncAll()
             }
         }
-        calendars = merged
-        calendarOwner = owners
-        searchCache = nil
-        dayIndexCache = nil
-        if let interval = fetchedInterval { fetch(interval) }
-        WidgetBridge.reload()
     }
 
-    func owner(of event: EKEvent) -> EKEventStore {
-        event.calendar.flatMap { calendarOwner[$0.calendarIdentifier] } ?? eventStore
+    /// Rebuild `calendars`/`events` from the engine's records.
+    func reload() {
+        calendars = engine.calendars
+        guard let interval = fetchedInterval else {
+            events = []
+            return
+        }
+        var lookup: [String: CalCalendar] = [:]
+        for cal in calendars { lookup[cal.calendarIdentifier] = cal }
+        var built: [CalEvent] = []
+        for (key, dict) in engine.records {
+            guard let cal = lookup[key] else { continue }
+            for record in dict.values where record.status != "cancelled" {
+                guard record.start < interval.end, record.end > interval.start else { continue }
+                built.append(CalEvent(record: record, calendar: cal))
+            }
+        }
+        built.sort {
+            if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
+            return $0.id < $1.id
+        }
+        events = built
+        dayIndexCache = nil
+        publishWidgetData()
     }
 
     func ensureFetched(_ interval: DateInterval) {
@@ -183,62 +232,26 @@ final class CalendarStore: ObservableObject {
         if let fetched = fetchedInterval, fetched.start <= interval.start, fetched.end >= interval.end { return }
         var start = interval.start.addingTimeInterval(-28 * 86400)
         var end = interval.end.addingTimeInterval(28 * 86400)
-        // Grow the window instead of replacing it (smooth month/year scrolling)
         if let fetched = fetchedInterval {
             start = min(start, fetched.start)
             end = max(end, fetched.end)
         }
-        // Cap the span so refetches stay fast
         if end.timeIntervalSince(start) > 400 * 86400 {
             start = interval.start.addingTimeInterval(-45 * 86400)
             end = interval.end.addingTimeInterval(45 * 86400)
         }
         fetchedInterval = DateInterval(start: start, end: end)
-        fetch(fetchedInterval!)
-    }
-
-    private let fetchQueue = DispatchQueue(label: "com.cwandt.forkcalendar.fetch", qos: .userInitiated)
-    private var fetchGeneration = 0
-
-    /// Fetches off the main thread so saves/navigation never beachball.
-    private func fetch(_ interval: DateInterval) {
-        fetchGeneration += 1
-        let generation = fetchGeneration
-        let stores = allStores
-        fetchQueue.async { [weak self] in
-            var merged: [EKEvent] = []
-            for store in stores {
-                let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
-                merged.append(contentsOf: store.events(matching: predicate))
-            }
-            // Deterministic tiebreaker — an unstable sort lets same-time events
-            // reorder across refetches (columns/colors jump while scrolling).
-            merged.sort {
-                if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
-                return ($0.eventIdentifier ?? "") < ($1.eventIdentifier ?? "")
-            }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let self, self.fetchGeneration == generation else { return }
-                    self.events = merged
-                    self.dayIndexCache = nil
-                    // Drop RSVP overrides once EventKit reflects the answer
-                    self.rsvpOverrides = self.rsvpOverrides.filter { key, _ in
-                        guard let match = merged.first(where: { eventKey($0) == key }) else { return true }
-                        return match.needsMyResponse
-                    }
-                }
-            }
-        }
+        reload()
+        engine.ensureWindow(covers: DateInterval(start: interval.start, end: interval.end))
     }
 
     // MARK: - Visibility
 
-    func isVisible(_ calendar: EKCalendar) -> Bool {
+    func isVisible(_ calendar: CalCalendar) -> Bool {
         !hiddenCalendarIDs.contains(calendar.calendarIdentifier)
     }
 
-    func toggle(_ calendar: EKCalendar) {
+    func toggle(_ calendar: CalCalendar) {
         if hiddenCalendarIDs.contains(calendar.calendarIdentifier) {
             hiddenCalendarIDs.remove(calendar.calendarIdentifier)
         } else {
@@ -246,23 +259,16 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    private func isDeclined(_ event: EKEvent) -> Bool {
-        guard let attendees = event.attendees else { return false }
-        return attendees.first(where: { $0.isCurrentUser })?.participantStatus == .declined
-    }
-
-    private func passesFilters(_ event: EKEvent) -> Bool {
+    private func passesFilters(_ event: CalEvent) -> Bool {
         guard let cal = event.calendar, isVisible(cal) else { return false }
-        if !AppSettings.shared.showDeclined, isDeclined(event) { return false }
+        if !AppSettings.shared.showDeclined, event.myParticipantStatus == .declined { return false }
         return true
     }
 
-    /// Visible events overlapping the given day, split into all-day/multi-day
-    /// and timed. Backed by the per-day index so scrolling renders stay cheap.
-    func events(on day: Date, calendar: Calendar) -> (allDay: [EKEvent], timed: [EKEvent]) {
+    func events(on day: Date, calendar: Calendar) -> (allDay: [CalEvent], timed: [CalEvent]) {
         let key = calendar.startOfDay(for: day)
-        var allDay: [EKEvent] = []
-        var timed: [EKEvent] = []
+        var allDay: [CalEvent] = []
+        var timed: [CalEvent] = []
         for event in dayIndex()[key] ?? [] {
             guard let start = event.startDate, let end = event.endDate else { continue }
             if event.isAllDay || end.timeIntervalSince(start) >= 86400 {
@@ -274,36 +280,12 @@ final class CalendarStore: ObservableObject {
         return (allDay, timed)
     }
 
-    // MARK: - RSVP overlay (optimistic, until CalDAV syncs Google's answer back)
+    // MARK: - RSVP state (the local record reflects an answer immediately)
 
-    @Published var rsvpOverrides: [String: EKParticipantStatus] = [:]
+    func awaitingResponse(_ event: CalEvent) -> Bool { event.needsMyResponse }
+    func effectiveStatus(_ event: CalEvent) -> ParticipantStatus? { event.myParticipantStatus }
 
-    /// Keyed on the invite's shared UID + this occurrence's start, so an RSVP
-    /// answered on one calendar's copy shows on every copy of that occurrence
-    /// (eventIdentifier differs per copy) without leaking across a series.
-    private func rsvpKey(_ event: EKEvent) -> String {
-        let id = event.calendarItemExternalIdentifier ?? event.eventIdentifier ?? "new"
-        return id + "-" + String(event.startDate?.timeIntervalSinceReferenceDate ?? 0)
-    }
-
-    func setRSVPOverride(_ status: EKParticipantStatus, for event: EKEvent) {
-        rsvpOverrides[rsvpKey(event)] = status
-        eventStore.refreshSourcesIfNecessary()
-    }
-
-    /// True when the event still needs my response (accounting for a
-    /// just-sent RSVP that EventKit hasn't synced yet).
-    func awaitingResponse(_ event: EKEvent) -> Bool {
-        guard rsvpOverrides[rsvpKey(event)] == nil else { return false }
-        return event.needsMyResponse
-    }
-
-    func effectiveStatus(_ event: EKEvent) -> EKParticipantStatus? {
-        rsvpOverrides[rsvpKey(event)] ?? event.myParticipantStatus
-    }
-
-    /// All-day and multi-day events overlapping the interval (for span bars).
-    func spanningEvents(from: Date, to: Date) -> [EKEvent] {
+    func spanningEvents(from: Date, to: Date) -> [CalEvent] {
         events.filter { event in
             guard passesFilters(event) else { return false }
             guard let start = event.startDate, let end = event.endDate else { return false }
@@ -312,11 +294,10 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    /// Fast per-day lookup for dense views (year view dots).
-    private func dayIndex() -> [Date: [EKEvent]] {
+    private func dayIndex() -> [Date: [CalEvent]] {
         if let cached = dayIndexCache { return cached }
         let cal = Calendar.autoupdatingCurrent
-        var index: [Date: [EKEvent]] = [:]
+        var index: [Date: [CalEvent]] = [:]
         for event in events {
             guard passesFilters(event) else { continue }
             guard let start = event.startDate, let end = event.endDate else { continue }
@@ -334,12 +315,10 @@ final class CalendarStore: ObservableObject {
 
     func eventColors(on day: Date, calendar: Calendar, max maxCount: Int = 3) -> [Color] {
         let key = calendar.startOfDay(for: day)
-        let dayEvents = dayIndex()[key] ?? []
-        return dayEvents.prefix(maxCount).map { $0.calendar?.displayColor ?? .accentColor }
+        return (dayIndex()[key] ?? []).prefix(maxCount).map { $0.calendar?.displayColor ?? .accentColor }
     }
 
-    /// Upcoming timed event today (for the menu bar).
-    var nextUpcomingEvent: EKEvent? {
+    var nextUpcomingEvent: CalEvent? {
         let now = Date()
         let cal = Calendar.autoupdatingCurrent
         return events.first {
@@ -349,69 +328,108 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    // MARK: - Search (±1 year)
+    // MARK: - Search (whole cache)
 
-    func searchEvents(_ query: String) -> [EKEvent] {
+    func searchEvents(_ query: String) -> [CalEvent] {
         guard accessState == .granted, query.count >= 2 else { return [] }
-        if searchCache == nil {
-            var merged: [EKEvent] = []
-            for store in allStores {
-                let predicate = store.predicateForEvents(
-                    withStart: Date().addingTimeInterval(-365 * 86400),
-                    end: Date().addingTimeInterval(365 * 86400),
-                    calendars: nil
-                )
-                merged.append(contentsOf: store.events(matching: predicate))
-            }
-            searchCache = merged.sorted { $0.startDate < $1.startDate }
-        }
         let now = Date()
-        return (searchCache ?? [])
-            .filter { ($0.title ?? "").localizedCaseInsensitiveContains(query) }
-            .sorted { abs($0.startDate.timeIntervalSince(now)) < abs($1.startDate.timeIntervalSince(now)) }
+        var lookup: [String: CalCalendar] = [:]
+        for cal in calendars { lookup[cal.calendarIdentifier] = cal }
+        var hits: [CalEvent] = []
+        for (key, dict) in engine.records {
+            guard let cal = lookup[key] else { continue }
+            for r in dict.values where r.status != "cancelled" && (r.title ?? "").localizedCaseInsensitiveContains(query) {
+                hits.append(CalEvent(record: r, calendar: cal))
+            }
+        }
+        return hits.sorted { abs($0.startDate.timeIntervalSince(now)) < abs($1.startDate.timeIntervalSince(now)) }
+    }
+
+    // MARK: - Widgets
+
+    private func publishWidgetData() {
+        #if os(iOS)
+        let cal = Calendar.autoupdatingCurrent
+        let start = cal.startOfDay(for: Date())
+        let end = cal.date(byAdding: .day, value: 3, to: start) ?? start
+        var items: [WidgetItem] = []
+        var lookup: [String: CalCalendar] = [:]
+        for c in calendars { lookup[c.calendarIdentifier] = c }
+        for (key, dict) in engine.records {
+            guard let c = lookup[key], isVisible(c) else { continue }
+            for r in dict.values where r.status != "cancelled" && r.start < end && r.end > start {
+                if !AppSettings.shared.showDeclined,
+                   r.attendees?.first(where: { $0.isSelf })?.responseStatus == .declined { continue }
+                items.append(WidgetItem(
+                    id: r.id, title: r.title ?? "Untitled", start: r.start, end: r.end,
+                    isAllDay: r.isAllDay, colorHex: c.displayColor.hexString ?? "7D6378"
+                ))
+            }
+        }
+        WidgetBridge.publish(items)
+        #endif
     }
 
     // MARK: - Mutations + undo
 
-    func saveWithUndo(_ event: EKEvent, snapshot: EventSnapshot?, isNew: Bool, span: EKSpan) {
-        do {
-            try owner(of: event).save(event, span: span, commit: true)
-            if isNew {
-                if let id = event.eventIdentifier { undoStack.append(.remove(id: id)) }
-            } else if let snapshot, let id = event.eventIdentifier {
-                undoStack.append(.restore(id: id, snapshot: snapshot))
-            }
-        } catch {
-            print("Save failed: \(error)")
-        }
-        reload()
+    func newEvent() -> CalEvent {
+        let event = CalEvent()
+        event.calendar = defaultCalendar
+        return event
     }
 
-    func deleteWithUndo(_ event: EKEvent, span: EKSpan) {
+    func saveWithUndo(_ event: CalEvent, snapshot: EventSnapshot?, isNew: Bool, span: EditSpan) {
+        guard let cal = event.calendar ?? defaultCalendar else {
+            toast = "No writable calendar"
+            return
+        }
+        event.calendar = cal
+        if event.title?.isEmpty ?? true { event.title = "New event" }
+        if isNew || event.isLocal {
+            engine.upsert(event.record())
+            undoStack.append(.remove(id: event.id))
+            reload()
+            Task { await pushInsert(event) }
+        } else {
+            let oldKey = snapshot?.calendarID ?? cal.calendarIdentifier
+            let old = engine.record(id: event.id, calendarKey: oldKey)
+            if oldKey != cal.calendarIdentifier { engine.remove(id: event.id, calendarKey: oldKey) }
+            engine.upsert(event.record())
+            if let snapshot { undoStack.append(.restore(id: event.id, snapshot: snapshot)) }
+            reload()
+            Task { await pushUpdate(event, old: old, oldKey: oldKey, span: span) }
+        }
+    }
+
+    func deleteWithUndo(_ event: CalEvent, span: EditSpan) {
+        guard let cal = event.calendar else { return }
         let snapshot = EventSnapshot(event)
-        do {
-            try owner(of: event).remove(event, span: span, commit: true)
-            undoStack.append(.recreate(snapshot: snapshot))
-        } catch {
-            print("Delete failed: \(error)")
+        let key = cal.calendarIdentifier
+        if span == .futureEvents, let masterID = event.recurringEventId {
+            engine.removeInstances(of: masterID, calendarKey: key, from: event.originalStart ?? event.startDate)
+        } else {
+            engine.remove(id: event.id, calendarKey: key)
         }
+        undoStack.append(.recreate(snapshot: snapshot))
         reload()
+        Task { await pushDelete(event, calendar: cal, span: span) }
     }
 
-    func duplicate(_ event: EKEvent, dayOffset: Double = 0) {
-        let copy = EKEvent(eventStore: eventStore)
+    func duplicate(_ event: CalEvent, dayOffset: Double = 0) {
+        let copy = CalEvent()
         var snapshot = EventSnapshot(event)
         snapshot.start = snapshot.start.addingTimeInterval(dayOffset * 86400)
         snapshot.end = snapshot.end.addingTimeInterval(dayOffset * 86400)
+        snapshot.attendees = nil
+        snapshot.recurrence = nil
         snapshot.apply(to: copy, in: self)
-        if copy.calendar == nil || !copy.calendar.allowsContentModifications
-            || calendarOwner[copy.calendar.calendarIdentifier] !== eventStore {
+        if copy.calendar == nil || !(copy.calendar?.allowsContentModifications ?? false) {
             copy.calendar = defaultCalendar
         }
         saveWithUndo(copy, snapshot: nil, isNew: true, span: .thisEvent)
     }
 
-    func move(_ event: EKEvent, to calendar: EKCalendar) {
+    func move(_ event: CalEvent, to calendar: CalCalendar) {
         let snapshot = EventSnapshot(event)
         event.calendar = calendar
         saveWithUndo(event, snapshot: snapshot, isNew: false, span: .thisEvent)
@@ -424,29 +442,377 @@ final class CalendarStore: ObservableObject {
         switch action {
         case .restore(let id, let snapshot):
             if let event = findEvent(id: id) {
+                let before = EventSnapshot(event)
                 snapshot.apply(to: event, in: self)
-                try? owner(of: event).save(event, span: .thisEvent, commit: true)
+                let oldKey = before.calendarID ?? event.calendar?.calendarIdentifier ?? ""
+                let old = engine.record(id: id, calendarKey: oldKey)
+                if oldKey != event.calendar?.calendarIdentifier { engine.remove(id: id, calendarKey: oldKey) }
+                engine.upsert(event.record())
+                reload()
+                Task { await pushUpdate(event, old: old, oldKey: oldKey, span: .thisEvent) }
             }
         case .recreate(let snapshot):
-            let event = EKEvent(eventStore: eventStore)
+            let event = CalEvent()
             snapshot.apply(to: event, in: self)
-            if event.calendar == nil || calendarOwner[event.calendar.calendarIdentifier] !== eventStore {
+            event.recurrence = nil
+            if event.calendar == nil || !(event.calendar?.allowsContentModifications ?? false) {
                 event.calendar = defaultCalendar
             }
-            try? eventStore.save(event, span: .thisEvent, commit: true)
+            guard event.calendar != nil else { return }
+            engine.upsert(event.record())
+            reload()
+            Task { await pushInsert(event) }
         case .remove(let id):
-            if let event = findEvent(id: id) {
-                try? owner(of: event).remove(event, span: .thisEvent, commit: true)
+            if let event = findEvent(id: id), let cal = event.calendar {
+                engine.remove(id: id, calendarKey: cal.calendarIdentifier)
+                reload()
+                Task { await pushDelete(event, calendar: cal, span: .thisEvent) }
+            }
+        }
+    }
+
+    private func findEvent(id: String) -> CalEvent? {
+        if let match = events.first(where: { $0.id == id }) { return match }
+        for (key, dict) in engine.records {
+            if let r = dict[id] { return CalEvent(record: r, calendar: engine.calendar(forKey: key)) }
+        }
+        return nil
+    }
+
+    /// Remap a local id to the server's id in the undo stack.
+    private func remapUndo(from old: String, to new: String) {
+        undoStack = undoStack.map {
+            switch $0 {
+            case .remove(let id) where id == old: return .remove(id: new)
+            case .restore(let id, let s) where id == old: return .restore(id: new, snapshot: s)
+            default: return $0
+            }
+        }
+    }
+
+    // MARK: - RSVP
+
+    func respond(_ event: CalEvent, status: ParticipantStatus) async {
+        guard let cal = event.calendar else { return }
+        guard var attendees = event.attendees, attendees.contains(where: { $0.isSelf }) else {
+            toast = "You're not on this event's guest list (\(cal.accountID))"
+            return
+        }
+        for i in attendees.indices where attendees[i].isSelf { attendees[i].responseStatus = status }
+        // Optimistic: every cached copy of the series/instance shows the answer
+        let key = cal.calendarIdentifier
+        let targetID = event.recurringEventId ?? event.id
+        event.attendees = attendees
+        if let dict = engine.records[key] {
+            for (id, var r) in dict where id == event.id || r.recurringEventId == targetID {
+                r.attendees = attendees
+                engine.upsert(r)
             }
         }
         reload()
+        do {
+            let token = try await accounts.validToken(for: cal.accountID)
+            let sendUpdates = AppSettings.shared.rsvpNotifyOrganizer ? "all" : "none"
+            _ = try await GoogleCalendarAPI.patch(
+                calendarID: cal.googleID, eventID: targetID,
+                body: ["attendees": attendees.map { $0.googleJSON() }],
+                sendUpdates: sendUpdates, token: token
+            )
+            let label: String = status == .accepted ? "Going" : status == .tentative ? "Maybe" : "Not going"
+            toast = "RSVP sent: \(label)" + (sendUpdates == "none" ? " (organizer not emailed)" : "")
+        } catch {
+            toast = "RSVP failed — \(error.localizedDescription)"
+        }
+        await engine.resync(calendarKey: key)
     }
 
-    private func findEvent(id: String) -> EKEvent? {
-        if let match = events.first(where: { $0.eventIdentifier == id }) { return match }
-        for store in allStores {
-            if let match = store.event(withIdentifier: id) { return match }
+    // MARK: - Server writes
+
+    /// Decide Google's sendUpdates for a change touching other guests.
+    private func sendUpdates(for event: CalEvent, old: EventRecord?, verb: String) async -> String {
+        let guests = event.otherAttendees.count
+        let hadGuests = (old?.attendees ?? []).contains { !$0.isSelf }
+        guard guests > 0 || hadGuests else { return "none" }
+        switch AppSettings.shared.guestNotifyPolicy {
+        case .always: return "all"
+        case .never: return "none"
+        case .ask:
+            let answer = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                notifyPrompt = NotifyPrompt(title: "\(verb) “\(event.title ?? "event")”", guestCount: max(guests, 1), continuation: cont)
+            }
+            return answer ? "all" : "none"
         }
-        return nil
+    }
+
+    func resolveNotifyPrompt(_ send: Bool) {
+        guard let prompt = notifyPrompt else { return }
+        notifyPrompt = nil
+        prompt.continuation.resume(returning: send)
+    }
+
+    private func pushInsert(_ event: CalEvent) async {
+        guard let cal = event.calendar else { return }
+        let localID = event.id
+        let wantedMeet = event.wantsMeet
+        do {
+            let token = try await accounts.validToken(for: cal.accountID)
+            let updates = await sendUpdates(for: event, old: nil, verb: "Invite guests to")
+            let created = try await GoogleCalendarAPI.insert(
+                calendarID: cal.googleID, body: EventBody.full(event), sendUpdates: updates, token: token
+            )
+            engine.remove(id: localID, calendarKey: cal.calendarIdentifier)
+            if let record = created.record(calendarKey: cal.calendarIdentifier) {
+                event.id = record.id
+                event.etag = record.etag
+                event.hangoutLink = record.hangoutLink
+                event.wantsMeet = false
+                engine.upsert(record)
+                remapUndo(from: localID, to: record.id)
+                if wantedMeet, record.hangoutLink != nil { toast = "Google Meet link added" }
+            }
+            reload()
+            // Recurring masters → instances come from the server
+            if !(event.recurrence ?? []).isEmpty { await engine.resync(calendarKey: cal.calendarIdentifier) }
+        } catch {
+            toast = "Couldn't create event — \(error.localizedDescription)"
+            engine.remove(id: localID, calendarKey: cal.calendarIdentifier)
+            reload()
+        }
+    }
+
+    private func pushUpdate(_ event: CalEvent, old: EventRecord?, oldKey: String, span: EditSpan) async {
+        guard let cal = event.calendar else { return }
+        let key = cal.calendarIdentifier
+        do {
+            let token = try await accounts.validToken(for: cal.accountID)
+            let updates = await sendUpdates(for: event, old: old, verb: "Update")
+            var eventID = event.id
+            var sourceCal = engine.calendar(forKey: oldKey) ?? cal
+
+            // Calendar change
+            if oldKey != key {
+                if sourceCal.accountID == cal.accountID {
+                    let moved = try await GoogleCalendarAPI.move(
+                        calendarID: sourceCal.googleID, eventID: eventID, to: cal.googleID,
+                        sendUpdates: updates, token: token
+                    )
+                    eventID = moved.id
+                    sourceCal = cal
+                } else {
+                    // Cross-account: copy then delete
+                    let sourceToken = try await accounts.validToken(for: sourceCal.accountID)
+                    let created = try await GoogleCalendarAPI.insert(
+                        calendarID: cal.googleID, body: EventBody.full(event, includeAttendees: false),
+                        sendUpdates: "none", token: token
+                    )
+                    try await GoogleCalendarAPI.delete(calendarID: sourceCal.googleID, eventID: eventID, sendUpdates: updates, token: sourceToken)
+                    engine.remove(id: event.id, calendarKey: key)
+                    if let record = created.record(calendarKey: key) {
+                        remapUndo(from: event.id, to: record.id)
+                        event.id = record.id
+                        engine.upsert(record)
+                    }
+                    reload()
+                    await engine.resync(calendarKey: oldKey)
+                    return
+                }
+            }
+
+            if span == .futureEvents, let masterID = event.recurringEventId {
+                try await pushSeriesSplit(event, masterID: masterID, calendar: cal, updates: updates, token: token)
+            } else {
+                let patched = try await GoogleCalendarAPI.patch(
+                    calendarID: cal.googleID, eventID: eventID,
+                    body: EventBody.patch(event, old: old), sendUpdates: updates, token: token
+                )
+                if let record = patched.record(calendarKey: key) {
+                    var r = record
+                    r.recurrence = r.recurrence ?? event.recurrence
+                    if eventID != event.id { engine.remove(id: event.id, calendarKey: key) }
+                    remapUndo(from: event.id, to: r.id)
+                    event.id = r.id
+                    event.etag = r.etag
+                    event.hangoutLink = r.hangoutLink
+                    if event.wantsMeet, r.hangoutLink != nil { toast = "Google Meet link added" }
+                    event.wantsMeet = false
+                    engine.upsert(r)
+                }
+                reload()
+                if event.isMaster || (old?.recurrence ?? []) != (event.recurrence ?? []) {
+                    await engine.resync(calendarKey: key)
+                }
+            }
+        } catch {
+            toast = "Couldn't save — \(error.localizedDescription)"
+            await engine.resync(calendarKey: key)
+            if oldKey != key { await engine.resync(calendarKey: oldKey) }
+        }
+    }
+
+    /// "This and all future": patch the master when the edited instance is the
+    /// first one; otherwise end the old series before it and start a new one.
+    private func pushSeriesSplit(_ event: CalEvent, masterID: String, calendar cal: CalCalendar, updates: String, token: String) async throws {
+        let key = cal.calendarIdentifier
+        let master = try await GoogleCalendarAPI.getEvent(calendarID: cal.googleID, eventID: masterID, token: token)
+        let masterStart = master.start.flatMap(GoogleDates.parse)
+        let originalStart = event.originalStart ?? event.startDate ?? Date()
+        let newRules = RRule.stripped(event.recurrence ?? master.recurrence ?? [])
+        if let masterStart, abs(masterStart.timeIntervalSince(originalStart)) < 60 {
+            var body = EventBody.full(event, includeAttendees: false)
+            body["recurrence"] = newRules
+            _ = try await GoogleCalendarAPI.patch(calendarID: cal.googleID, eventID: masterID, body: body, sendUpdates: updates, token: token)
+            engine.setMasterRules(newRules, calendarKey: key, masterID: masterID)
+        } else {
+            let truncated = RRule.truncated(master.recurrence ?? [], before: originalStart, allDay: master.start?.date != nil)
+            _ = try await GoogleCalendarAPI.patch(calendarID: cal.googleID, eventID: masterID, body: ["recurrence": truncated], sendUpdates: updates, token: token)
+            engine.setMasterRules(truncated, calendarKey: key, masterID: masterID)
+            var body = EventBody.full(event, includeAttendees: true)
+            body["recurrence"] = newRules
+            _ = try await GoogleCalendarAPI.insert(calendarID: cal.googleID, body: body, sendUpdates: updates, token: token)
+        }
+        engine.removeInstances(of: masterID, calendarKey: key, from: originalStart)
+        reload()
+        await engine.resync(calendarKey: key)
+    }
+
+    private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan) async {
+        let key = cal.calendarIdentifier
+        do {
+            let token = try await accounts.validToken(for: cal.accountID)
+            let updates = await sendUpdates(for: event, old: nil, verb: "Cancel")
+            if span == .futureEvents, let masterID = event.recurringEventId {
+                let master = try await GoogleCalendarAPI.getEvent(calendarID: cal.googleID, eventID: masterID, token: token)
+                let masterStart = master.start.flatMap(GoogleDates.parse)
+                let originalStart = event.originalStart ?? event.startDate ?? Date()
+                if let masterStart, abs(masterStart.timeIntervalSince(originalStart)) < 60 {
+                    try await GoogleCalendarAPI.delete(calendarID: cal.googleID, eventID: masterID, sendUpdates: updates, token: token)
+                } else {
+                    let truncated = RRule.truncated(master.recurrence ?? [], before: originalStart, allDay: master.start?.date != nil)
+                    _ = try await GoogleCalendarAPI.patch(calendarID: cal.googleID, eventID: masterID, body: ["recurrence": truncated], sendUpdates: updates, token: token)
+                    engine.setMasterRules(truncated, calendarKey: key, masterID: masterID)
+                }
+            } else if !event.isLocal {
+                try await GoogleCalendarAPI.delete(calendarID: cal.googleID, eventID: event.id, sendUpdates: updates, token: token)
+            }
+        } catch {
+            toast = "Couldn't delete — \(error.localizedDescription)"
+        }
+        await engine.resync(calendarKey: key)
+    }
+}
+
+/// Builds Google event JSON from a `CalEvent`.
+enum EventBody {
+    static func time(_ date: Date, allDay: Bool, tz: String?) -> [String: Any] {
+        var d = GoogleDates.json(date, allDay: allDay, timeZone: tz)
+        // PATCH merges nested objects; null out the other representation so
+        // Google doesn't see both `date` and `dateTime`.
+        if allDay {
+            d["dateTime"] = NSNull()
+            d["timeZone"] = NSNull()
+        } else {
+            d["date"] = NSNull()
+        }
+        return d
+    }
+
+    static func full(_ event: CalEvent, includeAttendees: Bool = true) -> [String: Any] {
+        var b: [String: Any] = [
+            "summary": event.title ?? "",
+            "location": event.location ?? "",
+            "description": event.notes ?? "",
+            "start": GoogleDates.json(event.startDate, allDay: event.isAllDay, timeZone: event.timeZone),
+            "end": GoogleDates.json(event.endDate, allDay: event.isAllDay, timeZone: event.timeZone),
+        ]
+        if let url = event.url {
+            b["source"] = ["url": url.absoluteString, "title": event.title ?? "Link"]
+        }
+        if let rules = event.recurrence, !rules.isEmpty, event.recurringEventId == nil {
+            b["recurrence"] = rules
+        }
+        if includeAttendees, let attendees = event.attendees, !attendees.isEmpty {
+            b["attendees"] = attendees.map { $0.googleJSON() }
+        }
+        if event.wantsMeet {
+            b["conferenceData"] = [
+                "createRequest": [
+                    "requestId": UUID().uuidString,
+                    "conferenceSolutionKey": ["type": "hangoutsMeet"],
+                ],
+            ]
+        }
+        return b
+    }
+
+    /// Only the fields that changed versus the cached record.
+    static func patch(_ event: CalEvent, old: EventRecord?) -> [String: Any] {
+        guard let old else { return full(event) }
+        var b: [String: Any] = [:]
+        if event.title != old.title { b["summary"] = event.title ?? "" }
+        if event.location != old.location { b["location"] = event.location ?? "" }
+        if event.notes != old.notes { b["description"] = event.notes ?? "" }
+        if event.startDate != old.start || event.isAllDay != old.isAllDay {
+            b["start"] = time(event.startDate, allDay: event.isAllDay, tz: event.timeZone)
+        }
+        if event.endDate != old.end || event.isAllDay != old.isAllDay {
+            b["end"] = time(event.endDate, allDay: event.isAllDay, tz: event.timeZone)
+        }
+        if event.url?.absoluteString != old.url {
+            if let url = event.url {
+                b["source"] = ["url": url.absoluteString, "title": event.title ?? "Link"]
+            } else {
+                b["source"] = NSNull()
+            }
+        }
+        if event.recurringEventId == nil, (event.recurrence ?? []) != (old.recurrence ?? []) {
+            b["recurrence"] = event.recurrence ?? []
+        }
+        if (event.attendees ?? []) != (old.attendees ?? []) {
+            b["attendees"] = (event.attendees ?? []).map { $0.googleJSON() }
+        }
+        if event.wantsMeet {
+            b["conferenceData"] = [
+                "createRequest": [
+                    "requestId": UUID().uuidString,
+                    "conferenceSolutionKey": ["type": "hangoutsMeet"],
+                ],
+            ]
+        }
+        return b
+    }
+}
+
+/// RRULE helpers (Google stores recurrence as RFC 5545 lines).
+enum RRule {
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd"
+        f.timeZone = TimeZone.autoupdatingCurrent
+        return f
+    }()
+
+    /// End the rule before `date` (UNTIL = one second earlier, or the previous day for all-day series).
+    static func truncated(_ rules: [String], before date: Date, allDay: Bool) -> [String] {
+        rules.map { line in
+            guard line.hasPrefix("RRULE:") else { return line }
+            var parts = line.dropFirst(6).split(separator: ";").map(String.init)
+                .filter { !$0.hasPrefix("UNTIL=") && !$0.hasPrefix("COUNT=") }
+            let until = allDay
+                ? dayFormatter.string(from: date.addingTimeInterval(-86400))
+                : GoogleDates.rruleUTC.string(from: date.addingTimeInterval(-1))
+            parts.append("UNTIL=\(until)")
+            return "RRULE:" + parts.joined(separator: ";")
+        }
+    }
+
+    /// Drop UNTIL/COUNT so a new series runs open-ended.
+    static func stripped(_ rules: [String]) -> [String] {
+        rules.map { line in
+            guard line.hasPrefix("RRULE:") else { return line }
+            let parts = line.dropFirst(6).split(separator: ";").map(String.init)
+                .filter { !$0.hasPrefix("UNTIL=") && !$0.hasPrefix("COUNT=") }
+            return "RRULE:" + parts.joined(separator: ";")
+        }
     }
 }

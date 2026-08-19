@@ -1,6 +1,5 @@
 #if os(macOS)
 import SwiftUI
-import EventKit
 import AppKit
 
 struct MenuBarLabel: View {

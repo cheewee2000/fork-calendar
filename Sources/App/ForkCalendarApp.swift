@@ -8,6 +8,7 @@ struct ForkCalendarApp: App {
     @StateObject private var store = CalendarStore()
     @StateObject private var appState = AppState()
     @StateObject private var settings = AppSettings.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         #if os(iOS)
@@ -36,6 +37,9 @@ struct ForkCalendarApp: App {
         #if os(macOS)
         .defaultSize(width: 1320, height: 840)
         #endif
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.syncIfDue() }
+        }
         .commands {
             CommandGroup(after: .newItem) {
                 Button("New Event") { appState.newEvent(store: store) }
@@ -86,6 +90,7 @@ struct ForkCalendarApp: App {
         Settings {
             SettingsView()
                 .environmentObject(settings)
+                .environmentObject(store)
                 .tint(CWT.ink)
         }
         #endif

@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 struct PaletteItem: Identifiable {
     let id = UUID()
@@ -163,11 +162,7 @@ private struct PaletteBody: View {
             PaletteItem(title: "Year view", subtitle: nil, icon: "square.grid.4x3.fill", shortcut: "Y") { appState.viewMode = .year },
             PaletteItem(title: "Share availability", subtitle: nil, icon: "square.and.arrow.up.on.square", shortcut: "S") { appState.toggleAvailabilityMode() },
             PaletteItem(title: "Undo", subtitle: nil, icon: "arrow.uturn.backward", shortcut: "⌘Z") { store.undo() },
-            PaletteItem(title: "Google diagnostics", subtitle: "Write Google lookup report to a file", icon: "stethoscope", shortcut: nil) {
-                let state = appState
-                let s = store
-                Task { await GoogleSync.runDiagnostics(store: s, appState: state) }
-            },
+            PaletteItem(title: "Sync now", subtitle: "Pull changes from every Google account", icon: "arrow.triangle.2.circlepath", shortcut: "⌘R") { store.refresh() },
         ]
         if q.isEmpty {
             items.append(contentsOf: commands)

@@ -1,6 +1,18 @@
 import Foundation
 import Combine
 
+enum GuestNotifyPolicy: String, CaseIterable, Identifiable {
+    case always, never, ask
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .always: return "Always email guests"
+        case .never: return "Never email guests"
+        case .ask: return "Ask each time"
+        }
+    }
+}
+
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
@@ -31,6 +43,18 @@ final class AppSettings: ObservableObject {
     /// Google OAuth desktop-app client (user-supplied, from console.cloud.google.com)
     @Published var googleClientID: String { didSet { UserDefaults.standard.set(googleClientID, forKey: "googleClientID") } }
     @Published var googleClientSecret: String { didSet { UserDefaults.standard.set(googleClientSecret, forKey: "googleClientSecret") } }
+    /// Optional iOS-type OAuth client (custom-scheme redirect); falls back to the desktop client.
+    @Published var googleIOSClientID: String { didSet { UserDefaults.standard.set(googleIOSClientID, forKey: "googleIOSClientID") } }
+    /// Background sync cadence in seconds; 0 = manual only (⌘R).
+    @Published var syncInterval: Int { didSet { UserDefaults.standard.set(syncInterval, forKey: "syncInterval") } }
+    /// Sync when the app comes to the foreground / window becomes key.
+    @Published var syncOnActivate: Bool { didSet { UserDefaults.standard.set(syncOnActivate, forKey: "syncOnActivate") } }
+    /// RSVP: email the organizer (Google sendUpdates=all) or answer silently.
+    @Published var rsvpNotifyOrganizer: Bool { didSet { UserDefaults.standard.set(rsvpNotifyOrganizer, forKey: "rsvpNotifyOrganizer") } }
+    /// Creating/editing/deleting events that have guests: notify them?
+    @Published var guestNotifyPolicy: GuestNotifyPolicy { didSet { UserDefaults.standard.set(guestNotifyPolicy.rawValue, forKey: "guestNotifyPolicy") } }
+    /// Calendar for new events (calendarIdentifier); empty = first account's primary.
+    @Published var defaultCalendarID: String { didSet { UserDefaults.standard.set(defaultCalendarID, forKey: "defaultCalendarID") } }
 
     private init() {
         let d = UserDefaults.standard
@@ -50,6 +74,12 @@ final class AppSettings: ObservableObject {
         calendarColors = d.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]
         googleClientID = d.string(forKey: "googleClientID") ?? ""
         googleClientSecret = d.string(forKey: "googleClientSecret") ?? ""
+        googleIOSClientID = d.string(forKey: "googleIOSClientID") ?? ""
+        syncInterval = d.object(forKey: "syncInterval") as? Int ?? 120
+        syncOnActivate = d.object(forKey: "syncOnActivate") as? Bool ?? true
+        rsvpNotifyOrganizer = d.object(forKey: "rsvpNotifyOrganizer") as? Bool ?? true
+        guestNotifyPolicy = GuestNotifyPolicy(rawValue: d.string(forKey: "guestNotifyPolicy") ?? "") ?? .ask
+        defaultCalendarID = d.string(forKey: "defaultCalendarID") ?? ""
     }
 
     var secondaryTimeZones: [TimeZone] {

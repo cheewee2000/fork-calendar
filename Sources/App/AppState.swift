@@ -1,5 +1,4 @@
 import SwiftUI
-import EventKit
 
 enum ViewMode: Hashable {
     case day
@@ -21,13 +20,13 @@ enum ViewMode: Hashable {
 
 struct EditorContext: Identifiable {
     let id = UUID()
-    let event: EKEvent
+    let event: CalEvent
     let isNew: Bool
 }
 
 enum PendingSpanAction {
-    case save(EKEvent, EventSnapshot?)
-    case delete(EKEvent)
+    case save(CalEvent, EventSnapshot?)
+    case delete(CalEvent)
 }
 
 struct AvailabilitySlot: Identifiable, Equatable {
@@ -90,6 +89,8 @@ final class AppState: ObservableObject {
     @Published var columnVisibility: NavigationSplitViewVisibility = .all
     /// iPhone: presents the calendar list (sidebar equivalent) as a sheet.
     @Published var showCalendarsSheet = false
+    /// iOS: settings/accounts sheet (macOS uses the Settings window).
+    @Published var showSettingsSheet = false
 
     // ⌘K palette
     @Published var paletteOpen = false
@@ -240,17 +241,16 @@ final class AppState: ObservableObject {
 
     func newEvent(store: CalendarStore, start: Date? = nil, end: Date? = nil, allDay: Bool = false, title: String? = nil) {
         guard store.accessState == .granted else { return }
-        let event = EKEvent(eventStore: store.eventStore)
+        let event = store.newEvent()
         let startDate = start ?? defaultStart
         event.startDate = startDate
         event.endDate = end ?? startDate.addingTimeInterval(Double(settings.defaultDuration) * 60)
         event.isAllDay = allDay
-        event.calendar = store.defaultCalendar
         if let title { event.title = title }
         panelContext = EditorContext(event: event, isNew: true)
     }
 
-    func select(_ event: EKEvent) {
+    func select(_ event: CalEvent) {
         panelContext = EditorContext(event: event, isNew: false)
     }
 
@@ -264,8 +264,8 @@ final class AppState: ObservableObject {
     }
 
     /// Route a change through the recurring-event span dialog when needed.
-    func commitChange(to event: EKEvent, snapshot: EventSnapshot?, isNew: Bool, store: CalendarStore) {
-        if !isNew, event.hasRecurrenceRules || event.isDetached {
+    func commitChange(to event: CalEvent, snapshot: EventSnapshot?, isNew: Bool, store: CalendarStore) {
+        if !isNew, event.isInstance {
             pendingSpanAction = .save(event, snapshot)
             showSpanDialog = true
         } else {
@@ -273,8 +273,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    func requestDelete(_ event: EKEvent, store: CalendarStore) {
-        if event.hasRecurrenceRules || event.isDetached {
+    func requestDelete(_ event: CalEvent, store: CalendarStore) {
+        if event.isInstance {
             pendingSpanAction = .delete(event)
             showSpanDialog = true
         } else {
@@ -283,7 +283,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    func resolveSpanAction(span: EKSpan?, store: CalendarStore) {
+    func resolveSpanAction(span: EditSpan?, store: CalendarStore) {
         defer {
             pendingSpanAction = nil
             showSpanDialog = false
@@ -349,6 +349,6 @@ final class AppState: ObservableObject {
     }
 }
 
-func eventKey(_ event: EKEvent) -> String {
+func eventKey(_ event: CalEvent) -> String {
     (event.eventIdentifier ?? "new") + "-" + String(event.startDate?.timeIntervalSinceReferenceDate ?? 0)
 }

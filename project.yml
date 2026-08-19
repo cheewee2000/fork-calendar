@@ -27,17 +27,14 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.13.4"
-        CFBundleVersion: "42"
-        NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
-        NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
+        CFBundleShortVersionString: "0.14.0"
+        CFBundleVersion: "43"
         NSHumanReadableCopyright: © 2026 CW&T
         ATSApplicationFontsPath: .
     entitlements:
       path: Support/ForkCalendar-macOS.entitlements
       properties:
         com.apple.security.app-sandbox: true
-        com.apple.security.personal-information.calendars: true
         com.apple.security.network.client: true
         com.apple.security.network.server: true
   ForkCalendar-iOS:
@@ -56,10 +53,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.13.4"
-        CFBundleVersion: "42"
-        NSCalendarsFullAccessUsageDescription: Fork Calendar shows and edits events from your calendars.
-        NSCalendarsUsageDescription: Fork Calendar shows and edits events from your calendars.
+        CFBundleShortVersionString: "0.14.0"
+        CFBundleVersion: "43"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
@@ -81,6 +76,7 @@ targets:
     sources:
       - Widgets
       - Sources/App/Theme.swift
+      - Sources/App/WidgetShared.swift
       - Sources/Utilities/ColorUtils.swift
       - Sources/Fonts
     settings:
@@ -95,10 +91,8 @@ targets:
       path: Support/Info-Widgets.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.13.4"
-        CFBundleVersion: "42"
-        NSCalendarsFullAccessUsageDescription: Fork Calendar shows your events in widgets.
-        NSCalendarsUsageDescription: Fork Calendar shows your events in widgets.
+        CFBundleShortVersionString: "0.14.0"
+        CFBundleVersion: "43"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
