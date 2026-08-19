@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var store: CalendarStore
     @ObservedObject private var accounts = AccountManager.shared
+    @State private var transferStatus = ""
 
     private static let timeZones = AppSettings.curatedTimeZones
 
@@ -88,6 +89,23 @@ struct SettingsView: View {
                 TextField("iOS client ID (optional)", text: $settings.googleIOSClientID)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                HStack {
+                    Button("Paste from Mac") {
+                        transferStatus = settings.applyOAuthClientTransfer(Clipboard.paste())
+                            ? "Pasted ✓" : "Clipboard has no Fork Calendar OAuth client"
+                    }
+                    Spacer()
+                    Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                }
+                #else
+                HStack {
+                    Button("Copy for iPhone") {
+                        Clipboard.copy(settings.oauthClientTransferString())
+                        transferStatus = "Copied — on the iPhone, Settings → OAuth client → Paste from Mac"
+                    }
+                    Spacer()
+                    Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                }
                 #endif
                 Text("Create OAuth clients at console.cloud.google.com (APIs & Services → Credentials) in a project with the Google Calendar API enabled. macOS uses a **Desktop app** client; iOS works best with an **iOS** client for bundle ID com.cwandt.forkcalendar.app (falls back to the desktop client). Each account you add signs in through Google's own page.")
                     .font(CWT.mono(10))

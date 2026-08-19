@@ -82,6 +82,31 @@ final class AppSettings: ObservableObject {
         defaultCalendarID = d.string(forKey: "defaultCalendarID") ?? ""
     }
 
+    // MARK: - OAuth client transfer (Mac → iPhone via Universal Clipboard)
+
+    private static let transferPrefix = "forkcal-oauth:"
+
+    /// Encodes the OAuth client fields as one pasteable string.
+    func oauthClientTransferString() -> String {
+        let payload = ["id": googleClientID, "secret": googleClientSecret, "ios": googleIOSClientID]
+        let data = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+        return Self.transferPrefix + data.base64EncodedString()
+    }
+
+    /// Applies a string produced by `oauthClientTransferString()`. Returns false if unrecognized.
+    @discardableResult
+    func applyOAuthClientTransfer(_ string: String?) -> Bool {
+        guard let string = string?.trimmingCharacters(in: .whitespacesAndNewlines),
+              string.hasPrefix(Self.transferPrefix),
+              let data = Data(base64Encoded: String(string.dropFirst(Self.transferPrefix.count))),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return false }
+        if let v = payload["id"], !v.isEmpty { googleClientID = v }
+        if let v = payload["secret"] { googleClientSecret = v }
+        if let v = payload["ios"], !v.isEmpty { googleIOSClientID = v }
+        return true
+    }
+
     var secondaryTimeZones: [TimeZone] {
         secondaryTZs.compactMap(TimeZone.init(identifier:))
     }
