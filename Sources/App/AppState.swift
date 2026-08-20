@@ -171,7 +171,7 @@ final class AppState: ObservableObject {
                 // own .animation(value: monthCover) drives the motion.)
                 let gen = overlapGeneration
                 monthCover = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
@@ -249,7 +249,7 @@ final class AppState: ObservableObject {
                     self.monthCover = true // sheet's .animation(value:) slides it
                     // Cleanup is anchored to the slide's start commit, not the
                     // keypress, so a slow mount can't cut the slide short.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
                         guard self.overlapGeneration == gen else { return }
                         var t = Transaction()
                         t.disablesAnimations = true
@@ -276,7 +276,7 @@ final class AppState: ObservableObject {
                 // before the columns had visibly slid.
                 DispatchQueue.main.async {
                     guard self.overlapGeneration == gen else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.32)) { cover() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.28)) { cover() }
                 }
             }
             return
@@ -301,7 +301,7 @@ final class AppState: ObservableObject {
                 guard self.overlapGeneration == gen else { return }
                 self.monthCover = false // sheet's .animation(value:) slides it
                 // Anchored to the slide's start commit (see cover-up path).
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
