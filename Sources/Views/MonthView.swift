@@ -1,17 +1,5 @@
 import SwiftUI
 
-private struct WeekPosition: Equatable {
-    let week: Date
-    let y: CGFloat
-}
-
-private struct WeekPositionKey: PreferenceKey {
-    static var defaultValue: [WeekPosition] = []
-    static func reduce(value: inout [WeekPosition], nextValue: () -> [WeekPosition]) {
-        value.append(contentsOf: nextValue())
-    }
-}
-
 /// Row height shared by month rows and the time grid's week strip — the two
 /// must render identically for the grid↔month zoom to hand off invisibly.
 let monthRowHeight: CGFloat = 108
@@ -24,10 +12,16 @@ struct MonthView: View {
     @EnvironmentObject var settings: AppSettings
 
     private let rowHeight: CGFloat = monthRowHeight
-    /// Blocks currentDate updates from pre-scroll layout passes: before the
-    /// initial jump lands, the top visible week is the window start (a year
-    /// back), and letting it through would stomp the date being viewed.
-    @State private var didInitialScroll = false
+    /// Two-way scroll anchor: the week at the top of the viewport. Seeded at
+    /// init so the first layout lands on the viewed week without instantiating
+    /// the lazy rows above it (scrollTo(id:) built ~a year of rows to get
+    /// there), and since it tracks the user's scrolling, re-renders can't
+    /// re-assert a stale position.
+    @State private var topWeek: Date?
+
+    init(initialWeek: Date) {
+        _topWeek = State(initialValue: initialWeek)
+    }
 
     private var weeks: [Date] {
         let cal = appState.calendar
@@ -62,59 +56,34 @@ struct MonthView: View {
             Divider()
             GeometryReader { geo in
                 let cellW = (geo.size.width - gutter) / 7
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(allWeeks, id: \.self) { weekStart in
-                                MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
-                                    .frame(height: rowHeight)
-                                    .id(weekStart)
-                                    .background(
-                                        GeometryReader { g in
-                                            Color.clear.preference(
-                                                key: WeekPositionKey.self,
-                                                value: [WeekPosition(week: weekStart, y: g.frame(in: .named("monthScroll")).minY)]
-                                            )
-                                        }
-                                    )
-                            }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(allWeeks, id: \.self) { weekStart in
+                            MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
+                                .frame(height: rowHeight)
                         }
                     }
-                    .coordinateSpace(name: "monthScroll")
-                    .onPreferenceChange(WeekPositionKey.self) { positions in
-                        updateCurrentMonth(from: positions)
-                    }
-                    // One-shot scrolls only: an offset held in ScrollPosition
-                    // gets re-asserted on later re-renders (event fetches land
-                    // right after mount), snapping the view away and blocking
-                    // upward scrolling. The reader's scrollTo lets go after.
-                    .onAppear {
-                        let target = appState.monthScrollTarget ?? appState.currentDate
-                        proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
-                        appState.monthScrollTarget = nil
-                        didInitialScroll = true
-                    }
-                    .onChange(of: appState.monthScrollTarget) {
-                        guard let target = appState.monthScrollTarget else { return }
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
-                        }
-                        appState.monthScrollTarget = nil
-                    }
+                    .scrollTargetLayout()
                 }
+                .scrollPosition(id: $topWeek, anchor: .top)
+                .onAppear { appState.monthScrollTarget = nil } // consumed at init
+                .onChange(of: appState.monthScrollTarget) {
+                    guard let target = appState.monthScrollTarget else { return }
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        topWeek = cal.startOfWeek(for: target)
+                    }
+                    appState.monthScrollTarget = nil
+                }
+                .onChange(of: topWeek) { updateCurrentMonth() }
             }
         }
     }
 
     /// The topmost visible week defines the header month while scrolling.
-    private func updateCurrentMonth(from positions: [WeekPosition]) {
-        guard appState.viewMode == .month, didInitialScroll else { return }
-        guard let top = positions
-            .filter({ $0.y > -rowHeight * 0.6 })
-            .min(by: { $0.y < $1.y })
-        else { return }
+    private func updateCurrentMonth() {
+        guard appState.viewMode == .month, let top = topWeek else { return }
         let cal = appState.calendar
-        guard let representative = cal.date(byAdding: .day, value: 3, to: top.week) else { return }
+        guard let representative = cal.date(byAdding: .day, value: 3, to: top) else { return }
         if !cal.isDate(representative, equalTo: appState.currentDate, toGranularity: .month) {
             appState.currentDate = representative
         }
