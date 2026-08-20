@@ -12,7 +12,7 @@ struct TimeGridView: View {
     @EnvironmentObject var settings: AppSettings
     let days: [Date]
 
-    private var gutterWidth: CGFloat { 54 + CGFloat(settings.secondaryTimeZones.count) * 42 }
+    private var gutterWidth: CGFloat { settings.gridGutterWidth }
     private var hourHeight: CGFloat { appState.hourHeight }
     @State private var zoomBase: CGFloat?
     @State private var zoomAnchorHours: CGFloat?
@@ -24,8 +24,9 @@ struct TimeGridView: View {
             let pageWidth = max(outer.size.width - gutterWidth, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
             let extDays = appState.visibleDays(pageOffset: -1, current: days) + days + appState.visibleDays(pageOffset: 1, current: days)
-            let bars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)
-            let laneCount = (bars.map(\.lane).max() ?? -1) + 1
+            let stripBars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)
+                .filter { $0.lane < 3 }
+            let stripLanes = (stripBars.map(\.lane).max() ?? -1) + 1
 
             VStack(spacing: 0) {
                 // The strip's clipped content still hit-tests one page beyond
@@ -36,7 +37,9 @@ struct TimeGridView: View {
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         HStack(spacing: 0) {
                             ForEach(extDays, id: \.self) { day in
-                                dayHeader(day)
+                                Text(weekdaySymbol(day))
+                                    .font(CWT.mono(10, .semibold))
+                                    .foregroundStyle(CWT.inkSoft)
                                     .frame(width: colWidth)
                                     // New columns are pushed in by the layout,
                                     // not faded in (no-fade zoom policy).
@@ -45,6 +48,8 @@ struct TimeGridView: View {
                         }
                     }
                 }
+                .padding(.vertical, 4)
+                .background(CWT.paper)
                 .overlay(alignment: .leading) {
                     // Zone labels for the gutter columns; doubles as the click
                     // blocker keeping the strip's invisible out-of-bounds
@@ -64,27 +69,40 @@ struct TimeGridView: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .contentShape(Rectangle())
                 }
+                Divider()
+                // The shared week strip: the same MonthCell + MonthSpanBar
+                // the month view renders its rows with, so the dates and
+                // all-day events on both sides of a grid↔month zoom are
+                // identical pixels and the fold hands off invisibly.
                 HStack(alignment: .top, spacing: 0) {
-                    // Blank gutter spacer; still blocks clicks from reaching
-                    // the strip's invisible out-of-bounds content.
-                    Color.clear
-                        .frame(width: gutterWidth)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .zIndex(1)
+                    // Gutter month label; also blocks clicks from reaching the
+                    // strip's invisible out-of-bounds content.
+                    MonthRowGutter(
+                        weekStart: appState.calendar.startOfWeek(for: days.first ?? appState.currentDate),
+                        width: gutterWidth
+                    )
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                    .zIndex(1)
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         ZStack(alignment: .topLeading) {
-                            AllDayCreateLayer(extDays: extDays, colWidth: colWidth)
-                            ForEach(bars) { bar in
-                                AllDaySpanBar(bar: bar, extDays: extDays, colWidth: colWidth)
+                            HStack(spacing: 0) {
+                                ForEach(extDays, id: \.self) { day in
+                                    MonthCell(day: day, cellW: colWidth, rowH: monthRowHeight,
+                                              laneInset: CGFloat(stripLanes) * 16, showsTimedEvents: false)
+                                        .frame(width: colWidth, height: monthRowHeight)
+                                        .transition(.identity)
+                                }
                             }
-                            newAllDayGhost(extDays: extDays, colWidth: colWidth)
+                            ForEach(stripBars) { bar in
+                                MonthSpanBar(bar: bar, cellW: colWidth, rowH: monthRowHeight, barsTop: 24)
+                            }
                         }
                         .frame(width: pageWidth * 3, alignment: .topLeading)
                     }
                 }
-                .frame(height: max(CGFloat(laneCount) * 18 + 2, 20))
-                .padding(.bottom, 3)
+                .frame(height: monthRowHeight)
+                .background(CWT.paper)
                 Divider()
                 ScrollView {
                     HStack(alignment: .top, spacing: 0) {
@@ -109,11 +127,14 @@ struct TimeGridView: View {
                     .background { SideScrollPan(appState: appState) }
                     #endif
                 }
-                // Grid↔month zoom: the hour section folds to zero height while
-                // the header + all-day strip above stays pinned, revealing (or
-                // covering) the month view mounted behind.
-                .frame(maxHeight: appState.gridFold ? 0 : .infinity, alignment: .top)
-                .clipped()
+                // Grid↔month zoom: the hour section folds away under the
+                // pinned week strip, revealing (or covering) the month view
+                // mounted behind. A mask (not a frame) so the fold is pure
+                // compositing — no per-frame relayout of the hour grid.
+                .background(CWT.paper)
+                .mask(alignment: .top) {
+                    Rectangle().frame(maxHeight: appState.gridFold ? 0 : .infinity)
+                }
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
                     CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
@@ -126,9 +147,6 @@ struct TimeGridView: View {
                     gridScroll.scrollTo(y: appState.hourHeight * 8)
                 }
             }
-            // Content-sized (not full-frame) so the opaque area shrinks with
-            // the fold and the month behind is revealed below the strip.
-            .background(CWT.paper)
             .onAppear {
                 appState.weekPageWidth = pageWidth
                 appState.gridColumnWidth = colWidth
@@ -195,6 +213,11 @@ struct TimeGridView: View {
                 zoomAnchorHours = nil
                 appState.isZooming = false
             }
+    }
+
+    private func weekdaySymbol(_ day: Date) -> String {
+        let cal = appState.calendar
+        return cal.veryShortWeekdaySymbols[cal.component(.weekday, from: day) - 1]
     }
 
     private func dayHeader(_ day: Date) -> some View {

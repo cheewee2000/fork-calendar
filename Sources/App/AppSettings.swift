@@ -124,6 +124,11 @@ final class AppSettings: ObservableObject {
         if !t.defaultCalendarID.isEmpty { defaultCalendarID = t.defaultCalendarID }
     }
 
+    /// Leading gutter shared by the time grid (hour labels) and the month
+    /// view (month labels) so their day columns align exactly — the grid↔month
+    /// zoom depends on the two layouts matching pixel for pixel.
+    var gridGutterWidth: CGFloat { 54 + CGFloat(secondaryTimeZones.count) * 42 }
+
     var secondaryTimeZones: [TimeZone] {
         secondaryTZs.compactMap(TimeZone.init(identifier:))
     }

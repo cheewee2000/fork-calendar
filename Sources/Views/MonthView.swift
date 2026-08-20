@@ -12,6 +12,10 @@ private struct WeekPositionKey: PreferenceKey {
     }
 }
 
+/// Row height shared by month rows and the time grid's week strip — the two
+/// must render identically for the grid↔month zoom to hand off invisibly.
+let monthRowHeight: CGFloat = 108
+
 /// Continuous vertically-scrolling month view (a stack of week rows spanning
 /// ±1–2 years). The header month updates as you scroll; navigation scrolls here.
 struct MonthView: View {
@@ -19,7 +23,7 @@ struct MonthView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: AppSettings
 
-    private let rowHeight: CGFloat = 108
+    private let rowHeight: CGFloat = monthRowHeight
 
     private var weeks: [Date] {
         let cal = appState.calendar
@@ -39,8 +43,10 @@ struct MonthView: View {
     var body: some View {
         let cal = appState.calendar
         let allWeeks = weeks
+        let gutter = settings.gridGutterWidth
         VStack(spacing: 0) {
             HStack(spacing: 0) {
+                Color.clear.frame(width: gutter, height: 1)
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
                         .font(CWT.mono(10, .semibold))
@@ -51,7 +57,7 @@ struct MonthView: View {
             .padding(.vertical, 4)
             Divider()
             GeometryReader { geo in
-                let cellW = geo.size.width / 7
+                let cellW = (geo.size.width - gutter) / 7
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -112,6 +118,7 @@ struct MonthWeekRow: View {
     let rowH: CGFloat
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         let cal = appState.calendar
@@ -119,15 +126,18 @@ struct MonthWeekRow: View {
         let bars = SpanLayout.bars(days: days, store: store, calendar: cal).filter { $0.lane < 3 }
         let laneCount = (bars.map(\.lane).max() ?? -1) + 1
         let barsTop: CGFloat = 24
-        ZStack(alignment: .topLeading) {
-            HStack(spacing: 0) {
-                ForEach(days, id: \.self) { day in
-                    MonthCell(day: day, cellW: cellW, rowH: rowH, laneInset: CGFloat(laneCount) * 16)
-                        .frame(width: cellW, height: rowH)
+        HStack(alignment: .top, spacing: 0) {
+            MonthRowGutter(weekStart: weekStart, width: settings.gridGutterWidth)
+            ZStack(alignment: .topLeading) {
+                HStack(spacing: 0) {
+                    ForEach(days, id: \.self) { day in
+                        MonthCell(day: day, cellW: cellW, rowH: rowH, laneInset: CGFloat(laneCount) * 16)
+                            .frame(width: cellW, height: rowH)
+                    }
                 }
-            }
-            ForEach(bars) { bar in
-                MonthSpanBar(bar: bar, cellW: cellW, rowH: rowH, barsTop: barsTop)
+                ForEach(bars) { bar in
+                    MonthSpanBar(bar: bar, cellW: cellW, rowH: rowH, barsTop: barsTop)
+                }
             }
         }
         .onAppear {
@@ -137,6 +147,37 @@ struct MonthWeekRow: View {
                 store.ensureFetched(DateInterval(start: weekStart, end: end))
             }
         }
+    }
+}
+
+/// Leading gutter cell for a week row: shows the month name on the row
+/// containing the 1st (the same idea as the year view's gutter). Used by both
+/// the month view and the time grid's week strip.
+struct MonthRowGutter: View {
+    @EnvironmentObject var appState: AppState
+    let weekStart: Date
+    let width: CGFloat
+
+    var body: some View {
+        Text(label)
+            .font(CWT.mono(9, .semibold))
+            .foregroundStyle(CWT.inkSoft)
+            .padding(.leading, 6)
+            .padding(.top, 4)
+            .frame(width: width, alignment: .topLeading)
+    }
+
+    private var label: String {
+        let cal = appState.calendar
+        for offset in 0..<7 {
+            if let day = cal.date(byAdding: .day, value: offset, to: weekStart),
+               cal.component(.day, from: day) == 1 {
+                let f = DateFormatter()
+                f.setLocalizedDateFormatFromTemplate("MMM")
+                return f.string(from: day)
+            }
+        }
+        return ""
     }
 }
 
@@ -301,6 +342,9 @@ struct MonthCell: View {
     let cellW: CGFloat
     let rowH: CGFloat
     var laneInset: CGFloat = 0
+    /// The time grid's week strip reuses this cell but shows timed events on
+    /// the hour grid instead of as title chips.
+    var showsTimedEvents = true
 
     /// Highlighted while drag-creating an all-day span, or covered by a
     /// drag-created event still open (unsaved) in the details panel.
@@ -320,7 +364,7 @@ struct MonthCell: View {
     var body: some View {
         let cal = appState.calendar
         let events = EventLayout.mergeDuplicates(
-            settings.monthAllDayOnly ? [] : store.events(on: day, calendar: cal).timed
+            (settings.monthAllDayOnly || !showsTimedEvents) ? [] : store.events(on: day, calendar: cal).timed
         )
         let isToday = day.isSameDay(as: Date(), calendar: cal)
         let dayOfMonth = cal.component(.day, from: day)
