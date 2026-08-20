@@ -38,6 +38,9 @@ struct TimeGridView: View {
                             ForEach(extDays, id: \.self) { day in
                                 dayHeader(day)
                                     .frame(width: colWidth)
+                                    // New columns are pushed in by the layout,
+                                    // not faded in (no-fade zoom policy).
+                                    .transition(.identity)
                             }
                         }
                     }
@@ -93,6 +96,7 @@ struct TimeGridView: View {
                                 HStack(spacing: 0) {
                                     ForEach(extDays, id: \.self) { day in
                                         DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
+                                            .transition(.identity)
                                     }
                                 }
                             }

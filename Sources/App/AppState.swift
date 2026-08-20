@@ -87,8 +87,26 @@ final class AppState: ObservableObject {
         guard mode != viewMode else { return }
         if mode.zoomFamily == viewMode.zoomFamily {
             // Same screen (time-grid day-count change): no view swap — the
-            // grid animates its own columns in and out.
-            withAnimation(Self.zoomAnimation) { viewMode = mode }
+            // grid animates its own columns in and out. When growing, pin the
+            // leftmost visible day so week is just "7 days from here", not a
+            // jump to the aligned week start; when shrinking, the default
+            // re-anchor to currentDate keeps the shared columns in both sets.
+            let oldDays = visibleDays
+            let newCount: Int
+            switch mode {
+            case .day: newCount = 1
+            case .days(let n): newCount = n
+            default: newCount = 7
+            }
+            let grownAnchor = newCount >= oldDays.count ? oldDays.first : nil
+            withAnimation(Self.zoomAnimation) {
+                viewMode = mode // didSet clears gridAnchor
+                // Anchored weeks bypass the weekend filter, so respect the
+                // classic aligned framing when weekends are hidden.
+                if let grownAnchor, settings.showWeekends || mode != .week {
+                    gridAnchor = grownAnchor
+                }
+            }
             return
         }
         let spec = makeZoomSpec(from: viewMode.zoomFamily, to: mode.zoomFamily)
@@ -104,7 +122,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    static let zoomAnimation = Animation.easeOut(duration: 0.32)
+    static let zoomAnimation = Animation.spring(response: 0.3, dampingFraction: 1)
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue

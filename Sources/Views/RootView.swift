@@ -195,6 +195,10 @@ struct CalendarDetailView: View {
                         default: TimeGridView(days: appState.visibleDays)
                         }
                     }
+                    // No fades: each layer is opaque and the deeper view
+                    // (higher family rawValue) draws on top, so zooms are pure
+                    // geometry — the top view covers or reveals the one below.
+                    .background(CWT.paper)
                     // .transition must sit INSIDE the .id identity boundary —
                     // outside it, the id swap replaces the subtree without ever
                     // consulting the transition and nothing animates. Keyed on
@@ -202,6 +206,7 @@ struct CalendarDetailView: View {
                     // its columns instead of swapping views.
                     .transition(zoomTransition)
                     .id(appState.viewMode.zoomFamily)
+                    .zIndex(Double(appState.viewMode.zoomFamily.rawValue))
                 }
                 .clipped()
             }
@@ -226,11 +231,11 @@ struct CalendarDetailView: View {
     private var zoomTransition: AnyTransition {
         if reduceMotion { return .opacity }
         let spec = appState.zoomSpec
-        guard spec.direction != 0, spec.scale > 1 else { return .opacity }
+        guard spec.direction != 0, spec.scale > 1 else { return .identity }
         let anchor = UnitPoint(x: 0.5, y: spec.anchorY)
-        let identity = RowBandZoom(scaleY: 1, anchor: anchor, opacity: 1)
-        let stretched = RowBandZoom(scaleY: spec.scale, anchor: anchor, opacity: 0)
-        let collapsed = RowBandZoom(scaleY: 1 / spec.scale, anchor: anchor, opacity: 0)
+        let identity = RowBandZoom(scaleY: 1, anchor: anchor)
+        let stretched = RowBandZoom(scaleY: spec.scale, anchor: anchor)
+        let collapsed = RowBandZoom(scaleY: 1 / spec.scale, anchor: anchor)
         if spec.direction > 0 {
             return .asymmetric(
                 insertion: .modifier(active: collapsed, identity: identity),
@@ -245,18 +250,15 @@ struct CalendarDetailView: View {
     }
 }
 
-/// Vertical scale about a fixed anchor row, with a fade. The anchor keeps the
+/// Vertical scale about a fixed anchor row — no fade. The anchor keeps the
 /// shared week band pinned in place while the rest of the view compresses or
 /// expands around it.
 private struct RowBandZoom: ViewModifier {
     var scaleY: CGFloat
     var anchor: UnitPoint
-    var opacity: Double
 
     func body(content: Content) -> some View {
-        content
-            .scaleEffect(x: 1, y: scaleY, anchor: anchor)
-            .opacity(opacity)
+        content.scaleEffect(x: 1, y: scaleY, anchor: anchor)
     }
 }
 
