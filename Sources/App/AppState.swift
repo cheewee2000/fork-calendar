@@ -183,10 +183,10 @@ final class AppState: ObservableObject {
         zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
         if coverUp {
             gridOverlapDays = visibleDays
-            // Drop any stale navigation target (e.g. a "Today" pressed back in
-            // grid mode) so the month opens on the week being viewed, matching
-            // the strip and the sheet.
-            monthScrollTarget = nil
+            // Pin the month's opening scroll to the week being viewed,
+            // overriding any stale target (e.g. a "Today" pressed back in
+            // grid mode) so strip, sheet, and settled month agree.
+            monthScrollTarget = currentDate
         }
         monthCover = !coverUp // sheet starts down before covering, up before revealing
         gridMonthOverlap = true
