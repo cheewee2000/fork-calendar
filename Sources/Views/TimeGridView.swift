@@ -519,7 +519,9 @@ struct AllDaySpanBar: View {
     }
 
     private var moveDrag: some Gesture {
-        DragGesture(minimumDistance: 5)
+        // Global space: the bar follows the preview offset — a local-space
+        // translation feeds the applied delta back in and jitters.
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
                 guard isEditable else { return }
                 isDragging = true
@@ -545,7 +547,8 @@ struct AllDaySpanBar: View {
             }
             #endif
             .gesture(
-                DragGesture(minimumDistance: 2)
+                // Global space: the handle moves with the resizing bar (see moveDrag).
+                DragGesture(minimumDistance: 2, coordinateSpace: .global)
                     .onChanged { value in
                         isResizing = true
                         resizingLead = lead
@@ -715,8 +718,10 @@ struct DayColumn: View {
     }
 
     private func snap(_ y: CGFloat) -> CGFloat {
-        let quarter = hourHeight / 4
-        return (y / quarter).rounded() * quarter
+        // Same zoom-dependent step as event drags: 5/10/15-minute snapping.
+        let minutes: CGFloat = hourHeight >= 112 ? 5 : hourHeight >= 64 ? 10 : 15
+        let step = hourHeight * minutes / 60
+        return (y / step).rounded() * step
     }
 
     private func date(atY y: CGFloat) -> Date {
@@ -964,20 +969,23 @@ struct EventBlockView: View {
             }
             #endif
             .gesture(
-                DragGesture(minimumDistance: 2)
+                // Global space: the handle MOVES with the resize preview, so
+                // a local-space translation oscillated between snap steps
+                // (the applied delta fed back into the measurement — jitter).
+                DragGesture(minimumDistance: 2, coordinateSpace: .global)
                     .onChanged { value in
                         isResizing = true
                         resizingTop = top
-                        // Live preview snaps in 15-minute steps
-                        let quarter = hourHeight / 4
-                        resizeDelta = (value.translation.height / quarter).rounded() * quarter
+                        // Live preview snaps to the zoom-dependent step
+                        let step = hourHeight * snapMinutes / 60
+                        resizeDelta = (value.translation.height / step).rounded() * step
                     }
                     .onEnded { value in
                         defer {
                             isResizing = false
                             resizeDelta = 0
                         }
-                        let minutes = (Double(value.translation.height / hourHeight) * 60 / 15).rounded() * 15
+                        let minutes = (Double(value.translation.height / hourHeight) * 60 / snapMinutes).rounded() * snapMinutes
                         guard minutes != 0 else { return }
                         let snapshot = EventSnapshot(item.event)
                         if top {
@@ -994,17 +1002,24 @@ struct EventBlockView: View {
             )
     }
 
-    /// Live preview snaps to 15-minute rows and whole day columns
+    /// Minute snap step for drags, finer as the hour scale zooms in.
+    private var snapMinutes: Double {
+        if hourHeight >= 112 { return 5 }
+        if hourHeight >= 64 { return 10 }
+        return 15
+    }
+
+    /// Live preview snaps to the zoom-dependent step and whole day columns
     private func snappedMoveOffset(_ translation: CGSize) -> CGSize {
-        let quarter = hourHeight / 4
+        let step = hourHeight * snapMinutes / 60
         return CGSize(
             width: (translation.width / colWidth).rounded() * colWidth,
-            height: (translation.height / quarter).rounded() * quarter
+            height: (translation.height / step).rounded() * step
         )
     }
 
     private func commitMove(_ translation: CGSize) {
-        let minuteDelta = (Double(translation.height / hourHeight) * 60 / 15).rounded() * 15
+        let minuteDelta = (Double(translation.height / hourHeight) * 60 / snapMinutes).rounded() * snapMinutes
         let dayDelta = (translation.width / colWidth).rounded()
         guard minuteDelta != 0 || dayDelta != 0 else { return }
         let interval = minuteDelta * 60 + Double(dayDelta) * 86400
@@ -1023,7 +1038,9 @@ struct EventBlockView: View {
     }
 
     private var moveDrag: some Gesture {
-        DragGesture(minimumDistance: 5)
+        // Global space: the block follows the preview offset, so a
+        // local-space translation would feed back and jitter (see resize).
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
                 guard isEditable else { return }
                 isDragging = true

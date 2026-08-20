@@ -40,10 +40,19 @@ enum EventLayout {
                 if r0 != r1 { return r0 < r1 }
                 return ($0.calendar?.calendarIdentifier ?? "") < ($1.calendar?.calendarIdentifier ?? "")
             }
-            let primary = copies.first(where: { $0.needsMyResponse })
-                ?? copies.first(where: { $0.myParticipantStatus != nil })
-                ?? copies.first(where: { $0.calendar?.allowsContentModifications == true })
-                ?? copies[0]
+            // Sidebar order wins outright — even over a copy awaiting my RSVP
+            // (its strip still renders dashed; responding happens on the
+            // invite copy via the panel). With no rank, fall back to the old
+            // interaction-preference chain.
+            let primary: CalEvent
+            if rank != nil {
+                primary = copies[0]
+            } else {
+                primary = copies.first(where: { $0.needsMyResponse })
+                    ?? copies.first(where: { $0.myParticipantStatus != nil })
+                    ?? copies.first(where: { $0.calendar?.allowsContentModifications == true })
+                    ?? copies[0]
+            }
             merged.append((primary, copies.filter { $0 !== primary }))
         }
         return merged
