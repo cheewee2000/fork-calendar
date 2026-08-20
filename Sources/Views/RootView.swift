@@ -208,6 +208,10 @@ struct CalendarDetailView: View {
                     if family == .month || (appState.gridMonthOverlap && family == .grid) {
                         MonthView()
                             .background(CWT.paper)
+                            // The fold alone reads as static — slide the rows
+                            // up into place as the grid folds away (and back
+                            // down as it unfolds), in the same spring.
+                            .offset(y: appState.gridMonthOverlap && !appState.gridFold ? monthRowHeight * 3 : 0)
                             .transition(zoomTransition)
                             .id(ZoomFamily.month)
                             .zIndex(1)
