@@ -172,7 +172,7 @@ private struct YearDayCell: View {
         .contentShape(Rectangle())
         .onTapGesture {
             appState.goTo(day)
-            appState.viewMode = .day
+            appState.setViewMode(.day)
         }
     }
 }

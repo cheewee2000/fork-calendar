@@ -156,10 +156,10 @@ private struct PaletteBody: View {
         let commands: [PaletteItem] = [
             PaletteItem(title: "Go to today", subtitle: nil, icon: "calendar", shortcut: "T") { appState.goToToday() },
             PaletteItem(title: "New event", subtitle: nil, icon: "plus", shortcut: "C") { appState.newEvent(store: store) },
-            PaletteItem(title: "Day view", subtitle: nil, icon: "rectangle", shortcut: "D") { appState.viewMode = .day },
-            PaletteItem(title: "Week view", subtitle: nil, icon: "rectangle.split.3x1", shortcut: "W") { appState.viewMode = .week },
-            PaletteItem(title: "Month view", subtitle: nil, icon: "square.grid.3x3", shortcut: "M") { appState.viewMode = .month },
-            PaletteItem(title: "Year view", subtitle: nil, icon: "square.grid.4x3.fill", shortcut: "Y") { appState.viewMode = .year },
+            PaletteItem(title: "Day view", subtitle: nil, icon: "rectangle", shortcut: "D") { appState.setViewMode(.day) },
+            PaletteItem(title: "Week view", subtitle: nil, icon: "rectangle.split.3x1", shortcut: "W") { appState.setViewMode(.week) },
+            PaletteItem(title: "Month view", subtitle: nil, icon: "square.grid.3x3", shortcut: "M") { appState.setViewMode(.month) },
+            PaletteItem(title: "Year view", subtitle: nil, icon: "square.grid.4x3.fill", shortcut: "Y") { appState.setViewMode(.year) },
             PaletteItem(title: "Share availability", subtitle: nil, icon: "square.and.arrow.up.on.square", shortcut: "S") { appState.toggleAvailabilityMode() },
             PaletteItem(title: "Undo", subtitle: nil, icon: "arrow.uturn.backward", shortcut: "⌘Z") { store.undo() },
             PaletteItem(title: "Sync now", subtitle: "Pull changes from every Google account", icon: "arrow.triangle.2.circlepath", shortcut: "⌘R") { store.refresh() },
@@ -183,7 +183,7 @@ private struct PaletteBody: View {
                     shortcut: nil
                 ) {
                     appState.goTo(event.startDate)
-                    if appState.viewMode == .month { appState.viewMode = .week }
+                    if appState.viewMode == .month { appState.setViewMode(.week) }
                     appState.select(event)
                 })
             }

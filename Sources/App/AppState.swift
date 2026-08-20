@@ -16,6 +16,32 @@ enum ViewMode: Hashable {
         case .year: return "Year"
         }
     }
+
+    /// Which screen this mode renders. Modes in the same family (all the
+    /// time-grid variants) animate internally by adding/removing columns;
+    /// crossing families plays the row-band zoom. Raw value = zoom depth.
+    var zoomFamily: ZoomFamily {
+        switch self {
+        case .month: return .month
+        case .year: return .year
+        default: return .grid
+        }
+    }
+}
+
+enum ZoomFamily: Int, Hashable {
+    case year = 0, month = 1, grid = 2
+}
+
+/// Geometry for one cross-family zoom. Every view is a stack of week rows
+/// (time grid = 1 row, month ≈ 6 on screen, year ≈ 53), so the deeper view
+/// always occupies a horizontal band of rows inside the shallower one:
+/// zooming scales between full height and that band, anchored where the band
+/// sits, which reads as rows sliding in/out above and below it.
+struct ZoomSpec: Equatable {
+    var direction: Int      // +1 zooming in (toward day), -1 out, 0 none
+    var anchorY: CGFloat    // viewport fraction of the band's center
+    var scale: CGFloat      // shallow rows / band rows (stretch factor)
 }
 
 struct EditorContext: Identifiable {
@@ -48,6 +74,72 @@ final class AppState: ObservableObject {
     @Published var currentDate = Date()
     @Published var viewMode: ViewMode = .week {
         didSet { if viewMode != oldValue { gridAnchor = nil } }
+    }
+    /// Geometry of the last cross-family view change. Published so the
+    /// outgoing view re-renders with the right transition before the swap
+    /// (SwiftUI captures removal transitions one render early).
+    @Published var zoomSpec = ZoomSpec(direction: 0, anchorY: 0.5, scale: 1)
+
+    /// Change the view mode with an Apple Calendar-style zoom. All mode
+    /// switches should go through here (not `viewMode =`) so the transition
+    /// knows whether it's diving in or pulling out, and from where.
+    func setViewMode(_ mode: ViewMode) {
+        guard mode != viewMode else { return }
+        if mode.zoomFamily == viewMode.zoomFamily {
+            // Same screen (time-grid day-count change): no view swap — the
+            // grid animates its own columns in and out.
+            withAnimation(Self.zoomAnimation) { viewMode = mode }
+            return
+        }
+        let spec = makeZoomSpec(from: viewMode.zoomFamily, to: mode.zoomFamily)
+        if spec != zoomSpec {
+            // Publish the spec first, then swap modes on the next runloop
+            // turn so the outgoing view's removal transition picks it up.
+            zoomSpec = spec
+            DispatchQueue.main.async {
+                withAnimation(Self.zoomAnimation) { self.viewMode = mode }
+            }
+        } else {
+            withAnimation(Self.zoomAnimation) { viewMode = mode }
+        }
+    }
+
+    static let zoomAnimation = Animation.easeOut(duration: 0.32)
+
+    private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
+        let zoomingIn = to.rawValue > from.rawValue
+        let shallow = zoomingIn ? from : to
+        let deep = zoomingIn ? to : from
+        let cal = calendar
+        let viewportH = gridViewportH > 100 ? gridViewportH : 700
+        // MonthView shows viewport/rowHeight(108) week rows, current week at top.
+        let monthVisibleRows = max(viewportH / 108, 2)
+
+        var total: CGFloat = 1, bandStart: CGFloat = 0, band: CGFloat = 1
+        let week = cal.startOfWeek(for: currentDate)
+        switch shallow {
+        case .month:
+            // Month scrolls the current week to the top of its viewport.
+            total = monthVisibleRows
+            bandStart = 0
+            band = 1
+        case .year:
+            let year = cal.component(.year, from: currentDate)
+            if let jan1 = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
+               let dec31 = cal.date(from: DateComponents(year: year, month: 12, day: 31)) {
+                let firstWeek = cal.startOfWeek(for: jan1)
+                let lastWeek = cal.startOfWeek(for: dec31)
+                total = CGFloat((cal.dateComponents([.day], from: firstWeek, to: lastWeek).day ?? 358) / 7 + 1)
+                bandStart = CGFloat((cal.dateComponents([.day], from: firstWeek, to: week).day ?? 0) / 7)
+                band = deep == .month ? min(monthVisibleRows, total - bandStart) : 1
+            }
+        case .grid:
+            break // grid is never the shallow side
+        }
+        let anchorY = min(max((bandStart + band / 2) / total, 0), 1)
+        return ZoomSpec(direction: zoomingIn ? 1 : -1,
+                        anchorY: anchorY,
+                        scale: max(total / max(band, 0.5), 1))
     }
     /// Set when navigation (not scrolling) moves the month view; the view scrolls there and clears it.
     @Published var monthScrollTarget: Date?
@@ -231,9 +323,9 @@ final class AppState: ObservableObject {
     func setDayCount(_ n: Int) {
         gridAnchor = nil
         switch n {
-        case 1: viewMode = .day
-        case 7: viewMode = .week
-        default: viewMode = .days(n)
+        case 1: setViewMode(.day)
+        case 7: setViewMode(.week)
+        default: setViewMode(.days(n))
         }
     }
 

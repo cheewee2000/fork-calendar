@@ -65,11 +65,11 @@ struct ForkCalendarApp: App {
                 Button("Next") { appState.step(1) }
                     .keyboardShortcut(.rightArrow, modifiers: [.command])
                 Divider()
-                Button("Day") { appState.viewMode = .day }
+                Button("Day") { appState.setViewMode(.day) }
                     .keyboardShortcut("1", modifiers: [.command])
-                Button("Week") { appState.viewMode = .week }
+                Button("Week") { appState.setViewMode(.week) }
                     .keyboardShortcut("2", modifiers: [.command])
-                Button("Month") { appState.viewMode = .month }
+                Button("Month") { appState.setViewMode(.month) }
                     .keyboardShortcut("3", modifiers: [.command])
                 Divider()
                 Button("Share Availability") { appState.toggleAvailabilityMode() }

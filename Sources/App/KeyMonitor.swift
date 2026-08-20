@@ -225,10 +225,10 @@ enum KeyMonitor {
 
         switch event.charactersIgnoringModifiers?.lowercased() {
         case "t": appState.goToToday(); return true
-        case "d": appState.viewMode = .day; return true
-        case "w": appState.viewMode = .week; return true
-        case "m": appState.viewMode = .month; return true
-        case "y": appState.viewMode = .year; return true
+        case "d": appState.setViewMode(.day); return true
+        case "w": appState.setViewMode(.week); return true
+        case "m": appState.setViewMode(.month); return true
+        case "y": appState.setViewMode(.year); return true
         case "c": appState.newEvent(store: store); return true
         case "s": appState.toggleAvailabilityMode(); return true
         case "r": store.refresh(); return true

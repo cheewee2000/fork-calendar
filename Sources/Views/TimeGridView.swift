@@ -202,7 +202,7 @@ struct TimeGridView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             appState.currentDate = day
-            appState.viewMode = .day
+            appState.setViewMode(.day)
         }
     }
 

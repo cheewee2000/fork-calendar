@@ -178,6 +178,7 @@ struct CalendarDetailView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var didSetInitialMode = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -185,23 +186,77 @@ struct CalendarDetailView: View {
             Divider()
             if store.accessState == .denied {
                 AccessDeniedView()
-            } else if appState.viewMode == .month {
-                MonthView()
-            } else if appState.viewMode == .year {
-                YearView()
             } else {
-                TimeGridView(days: appState.visibleDays)
+                ZStack {
+                    Group {
+                        switch appState.viewMode {
+                        case .month: MonthView()
+                        case .year: YearView()
+                        default: TimeGridView(days: appState.visibleDays)
+                        }
+                    }
+                    // .transition must sit INSIDE the .id identity boundary —
+                    // outside it, the id swap replaces the subtree without ever
+                    // consulting the transition and nothing animates. Keyed on
+                    // the family so day↔3-day↔week keeps one grid that animates
+                    // its columns instead of swapping views.
+                    .transition(zoomTransition)
+                    .id(appState.viewMode.zoomFamily)
+                }
+                .clipped()
             }
         }
         .background(CWT.paper)
         .onAppear {
             #if os(iOS)
             if !didSetInitialMode, sizeClass == .compact {
+                // Direct set: the launch default should not play a zoom.
                 appState.viewMode = .days(3)
             }
             #endif
             didSetInitialMode = true
         }
+    }
+
+    /// Apple Calendar-style zoom. Zooming out (week → month → year), the
+    /// current view collapses vertically into the row band it occupies in the
+    /// shallower view while that view's other rows slide in from above and
+    /// below; zooming in plays the reverse — the band stretches to fill the
+    /// screen as the deeper view grows out of it.
+    private var zoomTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        let spec = appState.zoomSpec
+        guard spec.direction != 0, spec.scale > 1 else { return .opacity }
+        let anchor = UnitPoint(x: 0.5, y: spec.anchorY)
+        let identity = RowBandZoom(scaleY: 1, anchor: anchor, opacity: 1)
+        let stretched = RowBandZoom(scaleY: spec.scale, anchor: anchor, opacity: 0)
+        let collapsed = RowBandZoom(scaleY: 1 / spec.scale, anchor: anchor, opacity: 0)
+        if spec.direction > 0 {
+            return .asymmetric(
+                insertion: .modifier(active: collapsed, identity: identity),
+                removal: .modifier(active: stretched, identity: identity)
+            )
+        } else {
+            return .asymmetric(
+                insertion: .modifier(active: stretched, identity: identity),
+                removal: .modifier(active: collapsed, identity: identity)
+            )
+        }
+    }
+}
+
+/// Vertical scale about a fixed anchor row, with a fade. The anchor keeps the
+/// shared week band pinned in place while the rest of the view compresses or
+/// expands around it.
+private struct RowBandZoom: ViewModifier {
+    var scaleY: CGFloat
+    var anchor: UnitPoint
+    var opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(x: 1, y: scaleY, anchor: anchor)
+            .opacity(opacity)
     }
 }
 
@@ -310,13 +365,13 @@ struct HeaderBar: View {
 
     private var viewMenu: some View {
         Menu {
-            Button { appState.viewMode = .day } label: { menuLabel("Day", "D", appState.viewMode == .day) }
-            Button { appState.viewMode = .week } label: { menuLabel("Week", "W", appState.viewMode == .week) }
-            Button { appState.viewMode = .month } label: { menuLabel("Month", "M", appState.viewMode == .month) }
-            Button { appState.viewMode = .year } label: { menuLabel("Year", "Y", appState.viewMode == .year) }
+            Button { appState.setViewMode(.day) } label: { menuLabel("Day", "D", appState.viewMode == .day) }
+            Button { appState.setViewMode(.week) } label: { menuLabel("Week", "W", appState.viewMode == .week) }
+            Button { appState.setViewMode(.month) } label: { menuLabel("Month", "M", appState.viewMode == .month) }
+            Button { appState.setViewMode(.year) } label: { menuLabel("Year", "Y", appState.viewMode == .year) }
             Divider()
             ForEach([2, 3, 4, 5], id: \.self) { n in
-                Button { appState.viewMode = .days(n) } label: {
+                Button { appState.setViewMode(.days(n)) } label: {
                     menuLabel("\(n) days", "\(n)", appState.viewMode == .days(n))
                 }
             }

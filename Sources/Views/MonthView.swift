@@ -396,7 +396,7 @@ struct MonthCell: View {
         #else
         .onTapGesture(count: 2) {
             appState.currentDate = day
-            appState.viewMode = .day
+            appState.setViewMode(.day)
         }
         .onTapGesture { appState.currentDate = day }
         .gesture(createDrag)
