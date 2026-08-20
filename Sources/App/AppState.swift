@@ -111,6 +111,37 @@ final class AppState: ObservableObject {
     /// update cycle used to strip the transaction and snap the transition.
     @Published var zoomTick = 0
 
+    /// The day at the viewport's left edge as the user actually sees it:
+    /// the anchor (or aligned first day) plus the fractional page held in
+    /// the resting pan offset — a side-scroll can leave the strip parked
+    /// mid-week without ever touching gridAnchor.
+    private var visualFirstDay: Date? {
+        guard let base = gridAnchor ?? visibleDays.first else { return nil }
+        guard gridColumnWidth > 4, abs(pan.offset) > 1 else { return base }
+        let dayShift = Int((-pan.offset / gridColumnWidth).rounded())
+        return calendar.date(byAdding: .day, value: dayShift, to: base)
+    }
+
+    /// Whether the grid is visually resting on its aligned days (Sunday at
+    /// the left for week view): no free anchor AND no resting pan offset.
+    private var gridVisuallyAligned: Bool {
+        gridAnchor == nil && abs(pan.offset) < 1
+    }
+
+    /// One animated commit that slides the grid home: re-points currentDate
+    /// at the days actually on screen, clears the free anchor AND the
+    /// resting pan offset, and bumps zoomTick so it all animates as one move.
+    private func realignGrid() {
+        if let vf = visualFirstDay,
+           let center = calendar.date(byAdding: .day, value: max(visibleDays.count, 1) / 2, to: vf),
+           !calendar.isDate(center, inSameDayAs: currentDate) {
+            currentDate = center
+        }
+        gridAnchor = nil
+        pan.offset = 0
+        zoomTick += 1
+    }
+
     /// Park the neighbor pages for the duration of an animation, then bring
     /// them back in a non-animated commit once the motion is over.
     private func hideGridNeighbors(restoreAfter delay: Double) {
@@ -144,12 +175,11 @@ final class AppState: ObservableObject {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
-            } else if gridAnchor != nil {
-                // Re-selecting the current grid mode re-aligns a free-anchored
-                // view (e.g. 'w' in a side-scrolled week slides Sunday to the
-                // left) — animated, never a snap.
-                gridAnchor = nil
-                zoomTick += 1
+            } else if !gridVisuallyAligned {
+                // Re-selecting the current grid mode re-aligns a side-scrolled
+                // view (e.g. 'w' in a panned week slides Sunday to the left) —
+                // animated, never a snap.
+                realignGrid()
             }
             return
         }
@@ -197,8 +227,11 @@ final class AppState: ObservableObject {
             // rows) mounts as the align settles; the real MonthView mounts at
             // cleanup, AFTER motion ends — a static pixel-identical swap.
             // viewMode stays .week until that cleanup.
+            // "Aligned" means VISUALLY aligned: a side-scroll parks the strip
+            // at a fractional pan offset without touching gridAnchor, so the
+            // anchor alone can't tell whether Sunday is at the left.
             var aligned = false
-            if case .week = viewMode, gridAnchor == nil { aligned = true }
+            if case .week = viewMode, gridVisuallyAligned { aligned = true }
             zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
             // Pin the month's opening scroll to the week being viewed,
             // overriding any stale target (e.g. a "Today" pressed back in
@@ -230,11 +263,11 @@ final class AppState: ObservableObject {
             if aligned {
                 cover()
             } else {
-                viewMode = .week
-                // Explicit: a same-value `.week` assignment skips didSet,
-                // so a free-anchored week would otherwise never re-align.
-                gridAnchor = nil
-                zoomTick += 1
+                // Capture the visual position BEFORE the mode swap, then slide
+                // home: anchor cleared, resting pan offset zeroed, currentDate
+                // re-pointed at the week on screen — one animated move.
+                realignGrid()
+                viewMode = .week // no-op if already .week; didSet re-clears anchor
                 // The sheet waits for the align to finish. The countdown is
                 // anchored one runloop later — after the align's commit has
                 // rendered — because the align's animation clock starts at its
@@ -257,7 +290,12 @@ final class AppState: ObservableObject {
             gridMonthOverlap = true
             var t = Transaction()
             t.disablesAnimations = true
-            withTransaction(t) { viewMode = mode }
+            withTransaction(t) {
+                viewMode = mode
+                // A pan offset left over from before entering month view would
+                // mount the revealed grid visually shifted off Sunday.
+                pan.offset = 0
+            }
             let gen = overlapGeneration
             DispatchQueue.main.async {
                 guard self.overlapGeneration == gen else { return }
