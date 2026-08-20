@@ -214,14 +214,16 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.async {
                     guard self.overlapGeneration == gen else { return }
                     self.monthCover = true // sheet's .animation(value:) slides it
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.45)) {
-                    guard self.overlapGeneration == gen else { return }
-                    var t = Transaction()
-                    t.disablesAnimations = true
-                    withTransaction(t) {
-                        self.viewMode = mode
-                        self.gridMonthOverlap = false
+                    // Cleanup is anchored to the slide's start commit, not the
+                    // keypress, so a slow mount can't cut the slide short.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
+                        guard self.overlapGeneration == gen else { return }
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            self.viewMode = mode
+                            self.gridMonthOverlap = false
+                        }
                     }
                 }
             }
@@ -233,12 +235,16 @@ final class AppState: ObservableObject {
                 // so a free-anchored week would otherwise never re-align.
                 gridAnchor = nil
                 zoomTick += 1
-                // Fixed handoff, timed to the align's settle (easeOut ends
-                // hard at its duration): completion-chaining on
-                // .logicallyComplete left a dead beat after motion became
-                // imperceptible. Deterministic now that the align starts in
-                // a light commit at frame one.
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.26)) { cover() }
+                // The sheet waits for the align to finish. The countdown is
+                // anchored one runloop later — after the align's commit has
+                // rendered — because the align's animation clock starts at its
+                // first FRAME, not at the keypress: on a heavy commit a
+                // keypress-anchored timer expired early and the sheet rose
+                // before the columns had visibly slid.
+                DispatchQueue.main.async {
+                    guard self.overlapGeneration == gen else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.32)) { cover() }
+                }
             }
             return
         }
@@ -256,10 +262,11 @@ final class AppState: ObservableObject {
             DispatchQueue.main.async {
                 guard self.overlapGeneration == gen else { return }
                 self.monthCover = false // sheet's .animation(value:) slides it
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
-                guard self.overlapGeneration == gen else { return }
-                self.gridMonthOverlap = false
+                // Anchored to the slide's start commit (see cover-up path).
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
+                    guard self.overlapGeneration == gen else { return }
+                    self.gridMonthOverlap = false
+                }
             }
             return
         }
