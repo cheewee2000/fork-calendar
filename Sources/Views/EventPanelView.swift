@@ -215,7 +215,7 @@ struct EventPanelView: View {
 
                     row(icon: "calendar") {
                         Picker("", selection: $calendarID) {
-                            ForEach(context.isNew || !isReadOnly ? store.writableCalendars : store.calendars, id: \.calendarIdentifier) { cal in
+                            ForEach(context.isNew || !isReadOnly ? store.writableCalendars : store.orderedCalendars, id: \.calendarIdentifier) { cal in
                                 Text(cal.title).tag(cal.calendarIdentifier)
                             }
                         }

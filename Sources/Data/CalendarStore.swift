@@ -145,8 +145,14 @@ final class CalendarStore: ObservableObject {
     }
 
     /// Calendars this app can write to (new events / move targets).
+    /// Every calendar in sidebar display order (accounts in account order,
+    /// each account's subscriptions in the user's drag order).
+    var orderedCalendars: [CalCalendar] {
+        calendarsBySource.flatMap(\.calendars)
+    }
+
     var writableCalendars: [CalCalendar] {
-        calendars.filter { $0.allowsContentModifications }
+        orderedCalendars.filter { $0.allowsContentModifications }
     }
 
     var calendarsBySource: [(source: String, calendars: [CalCalendar])] {
