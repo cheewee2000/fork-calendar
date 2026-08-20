@@ -236,10 +236,10 @@ final class CalendarStore: ObservableObject {
             start = min(start, fetched.start)
             end = max(end, fetched.end)
         }
-        if end.timeIntervalSince(start) > 400 * 86400 {
-            start = interval.start.addingTimeInterval(-45 * 86400)
-            end = interval.end.addingTimeInterval(45 * 86400)
-        }
+        // The interval only ever grows: shrinking it (an old 400-day cap
+        // re-centered on the newest request) silently unloaded events from
+        // month rows already scrolled past — and lazy rows only re-request
+        // their range on first appearance, so they stayed blank.
         fetchedInterval = DateInterval(start: start, end: end)
         reload()
         engine.ensureWindow(covers: DateInterval(start: interval.start, end: interval.end))

@@ -142,7 +142,8 @@ final class AppState: ObservableObject {
             default: newCount = 7
             }
             let grownAnchor = newCount >= oldDays.count ? oldDays.first : nil
-            hideGridNeighbors(restoreAfter: 0.5)
+            // Neighbors stay LIVE here: added columns animate into place
+            // precisely because they already exist as neighbor-page columns.
             withAnimation(Self.zoomAnimation) {
                 viewMode = mode // didSet clears gridAnchor
                 // Anchored weeks bypass the weekend filter, so respect the
@@ -174,7 +175,8 @@ final class AppState: ObservableObject {
             monthScrollTarget = currentDate
             monthCover = false
             gridMonthOverlap = true
-            hideGridNeighbors(restoreAfter: 0.9)
+            // Neighbors stay live: the align phase slides columns that only
+            // animate if they already exist as neighbor-page columns.
             let gen = overlapGeneration
             let cover: () -> Void = {
                 guard self.overlapGeneration == gen else { return }
