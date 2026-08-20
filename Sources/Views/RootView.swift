@@ -187,26 +187,37 @@ struct CalendarDetailView: View {
             if store.accessState == .denied {
                 AccessDeniedView()
             } else {
+                // No fades: each layer is opaque and the deeper view draws on
+                // top, so zooms are pure geometry — the top view covers or
+                // reveals the one below. During a grid↔month zoom BOTH views
+                // stay mounted (gridMonthOverlap): the grid's header strip and
+                // the month's rows are live the whole time; the only motion is
+                // the grid's hour section folding, and the hidden view
+                // unmounts after the fold. .transition sits INSIDE the .id
+                // identity boundary — outside it, the id swap replaces the
+                // subtree without ever consulting the transition.
+                let family = appState.viewMode.zoomFamily
                 ZStack {
-                    Group {
-                        switch appState.viewMode {
-                        case .month: MonthView()
-                        case .year: YearView()
-                        default: TimeGridView(days: appState.visibleDays)
-                        }
+                    if family == .year {
+                        YearView()
+                            .background(CWT.paper)
+                            .transition(zoomTransition)
+                            .id(ZoomFamily.year)
+                            .zIndex(0)
                     }
-                    // No fades: each layer is opaque and the deeper view
-                    // (higher family rawValue) draws on top, so zooms are pure
-                    // geometry — the top view covers or reveals the one below.
-                    .background(CWT.paper)
-                    // .transition must sit INSIDE the .id identity boundary —
-                    // outside it, the id swap replaces the subtree without ever
-                    // consulting the transition and nothing animates. Keyed on
-                    // the family so day↔3-day↔week keeps one grid that animates
-                    // its columns instead of swapping views.
-                    .transition(zoomTransition)
-                    .id(appState.viewMode.zoomFamily)
-                    .zIndex(Double(appState.viewMode.zoomFamily.rawValue))
+                    if family == .month || (appState.gridMonthOverlap && family == .grid) {
+                        MonthView()
+                            .background(CWT.paper)
+                            .transition(zoomTransition)
+                            .id(ZoomFamily.month)
+                            .zIndex(1)
+                    }
+                    if family == .grid || (appState.gridMonthOverlap && family == .month) {
+                        TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridOverlapDays)
+                            .transition(zoomTransition)
+                            .id(ZoomFamily.grid)
+                            .zIndex(2)
+                    }
                 }
                 .clipped()
             }
@@ -231,7 +242,9 @@ struct CalendarDetailView: View {
     private var zoomTransition: AnyTransition {
         if reduceMotion { return .opacity }
         let spec = appState.zoomSpec
-        guard spec.direction != 0, spec.scale > 1 else { return .identity }
+        // Grid↔month mounts/unmounts are instant; the fold itself is layout
+        // animation inside the grid, not a view transition.
+        guard spec.kind == .band, spec.direction != 0, spec.scale > 1 else { return .identity }
         let anchor = UnitPoint(x: 0.5, y: spec.anchorY)
         let identity = RowBandZoom(scaleY: 1, anchor: anchor)
         let stretched = RowBandZoom(scaleY: spec.scale, anchor: anchor)

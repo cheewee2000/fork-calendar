@@ -39,9 +39,14 @@ enum ZoomFamily: Int, Hashable {
 /// zooming scales between full height and that band, anchored where the band
 /// sits, which reads as rows sliding in/out above and below it.
 struct ZoomSpec: Equatable {
+    /// band: whole-view fold through the shared week-row band (year pairs).
+    /// gridMonth: no view transform at all — both views stay mounted and the
+    /// grid's hour section folds/unfolds while its header strip stays put.
+    enum Kind { case band, gridMonth }
     var direction: Int      // +1 zooming in (toward day), -1 out, 0 none
     var anchorY: CGFloat    // viewport fraction of the band's center
     var scale: CGFloat      // shallow rows / band rows (stretch factor)
+    var kind: Kind = .band
 }
 
 struct EditorContext: Identifiable {
@@ -79,6 +84,17 @@ final class AppState: ObservableObject {
     /// outgoing view re-renders with the right transition before the swap
     /// (SwiftUI captures removal transitions one render early).
     @Published var zoomSpec = ZoomSpec(direction: 0, anchorY: 0.5, scale: 1)
+    /// True while the time grid's hour section is collapsed to zero height
+    /// (the folded state on the month side of a grid↔month zoom).
+    @Published var gridFold = false
+    /// True while a grid↔month zoom is in flight: both views stay mounted so
+    /// the header strip and month rows are live the whole time — nothing is
+    /// destroyed until the fold finishes.
+    @Published var gridMonthOverlap = false
+    /// Columns the overlapping grid shows once viewMode is already .month
+    /// (visibleDays is empty then).
+    var gridOverlapDays: [Date] = []
+    private var overlapGeneration = 0
 
     /// Change the view mode with an Apple Calendar-style zoom. All mode
     /// switches should go through here (not `viewMode =`) so the transition
@@ -109,7 +125,11 @@ final class AppState: ObservableObject {
             }
             return
         }
-        let spec = makeZoomSpec(from: viewMode.zoomFamily, to: mode.zoomFamily)
+        let fromF = viewMode.zoomFamily, toF = mode.zoomFamily
+        if fromF == .grid, toF == .month { gridMonthSwap(to: mode, foldAway: true); return }
+        if fromF == .month, toF == .grid { gridMonthSwap(to: mode, foldAway: false); return }
+        if toF == .grid { gridFold = false } // arriving from year: never folded
+        let spec = makeZoomSpec(from: fromF, to: toF)
         if spec != zoomSpec {
             // Publish the spec first, then swap modes on the next runloop
             // turn so the outgoing view's removal transition picks it up.
@@ -123,6 +143,31 @@ final class AppState: ObservableObject {
     }
 
     static let zoomAnimation = Animation.spring(response: 0.3, dampingFraction: 1)
+
+    /// Grid↔month zoom: nothing is transformed or recreated. Both views mount
+    /// together (grid on top, month behind, instantly); the only motion is the
+    /// grid's hour section folding to zero height — its date header and
+    /// all-day strip stay pinned — revealing or covering the month, whose top
+    /// row is the same week. The covered view unmounts after the fold settles.
+    private func gridMonthSwap(to mode: ViewMode, foldAway: Bool) {
+        zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
+        if foldAway { gridOverlapDays = visibleDays }
+        gridFold = !foldAway // fold starts open, unfold starts closed
+        gridMonthOverlap = true
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { viewMode = mode }
+        overlapGeneration += 1
+        let gen = overlapGeneration
+        DispatchQueue.main.async {
+            withAnimation(Self.zoomAnimation) { self.gridFold = foldAway }
+        }
+        // Unmount the hidden view once the spring has settled.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            guard self.overlapGeneration == gen else { return }
+            self.gridMonthOverlap = false
+        }
+    }
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue

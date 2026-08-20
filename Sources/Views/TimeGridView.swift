@@ -109,6 +109,11 @@ struct TimeGridView: View {
                     .background { SideScrollPan(appState: appState) }
                     #endif
                 }
+                // Grid↔month zoom: the hour section folds to zero height while
+                // the header + all-day strip above stays pinned, revealing (or
+                // covering) the month view mounted behind.
+                .frame(maxHeight: appState.gridFold ? 0 : .infinity, alignment: .top)
+                .clipped()
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
                     CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
@@ -121,6 +126,9 @@ struct TimeGridView: View {
                     gridScroll.scrollTo(y: appState.hourHeight * 8)
                 }
             }
+            // Content-sized (not full-frame) so the opaque area shrinks with
+            // the fold and the month behind is revealed below the strip.
+            .background(CWT.paper)
             .onAppear {
                 appState.weekPageWidth = pageWidth
                 appState.gridColumnWidth = colWidth
