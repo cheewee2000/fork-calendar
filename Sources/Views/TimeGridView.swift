@@ -820,8 +820,16 @@ struct EventBlockView: View {
                         .font(CWT.mono(8))
                 }
             }
-            if height > 34, let s = item.event.startDate, let e = item.event.endDate {
-                Text(Fmt.interval.string(from: s, to: e))
+            if height > 34 || isResizing || isDragging, let s = item.event.startDate, let e = item.event.endDate {
+                // Live readout: while resizing/moving, show the times the
+                // commit would produce (deltas are already snapped).
+                let resizeMin = Double(resizeDelta / hourHeight) * 60
+                let moveMin = Double(dragOffset.height / hourHeight) * 60
+                let ds = isResizing ? (resizingTop ? s.addingTimeInterval(resizeMin * 60) : s)
+                       : isDragging ? s.addingTimeInterval(moveMin * 60) : s
+                let de = isResizing ? (resizingTop ? e : e.addingTimeInterval(resizeMin * 60))
+                       : isDragging ? e.addingTimeInterval(moveMin * 60) : e
+                Text(Fmt.interval.string(from: ds, to: de))
                     .font(CWT.mono(9))
                     .opacity(0.75)
                     .lineLimit(1)

@@ -491,10 +491,33 @@ final class CalendarStore: ObservableObject {
             let oldKey = snapshot?.calendarID ?? cal.calendarIdentifier
             let old = engine.record(id: event.id, calendarKey: oldKey)
             if oldKey != cal.calendarIdentifier { engine.remove(id: event.id, calendarKey: oldKey) }
-            engine.upsert(event.record())
+            let rec = event.record()
+            engine.upsert(rec)
+            // Mirror the change onto duplicate copies on other calendars
+            // (invitee copies of the same event). Google propagates these
+            // server-side, but locally they'd show stale times until the next
+            // sync; the syncAll after the push confirms.
+            if let old {
+                for (calKey, dict) in engine.records where calKey != rec.calendarKey {
+                    for dup in dict.values where dup.id != rec.id
+                        && dup.status != "cancelled"
+                        && dup.title == old.title && dup.start == old.start && dup.end == old.end {
+                        var patched = dup
+                        patched.title = rec.title
+                        patched.start = rec.start
+                        patched.end = rec.end
+                        patched.isAllDay = rec.isAllDay
+                        engine.upsert(patched)
+                    }
+                }
+            }
             if let snapshot { undoStack.append(.restore(id: event.id, snapshot: snapshot)) }
             reload()
-            Task { await pushUpdate(event, old: old, oldKey: oldKey, span: span) }
+            Task {
+                await pushUpdate(event, old: old, oldKey: oldKey, span: span)
+                // Pull the server's propagation to the other calendars' copies.
+                engine.syncAll()
+            }
         }
     }
 
