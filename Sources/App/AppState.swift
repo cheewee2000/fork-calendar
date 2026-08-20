@@ -234,8 +234,11 @@ final class AppState: ObservableObject {
     }
 
     /// The day columns one page before/after the current ones (for side-scroll).
-    func visibleDays(pageOffset: Int) -> [Date] {
-        let current = visibleDays
+    /// The grid passes its own `current` columns so that a grid mid-removal
+    /// (zoom to month/year, when `visibleDays` is already empty) keeps a
+    /// stable layout instead of collapsing while it animates out.
+    func visibleDays(pageOffset: Int, current currentOverride: [Date]? = nil) -> [Date] {
+        let current = currentOverride ?? visibleDays
         guard pageOffset != 0 else { return current }
         guard let firstDay = current.first else { return [] }
         let cal = calendar
