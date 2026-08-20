@@ -103,6 +103,11 @@ struct TimeGridView: View {
                 }
                 .frame(height: monthRowHeight)
                 .background(CWT.paper)
+                // The month sheet masks itself above this line while sliding
+                // over the hour grid, keeping this strip the only copy visible.
+                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("calBody")).maxY }) { _, y in
+                    appState.stripBottomY = y
+                }
                 Divider()
                 ScrollView {
                     HStack(alignment: .top, spacing: 0) {
@@ -127,14 +132,7 @@ struct TimeGridView: View {
                     .background { SideScrollPan(appState: appState) }
                     #endif
                 }
-                // Grid↔month zoom: the hour section folds away under the
-                // pinned week strip, revealing (or covering) the month view
-                // mounted behind. A mask (not a frame) so the fold is pure
-                // compositing — no per-frame relayout of the hour grid.
                 .background(CWT.paper)
-                .mask(alignment: .top) {
-                    Rectangle().frame(maxHeight: appState.gridFold ? 0 : .infinity)
-                }
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
                     CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)

@@ -84,9 +84,13 @@ final class AppState: ObservableObject {
     /// outgoing view re-renders with the right transition before the swap
     /// (SwiftUI captures removal transitions one render early).
     @Published var zoomSpec = ZoomSpec(direction: 0, anchorY: 0.5, scale: 1)
-    /// True while the time grid's hour section is collapsed to zero height
-    /// (the folded state on the month side of a grid↔month zoom).
-    @Published var gridFold = false
+    /// True when the month sheet is in place covering the hour grid; false
+    /// when it's pushed down below it (week side). Animated during grid↔month.
+    @Published var monthCover = false
+    /// Bottom edge (in calendar-body coordinates) of the shared week strip,
+    /// measured by the grid. The month sheet is masked above this line while
+    /// it slides, so the pinned strip is the only copy of the week visible.
+    var stripBottomY: CGFloat = 130
     /// True while a grid↔month zoom is in flight: both views stay mounted so
     /// the header strip and month rows are live the whole time — nothing is
     /// destroyed until the fold finishes.
@@ -101,6 +105,10 @@ final class AppState: ObservableObject {
     /// knows whether it's diving in or pulling out, and from where.
     func setViewMode(_ mode: ViewMode) {
         guard mode != viewMode else { return }
+        // Cancel any pending phase of an in-flight switch, and drop a stale
+        // overlap so a leftover layer never survives into the next mode.
+        overlapGeneration += 1
+        gridMonthOverlap = false
         if mode.zoomFamily == viewMode.zoomFamily {
             // Same screen (time-grid day-count change): no view swap — the
             // grid animates its own columns in and out. When growing, pin the
@@ -126,9 +134,26 @@ final class AppState: ObservableObject {
             return
         }
         let fromF = viewMode.zoomFamily, toF = mode.zoomFamily
-        if fromF == .grid, toF == .month { gridMonthSwap(to: mode, foldAway: true); return }
-        if fromF == .month, toF == .grid { gridMonthSwap(to: mode, foldAway: false); return }
-        if toF == .grid { gridFold = false } // arriving from year: never folded
+        if fromF == .grid, toF == .month {
+            // Phase 1: if the grid isn't the aligned week (fewer days, or a
+            // free anchor), first become it — columns slide and grow so the
+            // strip matches the month's top row exactly. Phase 2: the month
+            // sheet slides up from below, covering the hours.
+            var aligned = false
+            if case .week = viewMode, gridAnchor == nil { aligned = true }
+            if aligned {
+                monthCoverSwap(to: mode, coverUp: true)
+            } else {
+                let gen = overlapGeneration
+                withAnimation(Self.zoomAnimation) { viewMode = .week } // didSet clears gridAnchor → aligned
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+                    guard self.overlapGeneration == gen else { return }
+                    self.monthCoverSwap(to: mode, coverUp: true)
+                }
+            }
+            return
+        }
+        if fromF == .month, toF == .grid { monthCoverSwap(to: mode, coverUp: false); return }
         let spec = makeZoomSpec(from: fromF, to: toF)
         if spec != zoomSpec {
             // Publish the spec first, then swap modes on the next runloop
@@ -144,34 +169,33 @@ final class AppState: ObservableObject {
 
     static let zoomAnimation = Animation.spring(response: 0.22, dampingFraction: 1)
 
-    /// Grid↔month zoom: nothing is transformed or recreated. Both views mount
-    /// together (grid on top, month behind, instantly); the only motion is the
-    /// grid's hour section folding to zero height — its date header and
-    /// all-day strip stay pinned — revealing or covering the month, whose top
-    /// row is the same week. The covered view unmounts after the fold settles.
-    private func gridMonthSwap(to mode: ViewMode, foldAway: Bool) {
+    /// Grid↔month zoom: nothing is transformed or recreated. The hour grid
+    /// stays put, and the month is a sheet that slides up from below to cover
+    /// it (or down to reveal it). The shared week strip stays pinned — the
+    /// sheet's own copy of it is masked off while sliding. The hidden view
+    /// unmounts after the spring settles.
+    private func monthCoverSwap(to mode: ViewMode, coverUp: Bool) {
         zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
-        if foldAway { gridOverlapDays = visibleDays }
-        gridFold = !foldAway // fold starts open, unfold starts closed
+        if coverUp { gridOverlapDays = visibleDays }
+        monthCover = !coverUp // sheet starts down before covering, up before revealing
         gridMonthOverlap = true
         var t = Transaction()
         t.disablesAnimations = true
         withTransaction(t) { viewMode = mode }
         overlapGeneration += 1
         let gen = overlapGeneration
-        if foldAway {
-            // The grid is already mounted, so its fold can animate in the
-            // same commit as the swap — motion starts on the keypress frame.
-            withAnimation(Self.zoomAnimation) { gridFold = true }
-        } else {
-            // The grid mounts folded this commit; unfolding must wait one
-            // runloop turn or the insertion renders directly at full height.
+        if coverUp {
+            // The sheet mounted this commit (down at its start position);
+            // animating it must wait one runloop turn or it renders in place.
             DispatchQueue.main.async {
-                withAnimation(Self.zoomAnimation) { self.gridFold = false }
+                guard self.overlapGeneration == gen else { return }
+                withAnimation(Self.zoomAnimation) { self.monthCover = true }
             }
+        } else {
+            // The sheet was already mounted — slide it down in this commit.
+            withAnimation(Self.zoomAnimation) { monthCover = false }
         }
-        // Unmount the hidden view once the spring has settled.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             guard self.overlapGeneration == gen else { return }
             self.gridMonthOverlap = false
         }

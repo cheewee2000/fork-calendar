@@ -197,33 +197,43 @@ struct CalendarDetailView: View {
                 // identity boundary — outside it, the id swap replaces the
                 // subtree without ever consulting the transition.
                 let family = appState.viewMode.zoomFamily
-                ZStack {
-                    if family == .year {
-                        YearView()
-                            .background(CWT.paper)
-                            .transition(zoomTransition)
-                            .id(ZoomFamily.year)
-                            .zIndex(0)
+                GeometryReader { geo in
+                    let sheetTravel = max(geo.size.height - appState.stripBottomY, 0)
+                    ZStack {
+                        if family == .year {
+                            YearView()
+                                .background(CWT.paper)
+                                .transition(zoomTransition)
+                                .id(ZoomFamily.year)
+                                .zIndex(0)
+                        }
+                        if family == .month || (appState.gridMonthOverlap && family == .grid) {
+                            MonthView()
+                                .background(CWT.paper)
+                                // During a grid↔month zoom the month is a sheet
+                                // above the static hour grid: it slides up from
+                                // below the strip to cover the hours, or down
+                                // to reveal them. Its own copy of the strip row
+                                // is masked off while sliding — the grid's
+                                // pinned strip is the only one visible.
+                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
+                                .mask(alignment: .top) {
+                                    Rectangle().padding(.top, appState.gridMonthOverlap ? appState.stripBottomY : 0)
+                                }
+                                .transition(zoomTransition)
+                                .id(ZoomFamily.month)
+                                .zIndex(appState.gridMonthOverlap ? 3 : 1)
+                        }
+                        if family == .grid || (appState.gridMonthOverlap && family == .month) {
+                            TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridOverlapDays)
+                                .transition(zoomTransition)
+                                .id(ZoomFamily.grid)
+                                .zIndex(2)
+                        }
                     }
-                    if family == .month || (appState.gridMonthOverlap && family == .grid) {
-                        MonthView()
-                            .background(CWT.paper)
-                            // The fold alone reads as static — slide the rows
-                            // up into place as the grid folds away (and back
-                            // down as it unfolds), in the same spring.
-                            .offset(y: appState.gridMonthOverlap && !appState.gridFold ? monthRowHeight * 3 : 0)
-                            .transition(zoomTransition)
-                            .id(ZoomFamily.month)
-                            .zIndex(1)
-                    }
-                    if family == .grid || (appState.gridMonthOverlap && family == .month) {
-                        TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridOverlapDays)
-                            .transition(zoomTransition)
-                            .id(ZoomFamily.grid)
-                            .zIndex(2)
-                    }
+                    .clipped()
+                    .coordinateSpace(name: "calBody")
                 }
-                .clipped()
             }
         }
         .background(CWT.paper)
