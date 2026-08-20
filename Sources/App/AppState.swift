@@ -145,13 +145,14 @@ final class AppState: ObservableObject {
                 monthCoverSwap(to: mode, coverUp: true)
             } else {
                 let gen = overlapGeneration
-                withAnimation(Self.zoomAnimation) {
+                // Chained on actual animation completion — a fixed delay let
+                // the sheet start while the columns were still aligning.
+                withAnimation(Self.zoomAnimation, completionCriteria: .logicallyComplete) {
                     viewMode = .week
                     // Explicit: a same-value `.week` assignment skips didSet,
                     // so a free-anchored week would otherwise never re-align.
                     gridAnchor = nil
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+                } completion: {
                     guard self.overlapGeneration == gen else { return }
                     self.monthCoverSwap(to: mode, coverUp: true)
                 }
