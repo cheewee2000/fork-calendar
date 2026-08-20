@@ -207,12 +207,10 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.year)
                                 .zIndex(0)
                         }
-                        if family == .month || appState.gridMonthOverlap {
-                            // Mounted beneath the grid for the whole grid↔month
-                            // overlap — from the keypress, through the align
-                            // phase, until cleanup — so its build/teardown cost
-                            // never lands in a commit that starts a phase of
-                            // the animation.
+                        if family == .month {
+                            // viewMode flips to .month only at overlap cleanup,
+                            // after the sheet settles: this mounts as a static,
+                            // pixel-identical swap — never during motion.
                             MonthView(initialWeek: appState.calendar.startOfWeek(
                                 for: appState.monthScrollTarget ?? appState.currentDate))
                                 .background(CWT.paper)

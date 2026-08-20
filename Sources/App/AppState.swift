@@ -123,7 +123,20 @@ final class AppState: ObservableObject {
     /// switches should go through here (not `viewMode =`) so the transition
     /// knows whether it's diving in or pulling out, and from where.
     func setViewMode(_ mode: ViewMode) {
-        guard mode != viewMode else { return }
+        if mode == viewMode {
+            // Same mode re-selected mid-transition (viewMode swaps to .month
+            // only at cleanup now): cancel an in-flight cover by sliding the
+            // sheet back down.
+            guard gridMonthOverlap else { return }
+            overlapGeneration += 1
+            let gen = overlapGeneration
+            withAnimation(Self.zoomAnimation) { monthCover = false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                guard self.overlapGeneration == gen else { return }
+                self.gridMonthOverlap = false
+            }
+            return
+        }
         // Cancel any pending phase of an in-flight switch, and drop a stale
         // overlap so a leftover layer never survives into the next mode.
         overlapGeneration += 1
@@ -161,48 +174,54 @@ final class AppState: ObservableObject {
             // strip matches the month's top row exactly. Phase 2: the month
             // sheet slides up from below, covering the hours.
             //
-            // Everything the transition needs mounts NOW — the sheet parked
-            // offscreen below, the month view hidden behind the grid — so
-            // phase 2 is a cheap state flip. Mounting between the phases
-            // froze the handoff for a visible beat.
+            // Nothing heavy may land in a commit that starts visible motion:
+            // the keypress commit only starts the align; the sheet (8 light
+            // rows) mounts as the align settles; the real MonthView mounts at
+            // cleanup, AFTER motion ends — a static pixel-identical swap.
+            // viewMode stays .week until that cleanup.
             var aligned = false
             if case .week = viewMode, gridAnchor == nil { aligned = true }
             zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
-            gridOverlapDays = visibleDays
             // Pin the month's opening scroll to the week being viewed,
             // overriding any stale target (e.g. a "Today" pressed back in
             // grid mode) so strip, sheet, and settled month agree.
             monthScrollTarget = currentDate
-            monthCover = false
-            gridMonthOverlap = true
-            // Neighbors stay live: the align phase slides columns that only
-            // animate if they already exist as neighbor-page columns.
             let gen = overlapGeneration
             let cover: () -> Void = {
                 guard self.overlapGeneration == gen else { return }
-                self.gridOverlapDays = self.visibleDays // the aligned week
-                var t = Transaction()
-                t.disablesAnimations = true
-                withTransaction(t) { self.viewMode = mode }
-                withAnimation(Self.zoomAnimation) { self.monthCover = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self.monthCover = false
+                self.gridMonthOverlap = true
+                // The sheet mounts in this commit; animating it must wait
+                // one runloop turn or it renders directly at the end state.
+                DispatchQueue.main.async {
                     guard self.overlapGeneration == gen else { return }
-                    self.gridMonthOverlap = false
+                    withAnimation(Self.zoomAnimation) { self.monthCover = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    guard self.overlapGeneration == gen else { return }
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
+                        self.viewMode = mode
+                        self.gridMonthOverlap = false
+                    }
                 }
             }
             if aligned {
-                // The sheet mounts in this commit; animating it must wait
-                // one runloop turn or it renders directly at the end state.
-                DispatchQueue.main.async { cover() }
+                cover()
             } else {
-                // Chained on actual animation completion — a fixed delay let
-                // the sheet start while the columns were still aligning.
-                withAnimation(Self.zoomAnimation, completionCriteria: .logicallyComplete) {
+                withAnimation(Self.zoomAnimation) {
                     viewMode = .week
                     // Explicit: a same-value `.week` assignment skips didSet,
                     // so a free-anchored week would otherwise never re-align.
                     gridAnchor = nil
-                } completion: { cover() }
+                }
+                // Fixed handoff, timed to the align's VISUAL settle (~0.3s
+                // for the 0.22 spring): completion-chaining on
+                // .logicallyComplete left a dead beat after motion became
+                // imperceptible. Deterministic now that the align starts in
+                // a light commit at frame one.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { cover() }
             }
             return
         }
