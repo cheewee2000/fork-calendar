@@ -72,6 +72,7 @@ struct EventPanelView: View {
     @State private var editingNotes = false
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
+    @FocusState private var inviteFocused: Bool
 
     init(context: EditorContext, isSheet: Bool = false) {
         self.context = context
@@ -86,6 +87,41 @@ struct EventPanelView: View {
         _calendarID = State(initialValue: context.event.calendar?.calendarIdentifier ?? "")
         _recurrence = State(initialValue: RecurrenceChoice.from(context.event))
         originalSnapshot = context.isNew ? nil : EventSnapshot(context.event)
+    }
+
+    // MARK: - Invite autocomplete
+
+    /// The email fragment being typed (after the last comma).
+    private var inviteToken: String {
+        let last = inviteEmails.split(separator: ",", omittingEmptySubsequences: false).last.map(String.init) ?? inviteEmails
+        return last.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var inviteSuggestions: [CalendarStore.AttendeeSuggestion] {
+        guard inviteFocused, !isReadOnly else { return [] }
+        let token = inviteToken.lowercased()
+        guard !token.isEmpty else { return [] }
+        // Don't re-suggest people already on the event or earlier in the field.
+        var taken = Set((context.event.attendees ?? []).map { $0.email.lowercased() })
+        for part in inviteEmails.split(separator: ",").dropLast() {
+            taken.insert(part.trimmingCharacters(in: .whitespaces).lowercased())
+        }
+        let matches = store.attendeeSuggestions(matching: token, excluding: taken)
+        if matches.count == 1, matches[0].email == token { return [] } // already typed in full
+        return matches
+    }
+
+    private func acceptInviteSuggestion(_ s: CalendarStore.AttendeeSuggestion) {
+        var parts = inviteEmails.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        if parts.isEmpty { parts = [""] }
+        parts[parts.count - 1] = s.email
+        inviteEmails = parts.joined(separator: ", ") + ", "
+        inviteFocused = true
+    }
+
+    private func acceptFirstInviteSuggestion() {
+        if let first = inviteSuggestions.first { acceptInviteSuggestion(first) }
     }
 
     private var isReadOnly: Bool {
@@ -232,10 +268,35 @@ struct EventPanelView: View {
                                 .textFieldStyle(.plain)
                                 .font(CWT.mono(12))
                                 .disabled(isReadOnly)
+                                .focused($inviteFocused)
+                                .onSubmit(acceptFirstInviteSuggestion)
                                 #if os(iOS)
                                 .keyboardType(.emailAddress)
                                 .textInputAutocapitalization(.never)
                                 #endif
+                            // Lookup from past events' guests: click (or press
+                            // return for the top hit) to complete the token
+                            // being typed after the last comma.
+                            ForEach(inviteSuggestions) { s in
+                                Button {
+                                    acceptInviteSuggestion(s)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "person.crop.circle")
+                                            .font(CWT.mono(10))
+                                            .foregroundStyle(CWT.inkSoft)
+                                        if let name = s.name, !name.isEmpty, name.lowercased() != s.email {
+                                            Text(name).font(CWT.mono(11)).lineLimit(1)
+                                            Text(s.email).font(CWT.mono(10))
+                                                .foregroundStyle(CWT.inkSoft).lineLimit(1)
+                                        } else {
+                                            Text(s.email).font(CWT.mono(11)).lineLimit(1)
+                                        }
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
                             if !inviteEmails.isEmpty {
                                 Text(settings.guestNotifyPolicy == .never
                                      ? "Added to the guest list on save (no email — see Settings)"

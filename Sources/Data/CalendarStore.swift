@@ -224,7 +224,76 @@ final class CalendarStore: ObservableObject {
         }
         events = built
         dayIndexCache = nil
+        attendeeDirectory = nil
         publishWidgetData()
+    }
+
+    // MARK: - Attendee directory (invite autocomplete)
+
+    struct AttendeeSuggestion: Identifiable, Hashable {
+        var email: String
+        var name: String?
+        var id: String { email }
+    }
+
+    private var attendeeDirectory: [(email: String, name: String?, weight: Int, last: Date)]?
+
+    /// People you've shared events with, for invite autocomplete: every
+    /// synced event's guests and organizers, ranked by how often and how
+    /// recently they appear. Prefix matches (email, name, or any name word)
+    /// outrank substring matches.
+    func attendeeSuggestions(matching query: String, excluding: Set<String> = [], limit: Int = 5) -> [AttendeeSuggestion] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return [] }
+        if attendeeDirectory == nil { buildAttendeeDirectory() }
+        guard let dir = attendeeDirectory else { return [] }
+        var scored: [(s: AttendeeSuggestion, rank: Int, weight: Int, last: Date)] = []
+        for entry in dir {
+            if excluding.contains(entry.email) { continue }
+            let email = entry.email
+            let name = entry.name?.lowercased() ?? ""
+            let rank: Int
+            if email.hasPrefix(q) || name.hasPrefix(q) {
+                rank = 0
+            } else if name.split(separator: " ").contains(where: { $0.hasPrefix(q) }) {
+                rank = 1
+            } else if email.contains(q) || name.contains(q) {
+                rank = 2
+            } else {
+                continue
+            }
+            scored.append((AttendeeSuggestion(email: entry.email, name: entry.name), rank, entry.weight, entry.last))
+        }
+        scored.sort {
+            if $0.rank != $1.rank { return $0.rank < $1.rank }
+            if $0.weight != $1.weight { return $0.weight > $1.weight }
+            return $0.last > $1.last
+        }
+        return scored.prefix(limit).map(\.s)
+    }
+
+    private func buildAttendeeDirectory() {
+        var acc: [String: (name: String?, weight: Int, last: Date)] = [:]
+        func add(_ email: String, name: String?, date: Date) {
+            let key = email.lowercased()
+            guard key.contains("@"), !key.hasSuffix("resource.calendar.google.com") else { return }
+            var e = acc[key] ?? (name, 0, .distantPast)
+            if e.name == nil || e.name?.isEmpty == true { e.name = name }
+            e.weight += 1
+            if date > e.last { e.last = date }
+            acc[key] = e
+        }
+        for dict in engine.records.values {
+            for record in dict.values where record.status != "cancelled" {
+                for a in record.attendees ?? [] where !a.isSelf && !a.isResource {
+                    add(a.email, name: a.displayName, date: record.start)
+                }
+                if let org = record.organizerEmail, !record.organizerSelf {
+                    add(org, name: nil, date: record.start)
+                }
+            }
+        }
+        attendeeDirectory = acc.map { (email: $0.key, name: $0.value.name, weight: $0.value.weight, last: $0.value.last) }
     }
 
     func ensureFetched(_ interval: DateInterval) {
