@@ -140,7 +140,7 @@ final class AppState: ObservableObject {
                 // own .animation(value: monthCover) drives the motion.)
                 let gen = overlapGeneration
                 monthCover = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
@@ -215,7 +215,7 @@ final class AppState: ObservableObject {
                     guard self.overlapGeneration == gen else { return }
                     self.monthCover = true // sheet's .animation(value:) slides it
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.45)) {
                     guard self.overlapGeneration == gen else { return }
                     var t = Transaction()
                     t.disablesAnimations = true
@@ -238,7 +238,7 @@ final class AppState: ObservableObject {
                 // .logicallyComplete left a dead beat after motion became
                 // imperceptible. Deterministic now that the align starts in
                 // a light commit at frame one.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { cover() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.26)) { cover() }
             }
             return
         }
@@ -257,7 +257,7 @@ final class AppState: ObservableObject {
                 guard self.overlapGeneration == gen else { return }
                 self.monthCover = false // sheet's .animation(value:) slides it
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.4)) {
                 guard self.overlapGeneration == gen else { return }
                 self.gridMonthOverlap = false
             }
@@ -283,6 +283,8 @@ final class AppState: ObservableObject {
     static var zoomAnimation: Animation { .easeOut(duration: slowZoom ? 2.0 : 0.28) }
     /// Debug: 8x slow motion for scripted transition recordings ("!" hook key).
     static var slowZoom = false
+    /// Phase-handoff delays scale with slow motion so sequencing stays honest.
+    static func phaseDelay(_ d: Double) -> Double { slowZoom ? d * 2.0 / 0.28 : d }
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue
