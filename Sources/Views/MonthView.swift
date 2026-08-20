@@ -69,7 +69,7 @@ struct MonthView: View {
                 .onAppear { appState.monthScrollTarget = nil } // consumed at init
                 .onChange(of: appState.monthScrollTarget) {
                     guard let target = appState.monthScrollTarget else { return }
-                    withAnimation(.easeOut(duration: 0.25)) {
+                    withAnimation(.linear(duration: 0.25)) {
                         topWeek = cal.startOfWeek(for: target)
                     }
                     appState.monthScrollTarget = nil

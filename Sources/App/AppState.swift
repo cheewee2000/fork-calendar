@@ -322,10 +322,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    // Ease-out, not a critically-damped spring: the spring started at zero
-    // velocity (mushy ramp-in) and crawled through an asymptotic tail (mushy
-    // end). Ease-out moves at full speed on frame one and stops decisively.
-    static var zoomAnimation: Animation { .easeOut(duration: slowZoom ? 2.0 : 0.28) }
+    // Linear, no easing: constant speed from frame one to a hard stop.
+    static var zoomAnimation: Animation { .linear(duration: slowZoom ? 2.0 : 0.28) }
     /// Debug: 8x slow motion for scripted transition recordings ("!" hook key).
     static var slowZoom = false
     /// Phase-handoff delays scale with slow motion so sequencing stays honest.
