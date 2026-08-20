@@ -589,7 +589,7 @@ struct DayColumn: View {
 
     var body: some View {
         let timed = store.events(on: day, calendar: appState.calendar).timed
-        let positioned = EventLayout.layout(timed)
+        let positioned = EventLayout.layout(timed, rank: { store.sidebarRank($0.calendar?.calendarIdentifier) })
         ZStack(alignment: .topLeading) {
             if appState.calendar.isDateInWeekend(day) {
                 CWT.paper3.opacity(0.55)

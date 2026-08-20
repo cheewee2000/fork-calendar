@@ -55,6 +55,9 @@ final class AppSettings: ObservableObject {
     @Published var guestNotifyPolicy: GuestNotifyPolicy { didSet { UserDefaults.standard.set(guestNotifyPolicy.rawValue, forKey: "guestNotifyPolicy") } }
     /// Calendar for new events (calendarIdentifier); empty = first account's primary.
     @Published var defaultCalendarID: String { didSet { UserDefaults.standard.set(defaultCalendarID, forKey: "defaultCalendarID") } }
+    /// Manual sidebar ordering (calendarIdentifiers, display order). Calendars
+    /// not listed sort after listed ones with the default primary/title rules.
+    @Published var calendarOrder: [String] { didSet { UserDefaults.standard.set(calendarOrder, forKey: "calendarOrder") } }
 
     private init() {
         let d = UserDefaults.standard
@@ -77,6 +80,7 @@ final class AppSettings: ObservableObject {
         googleIOSClientID = d.string(forKey: "googleIOSClientID") ?? ""
         syncInterval = d.object(forKey: "syncInterval") as? Int ?? 120
         syncOnActivate = d.object(forKey: "syncOnActivate") as? Bool ?? true
+        calendarOrder = d.stringArray(forKey: "calendarOrder") ?? []
         rsvpNotifyOrganizer = d.object(forKey: "rsvpNotifyOrganizer") as? Bool ?? true
         guestNotifyPolicy = GuestNotifyPolicy(rawValue: d.string(forKey: "guestNotifyPolicy") ?? "") ?? .ask
         defaultCalendarID = d.string(forKey: "defaultCalendarID") ?? ""

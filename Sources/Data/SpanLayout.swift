@@ -32,13 +32,14 @@ enum SpanLayout {
         guard let rangeEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)) else { return [] }
         let dayKeys = days.map { calendar.startOfDay(for: $0) }
 
-        let events = EventLayout.mergeDuplicates(store.spanningEvents(from: rangeStart, to: rangeEnd).sorted(by: byStart))
+        let bySidebar: (CalEvent) -> Int = { store.sidebarRank($0.calendar?.calendarIdentifier) }
+        let events = EventLayout.mergeDuplicates(store.spanningEvents(from: rangeStart, to: rangeEnd).sorted(by: byStart), rank: bySidebar)
 
         var globalLanes: [String: Int] = [:]
         if stableLanes {
             // Greedy sweep in calendar-day ordinals over the full fetched set;
             // an event's lane depends only on its neighbors, not the window.
-            let all = EventLayout.mergeDuplicates(store.spanningEvents(from: .distantPast, to: .distantFuture).sorted(by: byStart)).map(\.primary)
+            let all = EventLayout.mergeDuplicates(store.spanningEvents(from: .distantPast, to: .distantFuture).sorted(by: byStart), rank: bySidebar).map(\.primary)
             var laneEnds: [Int] = []
             for event in all {
                 guard let start = event.startDate, let end = event.endDate else { continue }
@@ -127,6 +128,7 @@ struct SpanBarView: View {
 /// calendars: one strip per calendar, solid when that copy needs no answer
 /// from me, dashed while its invite is still awaiting my RSVP.
 struct CalendarStrips: View {
+    @EnvironmentObject var store: CalendarStore
     let copies: [CalEvent]
     var width: CGFloat = 3
 
@@ -135,8 +137,13 @@ struct CalendarStrips: View {
     }
 
     var body: some View {
+        // Stack order follows the sidebar's calendar list: the calendar
+        // highest in the list draws first (leftmost strip).
+        let ordered = copies.sorted {
+            store.sidebarRank($0.calendar?.calendarIdentifier) < store.sidebarRank($1.calendar?.calendarIdentifier)
+        }
         HStack(spacing: 1) {
-            ForEach(Array(copies.enumerated()), id: \.offset) { _, copy in
+            ForEach(Array(ordered.enumerated()), id: \.offset) { _, copy in
                 let color = copy.calendar?.displayColor ?? Color.accentColor
                 if copy.needsMyResponse {
                     DashedStrip()

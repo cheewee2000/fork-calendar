@@ -19,7 +19,7 @@ enum EventLayout {
     /// unanswered invite first (so needs-response styling and RSVP hit the
     /// right copy), then any copy where I'm an attendee, then an editable
     /// calendar's copy.
-    static func mergeDuplicates(_ events: [CalEvent]) -> [(primary: CalEvent, duplicates: [CalEvent])] {
+    static func mergeDuplicates(_ events: [CalEvent], rank: ((CalEvent) -> Int)? = nil) -> [(primary: CalEvent, duplicates: [CalEvent])] {
         var groups: [String: [CalEvent]] = [:]
         var order: [String] = []
         for event in events {
@@ -32,7 +32,14 @@ enum EventLayout {
         var merged: [(primary: CalEvent, duplicates: [CalEvent])] = []
         for key in order {
             var copies = groups[key] ?? []
-            copies.sort { ($0.calendar?.calendarIdentifier ?? "") < ($1.calendar?.calendarIdentifier ?? "") }
+            // Sidebar order when provided (top calendar first — it wins the
+            // primary fallback, so the block tints to the top calendar);
+            // identifier as the deterministic tiebreaker.
+            copies.sort {
+                let r0 = rank?($0) ?? 0, r1 = rank?($1) ?? 0
+                if r0 != r1 { return r0 < r1 }
+                return ($0.calendar?.calendarIdentifier ?? "") < ($1.calendar?.calendarIdentifier ?? "")
+            }
             let primary = copies.first(where: { $0.needsMyResponse })
                 ?? copies.first(where: { $0.myParticipantStatus != nil })
                 ?? copies.first(where: { $0.calendar?.allowsContentModifications == true })
@@ -43,8 +50,8 @@ enum EventLayout {
     }
 
     /// Assigns overlapping events to side-by-side columns within clusters.
-    static func layout(_ events: [CalEvent]) -> [PositionedEvent] {
-        let merged = mergeDuplicates(events)
+    static func layout(_ events: [CalEvent], rank: ((CalEvent) -> Int)? = nil) -> [PositionedEvent] {
+        let merged = mergeDuplicates(events, rank: rank)
 
         // Full tiebreaker chain: Swift's sort is unstable, so ties must be
         // deterministic or same-time events swap columns between renders.

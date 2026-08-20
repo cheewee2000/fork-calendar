@@ -151,16 +151,37 @@ final class CalendarStore: ObservableObject {
 
     var calendarsBySource: [(source: String, calendars: [CalCalendar])] {
         let order = accounts.accounts.map(\.email)
+        let custom = AppSettings.shared.calendarOrder
         let groups = Dictionary(grouping: calendars) { $0.accountID }
+        // Manual drag order first; calendars not yet ordered fall back to the
+        // default primary-then-title rules, after the ordered ones.
+        func rank(_ c: CalCalendar) -> (Int, Int, String) {
+            if let i = custom.firstIndex(of: c.calendarIdentifier) { return (i, 0, "") }
+            return (Int.max, c.isPrimary ? 0 : 1, c.title.lowercased())
+        }
         return groups.keys
             .sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
-            .map { key in
-                (key, groups[key]!.sorted {
-                    if $0.isPrimary != $1.isPrimary { return $0.isPrimary }
-                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                })
-            }
+            .map { key in (key, groups[key]!.sorted { rank($0) < rank($1) }) }
     }
+
+    /// Position of a calendar in the sidebar's display order (lower = higher
+    /// in the list). Drives the strip order of merged duplicate events.
+    private var sidebarRankCache: [String: Int]?
+
+    func sidebarRank(_ calendarID: String?) -> Int {
+        guard let calendarID else { return .max }
+        if sidebarRankCache == nil {
+            var r: [String: Int] = [:]
+            var i = 0
+            for group in calendarsBySource {
+                for c in group.calendars { r[c.calendarIdentifier] = i; i += 1 }
+            }
+            sidebarRankCache = r
+        }
+        return sidebarRankCache?[calendarID] ?? .max
+    }
+
+    func invalidateSidebarRank() { sidebarRankCache = nil }
 
     // MARK: - Lifecycle
 
@@ -225,6 +246,7 @@ final class CalendarStore: ObservableObject {
         events = built
         dayIndexCache = nil
         attendeeDirectory = nil
+        sidebarRankCache = nil
         publishWidgetData()
     }
 

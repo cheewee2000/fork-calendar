@@ -371,7 +371,8 @@ struct MonthCell: View {
     var body: some View {
         let cal = appState.calendar
         let events = EventLayout.mergeDuplicates(
-            (settings.monthAllDayOnly || !showsTimedEvents) ? [] : store.events(on: day, calendar: cal).timed
+            (settings.monthAllDayOnly || !showsTimedEvents) ? [] : store.events(on: day, calendar: cal).timed,
+            rank: { store.sidebarRank($0.calendar?.calendarIdentifier) }
         )
         let isToday = day.isSameDay(as: Date(), calendar: cal)
         let dayOfMonth = cal.component(.day, from: day)

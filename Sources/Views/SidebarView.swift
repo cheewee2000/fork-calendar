@@ -3,6 +3,20 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
+
+    /// Persist a drag reorder within one account section: the saved order is
+    /// the full sidebar sequence with that section's new arrangement in place.
+    private func moveCalendars(in group: (source: String, calendars: [CalCalendar]), from: IndexSet, to: Int) {
+        var cals = group.calendars
+        cals.move(fromOffsets: from, toOffset: to)
+        var order: [String] = []
+        for g in store.calendarsBySource {
+            order += (g.source == group.source ? cals : g.calendars).map(\.calendarIdentifier)
+        }
+        settings.calendarOrder = order
+        store.invalidateSidebarRank()
+    }
 
     var body: some View {
         List {
@@ -15,6 +29,9 @@ struct SidebarView: View {
                 Section {
                     ForEach(group.calendars, id: \.calendarIdentifier) { cal in
                         CalendarRow(cal: cal)
+                    }
+                    .onMove { from, to in
+                        moveCalendars(in: group, from: from, to: to)
                     }
                 } header: {
                     Text(group.source.uppercased())
