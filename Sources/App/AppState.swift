@@ -142,7 +142,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    static let zoomAnimation = Animation.spring(response: 0.3, dampingFraction: 1)
+    static let zoomAnimation = Animation.spring(response: 0.22, dampingFraction: 1)
 
     /// Grid↔month zoom: nothing is transformed or recreated. Both views mount
     /// together (grid on top, month behind, instantly); the only motion is the
@@ -159,11 +159,19 @@ final class AppState: ObservableObject {
         withTransaction(t) { viewMode = mode }
         overlapGeneration += 1
         let gen = overlapGeneration
-        DispatchQueue.main.async {
-            withAnimation(Self.zoomAnimation) { self.gridFold = foldAway }
+        if foldAway {
+            // The grid is already mounted, so its fold can animate in the
+            // same commit as the swap — motion starts on the keypress frame.
+            withAnimation(Self.zoomAnimation) { gridFold = true }
+        } else {
+            // The grid mounts folded this commit; unfolding must wait one
+            // runloop turn or the insertion renders directly at full height.
+            DispatchQueue.main.async {
+                withAnimation(Self.zoomAnimation) { self.gridFold = false }
+            }
         }
         // Unmount the hidden view once the spring has settled.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             guard self.overlapGeneration == gen else { return }
             self.gridMonthOverlap = false
         }

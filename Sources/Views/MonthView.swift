@@ -24,6 +24,7 @@ struct MonthView: View {
     @EnvironmentObject var settings: AppSettings
 
     private let rowHeight: CGFloat = monthRowHeight
+    @State private var monthScroll = ScrollPosition(edge: .top)
 
     private var weeks: [Date] {
         let cal = appState.calendar
@@ -58,43 +59,54 @@ struct MonthView: View {
             Divider()
             GeometryReader { geo in
                 let cellW = (geo.size.width - gutter) / 7
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(allWeeks, id: \.self) { weekStart in
-                                MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
-                                    .frame(height: rowHeight)
-                                    .id(weekStart)
-                                    .background(
-                                        GeometryReader { g in
-                                            Color.clear.preference(
-                                                key: WeekPositionKey.self,
-                                                value: [WeekPosition(week: weekStart, y: g.frame(in: .named("monthScroll")).minY)]
-                                            )
-                                        }
-                                    )
-                            }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(allWeeks, id: \.self) { weekStart in
+                            MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
+                                .frame(height: rowHeight)
+                                .background(
+                                    GeometryReader { g in
+                                        Color.clear.preference(
+                                            key: WeekPositionKey.self,
+                                            value: [WeekPosition(week: weekStart, y: g.frame(in: .named("monthScroll")).minY)]
+                                        )
+                                    }
+                                )
                         }
                     }
-                    .coordinateSpace(name: "monthScroll")
-                    .onPreferenceChange(WeekPositionKey.self) { positions in
-                        updateCurrentMonth(from: positions)
+                }
+                .coordinateSpace(name: "monthScroll")
+                .onPreferenceChange(WeekPositionKey.self) { positions in
+                    updateCurrentMonth(from: positions)
+                }
+                // Jump by offset, not scrollTo(id:) — rows have fixed height,
+                // and an id-based scroll forces the lazy stack to instantiate
+                // every row above the target (a year of rows, 8+ event-store
+                // queries each), which is what made opening month view slow.
+                .scrollPosition($monthScroll)
+                .onAppear {
+                    let target = appState.monthScrollTarget ?? appState.currentDate
+                    monthScroll.scrollTo(y: rowOffset(of: target, in: allWeeks))
+                    appState.monthScrollTarget = nil
+                }
+                .onChange(of: appState.monthScrollTarget) {
+                    guard let target = appState.monthScrollTarget else { return }
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        monthScroll.scrollTo(y: rowOffset(of: target, in: allWeeks))
                     }
-                    .onAppear {
-                        let target = appState.monthScrollTarget ?? appState.currentDate
-                        proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
-                        appState.monthScrollTarget = nil
-                    }
-                    .onChange(of: appState.monthScrollTarget) {
-                        guard let target = appState.monthScrollTarget else { return }
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            proxy.scrollTo(cal.startOfWeek(for: target), anchor: .top)
-                        }
-                        appState.monthScrollTarget = nil
-                    }
+                    appState.monthScrollTarget = nil
                 }
             }
         }
+    }
+
+    /// Content offset of a date's week row (fixed row heights make it exact).
+    private func rowOffset(of date: Date, in weeks: [Date]) -> CGFloat {
+        let cal = appState.calendar
+        guard let first = weeks.first else { return 0 }
+        let week = cal.startOfWeek(for: date)
+        let idx = (cal.dateComponents([.day], from: first, to: week).day ?? 0) / 7
+        return CGFloat(max(idx, 0)) * rowHeight
     }
 
     /// The topmost visible week defines the header month while scrolling.
