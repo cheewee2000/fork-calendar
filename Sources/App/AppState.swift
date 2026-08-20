@@ -145,7 +145,12 @@ final class AppState: ObservableObject {
                 monthCoverSwap(to: mode, coverUp: true)
             } else {
                 let gen = overlapGeneration
-                withAnimation(Self.zoomAnimation) { viewMode = .week } // didSet clears gridAnchor → aligned
+                withAnimation(Self.zoomAnimation) {
+                    viewMode = .week
+                    // Explicit: a same-value `.week` assignment skips didSet,
+                    // so a free-anchored week would otherwise never re-align.
+                    gridAnchor = nil
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
                     guard self.overlapGeneration == gen else { return }
                     self.monthCoverSwap(to: mode, coverUp: true)
@@ -176,7 +181,13 @@ final class AppState: ObservableObject {
     /// unmounts after the spring settles.
     private func monthCoverSwap(to mode: ViewMode, coverUp: Bool) {
         zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
-        if coverUp { gridOverlapDays = visibleDays }
+        if coverUp {
+            gridOverlapDays = visibleDays
+            // Drop any stale navigation target (e.g. a "Today" pressed back in
+            // grid mode) so the month opens on the week being viewed, matching
+            // the strip and the sheet.
+            monthScrollTarget = nil
+        }
         monthCover = !coverUp // sheet starts down before covering, up before revealing
         gridMonthOverlap = true
         var t = Transaction()
