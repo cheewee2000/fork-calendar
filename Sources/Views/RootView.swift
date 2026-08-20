@@ -213,13 +213,16 @@ struct CalendarDetailView: View {
                                 // During a grid↔month zoom the month is a sheet
                                 // above the static hour grid: it slides up from
                                 // below the strip to cover the hours, or down
-                                // to reveal them. Its own copy of the strip row
-                                // is masked off while sliding — the grid's
-                                // pinned strip is the only one visible.
-                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
+                                // to reveal them. The mask sits BEFORE the
+                                // offset so it cuts the sheet's own symbols +
+                                // current-week row in content coordinates and
+                                // travels with it — the sheet's leading edge is
+                                // next week's row, and the current week only
+                                // ever exists as the grid's pinned strip.
                                 .mask(alignment: .top) {
                                     Rectangle().padding(.top, appState.gridMonthOverlap ? appState.stripBottomY : 0)
                                 }
+                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
                                 .transition(zoomTransition)
                                 .id(ZoomFamily.month)
                                 .zIndex(appState.gridMonthOverlap ? 3 : 1)
