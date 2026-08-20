@@ -118,8 +118,16 @@ struct TimeGridView: View {
                                 hourLines
                                 HStack(spacing: 0) {
                                     ForEach(extDays, id: \.self) { day in
-                                        DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
-                                            .transition(.identity)
+                                        if appState.gridNeighborsLive || days.contains(day) {
+                                            DayColumn(day: day, colWidth: colWidth, hourHeight: hourHeight)
+                                                .transition(.identity)
+                                        } else {
+                                            // Offscreen neighbor pages render as
+                                            // empty space while a zoom/column
+                                            // animation runs — see gridNeighborsLive.
+                                            Color.clear.frame(width: colWidth)
+                                                .transition(.identity)
+                                        }
                                     }
                                 }
                             }
