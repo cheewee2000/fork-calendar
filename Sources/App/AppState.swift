@@ -124,16 +124,24 @@ final class AppState: ObservableObject {
     /// knows whether it's diving in or pulling out, and from where.
     func setViewMode(_ mode: ViewMode) {
         if mode == viewMode {
-            // Same mode re-selected mid-transition (viewMode swaps to .month
-            // only at cleanup now): cancel an in-flight cover by sliding the
-            // sheet back down.
-            guard gridMonthOverlap else { return }
+            // Cancels any scheduled cover/cleanup phase (viewMode swaps to
+            // .month only at cleanup, so a mid-transition re-press of the
+            // current mode lands here — including during the align phase,
+            // before the sheet is up).
             overlapGeneration += 1
-            let gen = overlapGeneration
-            withAnimation(Self.zoomAnimation) { monthCover = false }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                guard self.overlapGeneration == gen else { return }
-                self.gridMonthOverlap = false
+            if gridMonthOverlap {
+                // Sheet is up (or rising): slide it back down.
+                let gen = overlapGeneration
+                withAnimation(Self.zoomAnimation) { monthCover = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    guard self.overlapGeneration == gen else { return }
+                    self.gridMonthOverlap = false
+                }
+            } else if gridAnchor != nil {
+                // Re-selecting the current grid mode re-aligns a free-anchored
+                // view (e.g. 'w' in a side-scrolled week slides Sunday to the
+                // left) — animated, never a snap.
+                withAnimation(Self.zoomAnimation) { gridAnchor = nil }
             }
             return
         }
@@ -216,12 +224,12 @@ final class AppState: ObservableObject {
                     // so a free-anchored week would otherwise never re-align.
                     gridAnchor = nil
                 }
-                // Fixed handoff, timed to the align's VISUAL settle (~0.3s
-                // for the 0.22 spring): completion-chaining on
+                // Fixed handoff, timed to the align's settle (easeOut ends
+                // hard at its duration): completion-chaining on
                 // .logicallyComplete left a dead beat after motion became
                 // imperceptible. Deterministic now that the align starts in
                 // a light commit at frame one.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { cover() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { cover() }
             }
             return
         }
@@ -260,7 +268,10 @@ final class AppState: ObservableObject {
         }
     }
 
-    static let zoomAnimation = Animation.spring(response: 0.22, dampingFraction: 1)
+    // Ease-out, not a critically-damped spring: the spring started at zero
+    // velocity (mushy ramp-in) and crawled through an asymptotic tail (mushy
+    // end). Ease-out moves at full speed on frame one and stops decisively.
+    static let zoomAnimation = Animation.easeOut(duration: 0.28)
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue
@@ -480,7 +491,9 @@ final class AppState: ObservableObject {
     }
 
     func setDayCount(_ n: Int) {
-        gridAnchor = nil
+        // No unanimated gridAnchor clear here: setViewMode animates the
+        // re-align (an instant clear snapped an anchored week to Sunday-left,
+        // which also made the later week→month align look like it never ran).
         switch n {
         case 1: setViewMode(.day)
         case 7: setViewMode(.week)
