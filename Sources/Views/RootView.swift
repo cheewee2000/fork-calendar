@@ -207,25 +207,25 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.year)
                                 .zIndex(0)
                         }
-                        if family == .month || (appState.gridMonthOverlap && family == .grid) {
+                        if family == .month, !appState.gridMonthOverlap {
                             MonthView()
                                 .background(CWT.paper)
-                                // During a grid↔month zoom the month is a sheet
-                                // above the static hour grid: it slides up from
-                                // below the strip to cover the hours, or down
-                                // to reveal them. The mask sits BEFORE the
-                                // offset so it cuts the sheet's own symbols +
-                                // current-week row in content coordinates and
-                                // travels with it — the sheet's leading edge is
-                                // next week's row, and the current week only
-                                // ever exists as the grid's pinned strip.
-                                .mask(alignment: .top) {
-                                    Rectangle().padding(.top, appState.gridMonthOverlap ? appState.stripBottomY : 0)
-                                }
-                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
                                 .transition(zoomTransition)
                                 .id(ZoomFamily.month)
-                                .zIndex(appState.gridMonthOverlap ? 3 : 1)
+                                .zIndex(1)
+                        }
+                        if appState.gridMonthOverlap {
+                            // Grid↔month zoom: the sheet of upcoming weeks
+                            // slides up over the static hour grid (or down off
+                            // it) beneath the pinned strip. The current week
+                            // isn't in the sheet, so it cannot move. When the
+                            // slide settles, the real MonthView (or the grid
+                            // alone) takes over pixel for pixel.
+                            MonthSheet()
+                                .padding(.top, appState.stripBottomY)
+                                .offset(y: appState.monthCover ? 0 : sheetTravel)
+                                .transition(.identity)
+                                .zIndex(3)
                         }
                         if family == .grid || (appState.gridMonthOverlap && family == .month) {
                             TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridOverlapDays)

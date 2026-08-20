@@ -184,16 +184,11 @@ final class AppState: ObservableObject {
         withTransaction(t) { viewMode = mode }
         overlapGeneration += 1
         let gen = overlapGeneration
-        if coverUp {
-            // The sheet mounted this commit (down at its start position);
-            // animating it must wait one runloop turn or it renders in place.
-            DispatchQueue.main.async {
-                guard self.overlapGeneration == gen else { return }
-                withAnimation(Self.zoomAnimation) { self.monthCover = true }
-            }
-        } else {
-            // The sheet was already mounted — slide it down in this commit.
-            withAnimation(Self.zoomAnimation) { monthCover = false }
+        // The sheet mounts in this commit at its start position; animating it
+        // must wait one runloop turn or it renders directly at the end state.
+        DispatchQueue.main.async {
+            guard self.overlapGeneration == gen else { return }
+            withAnimation(Self.zoomAnimation) { self.monthCover = coverUp }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             guard self.overlapGeneration == gen else { return }
