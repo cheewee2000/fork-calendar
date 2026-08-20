@@ -228,6 +228,10 @@ struct CalendarDetailView: View {
                             MonthSheet()
                                 .padding(.top, appState.stripBottomY)
                                 .offset(y: appState.monthCover ? 0 : sheetTravel)
+                                // Scoped to monthCover so the slide always
+                                // animates (and nothing else rides along) no
+                                // matter what shares the update cycle.
+                                .animation(AppState.zoomAnimation, value: appState.monthCover)
                                 .transition(.identity)
                                 .zIndex(3)
                         }

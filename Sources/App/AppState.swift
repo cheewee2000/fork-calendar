@@ -104,6 +104,12 @@ final class AppState: ObservableObject {
     /// layout only pay for the visible page.
     @Published var gridNeighborsLive = true
     private var neighborsGeneration = 0
+    /// Bumped in the same commit as any column-geometry change that should
+    /// animate. The grid scopes its animation to this value
+    /// (`.animation(_:value:)`) instead of relying on withAnimation's
+    /// transaction: a CalendarStore publish (event sync) landing in the same
+    /// update cycle used to strip the transaction and snap the transition.
+    @Published var zoomTick = 0
 
     /// Park the neighbor pages for the duration of an animation, then bring
     /// them back in a non-animated commit once the motion is over.
@@ -130,9 +136,10 @@ final class AppState: ObservableObject {
             // before the sheet is up).
             overlapGeneration += 1
             if gridMonthOverlap {
-                // Sheet is up (or rising): slide it back down.
+                // Sheet is up (or rising): slide it back down. (The sheet's
+                // own .animation(value: monthCover) drives the motion.)
                 let gen = overlapGeneration
-                withAnimation(Self.zoomAnimation) { monthCover = false }
+                monthCover = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
@@ -141,7 +148,8 @@ final class AppState: ObservableObject {
                 // Re-selecting the current grid mode re-aligns a free-anchored
                 // view (e.g. 'w' in a side-scrolled week slides Sunday to the
                 // left) — animated, never a snap.
-                withAnimation(Self.zoomAnimation) { gridAnchor = nil }
+                gridAnchor = nil
+                zoomTick += 1
             }
             return
         }
@@ -165,14 +173,16 @@ final class AppState: ObservableObject {
             let grownAnchor = newCount >= oldDays.count ? oldDays.first : nil
             // Neighbors stay LIVE here: added columns animate into place
             // precisely because they already exist as neighbor-page columns.
-            withAnimation(Self.zoomAnimation) {
-                viewMode = mode // didSet clears gridAnchor
-                // Anchored weeks bypass the weekend filter, so respect the
-                // classic aligned framing when weekends are hidden.
-                if let grownAnchor, settings.showWeekends || mode != .week {
-                    gridAnchor = grownAnchor
-                }
+            // Plain mutations + zoomTick: the grid's .animation(value:) scopes
+            // the animation to this change, immune to whatever else lands in
+            // the same update cycle (withAnimation's transaction wasn't).
+            viewMode = mode // didSet clears gridAnchor
+            // Anchored weeks bypass the weekend filter, so respect the
+            // classic aligned framing when weekends are hidden.
+            if let grownAnchor, settings.showWeekends || mode != .week {
+                gridAnchor = grownAnchor
             }
+            zoomTick += 1
             return
         }
         let fromF = viewMode.zoomFamily, toF = mode.zoomFamily
@@ -203,7 +213,7 @@ final class AppState: ObservableObject {
                 // one runloop turn or it renders directly at the end state.
                 DispatchQueue.main.async {
                     guard self.overlapGeneration == gen else { return }
-                    withAnimation(Self.zoomAnimation) { self.monthCover = true }
+                    self.monthCover = true // sheet's .animation(value:) slides it
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                     guard self.overlapGeneration == gen else { return }
@@ -218,12 +228,11 @@ final class AppState: ObservableObject {
             if aligned {
                 cover()
             } else {
-                withAnimation(Self.zoomAnimation) {
-                    viewMode = .week
-                    // Explicit: a same-value `.week` assignment skips didSet,
-                    // so a free-anchored week would otherwise never re-align.
-                    gridAnchor = nil
-                }
+                viewMode = .week
+                // Explicit: a same-value `.week` assignment skips didSet,
+                // so a free-anchored week would otherwise never re-align.
+                gridAnchor = nil
+                zoomTick += 1
                 // Fixed handoff, timed to the align's settle (easeOut ends
                 // hard at its duration): completion-chaining on
                 // .logicallyComplete left a dead beat after motion became
@@ -246,7 +255,7 @@ final class AppState: ObservableObject {
             let gen = overlapGeneration
             DispatchQueue.main.async {
                 guard self.overlapGeneration == gen else { return }
-                withAnimation(Self.zoomAnimation) { self.monthCover = false }
+                self.monthCover = false // sheet's .animation(value:) slides it
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 guard self.overlapGeneration == gen else { return }
@@ -271,7 +280,9 @@ final class AppState: ObservableObject {
     // Ease-out, not a critically-damped spring: the spring started at zero
     // velocity (mushy ramp-in) and crawled through an asymptotic tail (mushy
     // end). Ease-out moves at full speed on frame one and stops decisively.
-    static let zoomAnimation = Animation.easeOut(duration: 0.28)
+    static var zoomAnimation: Animation { .easeOut(duration: slowZoom ? 2.0 : 0.28) }
+    /// Debug: 8x slow motion for scripted transition recordings ("!" hook key).
+    static var slowZoom = false
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue
@@ -341,6 +352,30 @@ final class AppState: ObservableObject {
     init() {
         let stored = UserDefaults.standard.double(forKey: "hourHeight")
         hourHeight = stored >= 28 && stored <= 160 ? CGFloat(stored) : 56
+        #if os(macOS)
+        // Automation hook: lets scripted tests drive view-mode changes
+        // (`ForkCalDebugKey` distributed notification with a key string) so
+        // transitions can be screen-recorded and verified without a human at
+        // the keyboard. Accepts only the KeyMonitor mode keys.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("ForkCalDebugKey"), object: nil, queue: .main
+        ) { [weak self] note in
+            guard let key = note.object as? String else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                switch key {
+                case "d": self.setViewMode(.day)
+                case "w": self.setViewMode(.week)
+                case "m": self.setViewMode(.month)
+                case "y": self.setViewMode(.year)
+                case "t": self.goToToday()
+                case "1"..."9": self.setDayCount(Int(key) ?? 7)
+                case "!": Self.slowZoom.toggle()
+                default: break
+                }
+            }
+        }
+        #endif
     }
     @Published var panelContext: EditorContext?
     @Published var pendingSpanAction: PendingSpanAction?

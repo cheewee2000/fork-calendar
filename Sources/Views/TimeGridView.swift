@@ -153,6 +153,12 @@ struct TimeGridView: View {
                     gridScroll.scrollTo(y: appState.hourHeight * 8)
                 }
             }
+            // Column-geometry animation is scoped to zoomTick, not driven by
+            // withAnimation transactions: a store publish coalescing into the
+            // same update cycle used to strip the transaction and snap the
+            // columns. Pans and event refreshes don't touch the tick, so they
+            // never animate by accident.
+            .animation(AppState.zoomAnimation, value: appState.zoomTick)
             .onAppear {
                 appState.weekPageWidth = pageWidth
                 appState.gridColumnWidth = colWidth
