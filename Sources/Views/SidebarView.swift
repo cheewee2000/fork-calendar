@@ -62,8 +62,11 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .help("Accounts & settings (⌘,)")
                 #else
-                Button {
-                    appState.showSettingsSheet = true
+                // Push within the calendars sheet's NavigationStack: RootView's
+                // settings sheet can't present while this sheet is already up.
+                NavigationLink {
+                    SettingsView()
+                        .navigationTitle("Settings")
                 } label: {
                     Image(systemName: "gearshape").font(CWT.mono(13)).foregroundStyle(CWT.inkSoft)
                 }
