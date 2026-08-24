@@ -4,7 +4,15 @@ struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var accounts = AccountManager.shared
     @State private var showSettings = false
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    #endif
+
+    private func needsReauth(_ source: String) -> Bool {
+        accounts.accounts.first(where: { $0.email == source })?.needsReauth == true
+    }
 
     /// Persist a drag reorder within one account section: the saved order is
     /// the full sidebar sequence with that section's new arrangement in place.
@@ -35,10 +43,31 @@ struct SidebarView: View {
                         moveCalendars(in: group, from: from, to: to)
                     }
                 } header: {
-                    Text(group.source.uppercased())
-                        .font(CWT.mono(9, .bold))
-                        .kerning(0.4)
-                        .foregroundStyle(CWT.inkSoft)
+                    HStack(spacing: 5) {
+                        Text(group.source.uppercased())
+                            .font(CWT.mono(9, .bold))
+                            .kerning(0.4)
+                            .foregroundStyle(CWT.inkSoft)
+                        if needsReauth(group.source) {
+                            Button {
+                                #if os(macOS)
+                                openSettings()
+                                #else
+                                showSettings = true
+                                #endif
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                    Text("SIGN IN AGAIN")
+                                        .kerning(0.4)
+                                }
+                                .font(CWT.mono(9, .bold))
+                                .foregroundStyle(CWT.signalOrange)
+                            }
+                            .buttonStyle(.plain)
+                            .help("This account's sign-in expired — tap to open Settings")
+                        }
+                    }
                 }
             }
         }
