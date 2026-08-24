@@ -4,6 +4,7 @@ struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: AppSettings
+    @State private var showSettings = false
 
     /// Persist a drag reorder within one account section: the saved order is
     /// the full sidebar sequence with that section's new arrangement in place.
@@ -42,6 +43,13 @@ struct SidebarView: View {
             }
         }
         .navigationTitle("Fork Calendar")
+        #if os(iOS)
+        // Programmatic push: a NavigationLink inside a List's safeAreaInset
+        // doesn't reliably activate on iOS, so the gear drives this instead.
+        .navigationDestination(isPresented: $showSettings) {
+            SettingsView().navigationTitle("Settings")
+        }
+        #endif
         .safeAreaInset(edge: .bottom) {
             // CW&T ID label: the codename is the logo.
             HStack(alignment: .bottom) {
@@ -62,13 +70,13 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .help("Accounts & settings (⌘,)")
                 #else
-                // Push within the calendars sheet's NavigationStack: RootView's
-                // settings sheet can't present while this sheet is already up.
-                NavigationLink {
-                    SettingsView()
-                        .navigationTitle("Settings")
+                Button {
+                    showSettings = true
                 } label: {
-                    Image(systemName: "gearshape").font(CWT.mono(13)).foregroundStyle(CWT.inkSoft)
+                    Image(systemName: "gearshape").font(CWT.mono(15)).foregroundStyle(CWT.inkSoft)
+                        // Finger-sized target — the bare glyph is ~15pt.
+                        .frame(width: 44, height: 44, alignment: .trailing)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 #endif
