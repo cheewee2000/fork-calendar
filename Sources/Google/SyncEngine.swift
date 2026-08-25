@@ -250,6 +250,11 @@ final class SyncEngine: ObservableObject {
     /// listing when there's no token or Google says it expired.
     func syncCalendar(_ cal: CalCalendar, token: String) async throws {
         let key = cal.calendarIdentifier
+        liveListings += 1
+        defer {
+            liveListings -= 1
+            if liveListings == 0 { localWrites.removeAll() }
+        }
         var syncToken = syncTokens[key]
         var fresh: [String: EventRecord] = syncToken == nil ? [:] : (records[key] ?? [:])
         var touchedMasters = Set<String>()
@@ -288,6 +293,13 @@ final class SyncEngine: ObservableObject {
                 if let token = result.nextSyncToken { syncTokens[key] = token }
                 break
             }
+        }
+        // Replay local writes that landed while this listing was in flight:
+        // `fresh` is a snapshot from before them (empty on a full re-list),
+        // so the wholesale replace below would erase an event created or
+        // edited mid-sync — and it would only come back on the NEXT sync.
+        for w in localWrites where w.key == key {
+            fresh[w.id] = w.record
         }
         records[key] = fresh
         onChange?()
@@ -352,12 +364,21 @@ final class SyncEngine: ObservableObject {
 
     // MARK: - Local mutations (optimistic; the server round-trip follows)
 
+    /// Listing passes currently in flight. While any are live, local writes
+    /// are journaled so each pass can replay them over its own snapshot —
+    /// `syncCalendar` replaces `records[key]` wholesale, which would
+    /// otherwise erase anything written after the listing began.
+    private var liveListings = 0
+    private var localWrites: [(key: String, id: String, record: EventRecord?)] = []
+
     func upsert(_ record: EventRecord) {
+        if liveListings > 0 { localWrites.append((record.calendarKey, record.id, record)) }
         records[record.calendarKey, default: [:]][record.id] = record
         scheduleSave()
     }
 
     func remove(id: String, calendarKey: String) {
+        if liveListings > 0 { localWrites.append((calendarKey, id, nil)) }
         records[calendarKey]?[id] = nil
         scheduleSave()
     }
@@ -367,6 +388,7 @@ final class SyncEngine: ObservableObject {
         guard var dict = records[calendarKey] else { return }
         for (id, r) in dict where r.recurringEventId == masterID {
             if let date, (r.originalStart ?? r.start) < date { continue }
+            if liveListings > 0 { localWrites.append((calendarKey, id, nil)) }
             dict[id] = nil
         }
         records[calendarKey] = dict
@@ -385,6 +407,7 @@ final class SyncEngine: ObservableObject {
     func resetCache() {
         calendars = []
         records = [:]
+        localWrites = []
         syncTokens = [:]
         masters = [:]
         lastSync = nil
