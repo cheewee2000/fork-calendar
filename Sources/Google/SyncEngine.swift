@@ -12,6 +12,9 @@ struct CacheFile: Codable {
     var windowStart: Date
     var windowEnd: Date
     var lastSync: Date?
+    /// Bumped when cached records need a one-time full re-list to heal
+    /// (a mismatch drops every sync token on load).
+    var cacheRevision: Int?
 }
 
 /// Keeps a local mirror of every enabled account's calendars and events,
@@ -47,6 +50,9 @@ final class SyncEngine: ObservableObject {
             .store(in: &bag)
     }
 
+    /// Bump to force a one-time full re-list on every calendar at next launch.
+    static let cacheRevision = 2
+
     static func defaultWindow(around day: Date) -> DateInterval {
         DateInterval(start: day.addingTimeInterval(-365 * 86400), end: day.addingTimeInterval(548 * 86400))
     }
@@ -74,6 +80,10 @@ final class SyncEngine: ObservableObject {
         calendars = file.calendars
         syncTokens = file.syncTokens
         masters = file.masters
+        // Failed pushes before v0.15.28 could leave locally-edited records the
+        // incremental sync never heals (the server copy never changed, so it's
+        // never re-sent). One full re-list per calendar rebuilds from truth.
+        if file.cacheRevision != SyncEngine.cacheRevision { syncTokens.removeAll() }
         window = DateInterval(start: file.windowStart, end: file.windowEnd)
         lastSync = file.lastSync
         var dict: [String: [String: EventRecord]] = [:]
@@ -104,7 +114,8 @@ final class SyncEngine: ObservableObject {
             masters: masters,
             windowStart: window.start,
             windowEnd: window.end,
-            lastSync: lastSync
+            lastSync: lastSync,
+            cacheRevision: SyncEngine.cacheRevision
         )
         let url = SyncEngine.cacheURL
         DispatchQueue.global(qos: .utility).async {

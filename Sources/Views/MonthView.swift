@@ -4,6 +4,10 @@ import SwiftUI
 /// must render identically for the grid↔month zoom to hand off invisibly.
 let monthRowHeight: CGFloat = 108
 
+/// All-day lanes that fit a 108pt row (24pt header + 5 × 16pt bars). Bars
+/// past the cap are dropped and surface as a per-day "+N" marker instead.
+let monthSpanLaneCap = 5
+
 /// Continuous vertically-scrolling month view (a stack of week rows spanning
 /// ±1–2 years). The header month updates as you scroll; navigation scrolls here.
 struct MonthView: View {
@@ -101,7 +105,8 @@ struct MonthWeekRow: View {
     var body: some View {
         let cal = appState.calendar
         let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
-        let bars = SpanLayout.bars(days: days, store: store, calendar: cal).filter { $0.lane < 3 }
+        let allBars = SpanLayout.bars(days: days, store: store, calendar: cal)
+        let bars = allBars.filter { $0.lane < monthSpanLaneCap }
         let laneCount = (bars.map(\.lane).max() ?? -1) + 1
         let barsTop: CGFloat = 24
         HStack(alignment: .top, spacing: 0) {
@@ -116,6 +121,7 @@ struct MonthWeekRow: View {
                 ForEach(bars) { bar in
                     MonthSpanBar(bar: bar, cellW: cellW, rowH: rowH, barsTop: barsTop)
                 }
+                SpanOverflowMarkers(allBars: allBars, dayCount: days.count, cellW: cellW)
             }
         }
         .onAppear {
@@ -153,6 +159,30 @@ struct MonthSheet: View {
                 }
             }
             .background(CWT.paper)
+        }
+    }
+}
+
+/// "+N" markers in the day-number line for all-day events dropped past the
+/// lane cap, so a crowded day never hides events silently.
+struct SpanOverflowMarkers: View {
+    let allBars: [SpanBar]
+    let dayCount: Int
+    let cellW: CGFloat
+
+    var body: some View {
+        let hidden = allBars.filter { $0.lane >= monthSpanLaneCap }
+        if !hidden.isEmpty {
+            ForEach(0..<dayCount, id: \.self) { idx in
+                let n = hidden.filter { $0.startIndex <= idx && idx <= $0.endIndex }.count
+                if n > 0 {
+                    Text("+\(n)")
+                        .font(CWT.mono(8, .semibold))
+                        .foregroundStyle(CWT.inkSoft)
+                        .frame(width: cellW - 8, alignment: .trailing)
+                        .offset(x: CGFloat(idx) * cellW + 4, y: 6)
+                }
+            }
         }
     }
 }

@@ -132,6 +132,22 @@ struct EventPanelView: View {
         store.calendars.first { $0.calendarIdentifier == calendarID }
     }
 
+    /// All-day pickers show the last day the event covers; the model (like
+    /// Google) keeps an exclusive end — midnight after that last day.
+    private var inclusiveEnd: Binding<Date> {
+        Binding(
+            get: {
+                let cal = Calendar.autoupdatingCurrent
+                return cal.startOfDay(for: max(end.addingTimeInterval(-1), start))
+            },
+            set: {
+                let cal = Calendar.autoupdatingCurrent
+                let lastDay = cal.startOfDay(for: $0)
+                end = cal.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -193,8 +209,8 @@ struct EventPanelView: View {
                             .font(CWT.mono(12))
                             DatePicker(
                                 "Ends",
-                                selection: $end,
-                                in: start...,
+                                selection: isAllDay ? inclusiveEnd : $end,
+                                in: (isAllDay ? Calendar.autoupdatingCurrent.startOfDay(for: start) : start)...,
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
                             .font(CWT.mono(12))
@@ -497,8 +513,18 @@ struct EventPanelView: View {
         let event = context.event
         event.title = title.isEmpty ? "New event" : title
         event.isAllDay = isAllDay
-        event.startDate = start
-        event.endDate = max(end, isAllDay ? start : start.addingTimeInterval(900))
+        if isAllDay {
+            // Normalize to whole days with an exclusive end, so a one-day
+            // event spans exactly one day (Google rejects an empty range).
+            let cal = Calendar.autoupdatingCurrent
+            let firstDay = cal.startOfDay(for: start)
+            let lastDay = cal.startOfDay(for: max(end.addingTimeInterval(-1), firstDay))
+            event.startDate = firstDay
+            event.endDate = cal.date(byAdding: .day, value: 1, to: lastDay) ?? end
+        } else {
+            event.startDate = start
+            event.endDate = max(end, start.addingTimeInterval(900))
+        }
         event.location = location.isEmpty ? nil : location
         event.notes = notes.isEmpty ? nil : notes
         event.url = urlString.isEmpty ? nil : URL(string: urlString)

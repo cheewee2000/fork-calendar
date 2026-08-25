@@ -497,6 +497,7 @@ final class CalendarStore: ObservableObject {
             // (invitee copies of the same event). Google propagates these
             // server-side, but locally they'd show stale times until the next
             // sync; the syncAll after the push confirms.
+            var mirroredOriginals: [EventRecord] = []
             if let old {
                 for (calKey, dict) in engine.records where calKey != rec.calendarKey {
                     for dup in dict.values where dup.id != rec.id
@@ -507,6 +508,7 @@ final class CalendarStore: ObservableObject {
                         patched.start = rec.start
                         patched.end = rec.end
                         patched.isAllDay = rec.isAllDay
+                        mirroredOriginals.append(dup)
                         engine.upsert(patched)
                     }
                 }
@@ -514,7 +516,7 @@ final class CalendarStore: ObservableObject {
             if let snapshot { undoStack.append(.restore(id: event.id, snapshot: snapshot)) }
             reload()
             Task {
-                await pushUpdate(event, old: old, oldKey: oldKey, span: span)
+                await pushUpdate(event, old: old, oldKey: oldKey, span: span, mirrored: mirroredOriginals)
                 // Pull the server's propagation to the other calendars' copies.
                 engine.syncAll()
             }
@@ -700,7 +702,7 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    private func pushUpdate(_ event: CalEvent, old: EventRecord?, oldKey: String, span: EditSpan) async {
+    private func pushUpdate(_ event: CalEvent, old: EventRecord?, oldKey: String, span: EditSpan, mirrored: [EventRecord] = []) async {
         guard let cal = event.calendar else { return }
         let key = cal.calendarIdentifier
         do {
@@ -764,6 +766,16 @@ final class CalendarStore: ObservableObject {
             }
         } catch {
             toast = "Couldn't save — \(error.localizedDescription)"
+            // The server still has the pre-edit event, so put the optimistic
+            // local record (and any mirrored duplicate copies) back; the
+            // incremental resync below can't — records the server never
+            // changed are never re-sent.
+            if let old {
+                engine.remove(id: event.id, calendarKey: key)
+                engine.upsert(old)
+            }
+            for original in mirrored { engine.upsert(original) }
+            if old != nil || !mirrored.isEmpty { reload() }
             await engine.resync(calendarKey: key)
             if oldKey != key { await engine.resync(calendarKey: oldKey) }
         }

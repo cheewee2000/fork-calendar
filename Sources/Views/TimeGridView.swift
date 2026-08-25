@@ -24,8 +24,8 @@ struct TimeGridView: View {
             let pageWidth = max(outer.size.width - gutterWidth, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
             let extDays = appState.visibleDays(pageOffset: -1, current: days) + days + appState.visibleDays(pageOffset: 1, current: days)
-            let stripBars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)
-                .filter { $0.lane < 3 }
+            let allStripBars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)
+            let stripBars = allStripBars.filter { $0.lane < monthSpanLaneCap }
             let stripLanes = (stripBars.map(\.lane).max() ?? -1) + 1
 
             VStack(spacing: 0) {
@@ -97,6 +97,7 @@ struct TimeGridView: View {
                             ForEach(stripBars) { bar in
                                 MonthSpanBar(bar: bar, cellW: colWidth, rowH: monthRowHeight, barsTop: 24)
                             }
+                            SpanOverflowMarkers(allBars: allStripBars, dayCount: extDays.count, cellW: colWidth)
                         }
                         .frame(width: pageWidth * 3, alignment: .topLeading)
                     }
