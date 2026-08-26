@@ -70,6 +70,10 @@ final class CalendarStore: ObservableObject {
     @Published var events: [CalEvent] = []
     @Published var isRefreshing = false
     @Published var lastSync: Date?
+    /// Network unreachable on the last sync attempt (sidebar pill).
+    @Published var isOffline = false
+    /// Offline writes waiting to reach Google.
+    @Published var pendingCount = 0
     @Published var toast: String?
     @Published var notifyPrompt: NotifyPrompt?
     @Published var hiddenCalendarIDs: Set<String> {
@@ -95,6 +99,21 @@ final class CalendarStore: ObservableObject {
             showDeclined: AppSettings.shared.showDeclined
         )
         engine.onChange = { [weak self] in self?.reload() }
+        // A replayed offline insert traded its local id for the server's:
+        // keep undo entries and any live (open-editor) event object valid.
+        engine.onRemapID = { [weak self] old, new in
+            guard let self else { return }
+            self.findEvent(id: old)?.id = new
+            self.remapUndo(from: old, to: new)
+        }
+        engine.$isOffline
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] offline in self?.isOffline = offline }
+            .store(in: &bag)
+        engine.$pendingOps
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] ops in self?.pendingCount = ops.count }
+            .store(in: &bag)
         engine.$isSyncing
             .receive(on: DispatchQueue.main)
             .sink { [weak self] syncing in self?.isRefreshing = syncing }
@@ -624,6 +643,7 @@ final class CalendarStore: ObservableObject {
         // Optimistic: every cached copy of the series/instance shows the answer
         let key = cal.calendarIdentifier
         let targetID = event.recurringEventId ?? event.id
+        let preChange = engine.record(id: targetID, calendarKey: key)
         event.attendees = attendees
         if let dict = engine.records[key] {
             for (id, var r) in dict where id == event.id || r.recurringEventId == targetID {
@@ -643,6 +663,19 @@ final class CalendarStore: ObservableObject {
             let label: String = status == .accepted ? "Going" : status == .tentative ? "Maybe" : "Not going"
             toast = "RSVP sent: \(label)" + (sendUpdates == "none" ? " (organizer not emailed)" : "")
         } catch {
+            if error.isRetryableOffline {
+                engine.enqueue(PendingOp(
+                    kind: .update, accountID: cal.accountID,
+                    calendarKey: key, googleCalendarID: cal.googleID,
+                    eventID: targetID,
+                    body: PendingOp.encode(["attendees": attendees.map { $0.googleJSON() }]),
+                    sendUpdates: AppSettings.shared.rsvpNotifyOrganizer ? "all" : "none",
+                    optimistic: engine.record(id: targetID, calendarKey: key),
+                    rollback: preChange
+                ))
+                toast = "Offline — RSVP will send when you're back online"
+                return
+            }
             toast = "RSVP failed — \(error.localizedDescription)"
         }
         await engine.resync(calendarKey: key)
@@ -676,9 +709,9 @@ final class CalendarStore: ObservableObject {
         guard let cal = event.calendar else { return }
         let localID = event.id
         let wantedMeet = event.wantsMeet
+        let updates = await sendUpdates(for: event, old: nil, verb: "Invite guests to")
         do {
             let token = try await accounts.validToken(for: cal.accountID)
-            let updates = await sendUpdates(for: event, old: nil, verb: "Invite guests to")
             let created = try await GoogleCalendarAPI.insert(
                 calendarID: cal.googleID, body: EventBody.full(event), sendUpdates: updates, token: token
             )
@@ -696,18 +729,28 @@ final class CalendarStore: ObservableObject {
             // Recurring masters → instances come from the server
             if !(event.recurrence ?? []).isEmpty { await engine.resync(calendarKey: cal.calendarIdentifier) }
         } catch {
-            toast = "Couldn't create event — \(error.localizedDescription)"
-            engine.remove(id: localID, calendarKey: cal.calendarIdentifier)
-            reload()
+            if error.isRetryableOffline {
+                engine.enqueue(PendingOp(
+                    kind: .insert, accountID: cal.accountID,
+                    calendarKey: cal.calendarIdentifier, googleCalendarID: cal.googleID,
+                    eventID: localID, body: PendingOp.encode(EventBody.full(event)),
+                    sendUpdates: updates, optimistic: event.record(), rollback: nil
+                ))
+                toast = "Offline — event will sync when you're back online"
+            } else {
+                toast = "Couldn't create event — \(error.localizedDescription)"
+                engine.remove(id: localID, calendarKey: cal.calendarIdentifier)
+                reload()
+            }
         }
     }
 
     private func pushUpdate(_ event: CalEvent, old: EventRecord?, oldKey: String, span: EditSpan, mirrored: [EventRecord] = []) async {
         guard let cal = event.calendar else { return }
         let key = cal.calendarIdentifier
+        let updates = await sendUpdates(for: event, old: old, verb: "Update")
         do {
             let token = try await accounts.validToken(for: cal.accountID)
-            let updates = await sendUpdates(for: event, old: old, verb: "Update")
             var eventID = event.id
             var sourceCal = engine.calendar(forKey: oldKey) ?? cal
 
@@ -765,6 +808,20 @@ final class CalendarStore: ObservableObject {
                 }
             }
         } catch {
+            // Offline: keep the optimistic edit and queue the patch — but not
+            // for calendar moves or series splits, which need a multi-step
+            // server conversation that can't be replayed blindly.
+            if error.isRetryableOffline, oldKey == key,
+               !(span == .futureEvents && event.recurringEventId != nil) {
+                engine.enqueue(PendingOp(
+                    kind: .update, accountID: cal.accountID,
+                    calendarKey: key, googleCalendarID: cal.googleID,
+                    eventID: event.id, body: PendingOp.encode(EventBody.patch(event, old: old)),
+                    sendUpdates: updates, optimistic: event.record(), rollback: old
+                ))
+                toast = "Offline — change will sync when you're back online"
+                return
+            }
             toast = "Couldn't save — \(error.localizedDescription)"
             // The server still has the pre-edit event, so put the optimistic
             // local record (and any mirrored duplicate copies) back; the
@@ -809,9 +866,14 @@ final class CalendarStore: ObservableObject {
 
     private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan) async {
         let key = cal.calendarIdentifier
+        if event.isLocal {
+            // Never reached the server — just cancel any queued insert.
+            engine.cancelPending(eventID: event.id, calendarKey: key)
+            return
+        }
+        let updates = await sendUpdates(for: event, old: nil, verb: "Cancel")
         do {
             let token = try await accounts.validToken(for: cal.accountID)
-            let updates = await sendUpdates(for: event, old: nil, verb: "Cancel")
             if span == .futureEvents, let masterID = event.recurringEventId {
                 let master = try await GoogleCalendarAPI.getEvent(calendarID: cal.googleID, eventID: masterID, token: token)
                 let masterStart = master.start.flatMap(GoogleDates.parse)
@@ -823,11 +885,30 @@ final class CalendarStore: ObservableObject {
                     _ = try await GoogleCalendarAPI.patch(calendarID: cal.googleID, eventID: masterID, body: ["recurrence": truncated], sendUpdates: updates, token: token)
                     engine.setMasterRules(truncated, calendarKey: key, masterID: masterID)
                 }
-            } else if !event.isLocal {
+            } else {
                 try await GoogleCalendarAPI.delete(calendarID: cal.googleID, eventID: event.id, sendUpdates: updates, token: token)
             }
         } catch {
-            toast = "Couldn't delete — \(error.localizedDescription)"
+            if error.isRetryableOffline {
+                if span == .futureEvents, event.recurringEventId != nil {
+                    // Truncating a series needs the master from the server;
+                    // the local removal can't stand — a full re-list restores
+                    // the instances once we're back online.
+                    engine.dropSyncToken(forKey: key)
+                    toast = "Can't delete future events while offline"
+                } else {
+                    engine.enqueue(PendingOp(
+                        kind: .delete, accountID: cal.accountID,
+                        calendarKey: key, googleCalendarID: cal.googleID,
+                        eventID: event.id, body: nil, sendUpdates: updates,
+                        optimistic: nil, rollback: event.record()
+                    ))
+                    toast = "Offline — will delete when you're back online"
+                    return
+                }
+            } else {
+                toast = "Couldn't delete — \(error.localizedDescription)"
+            }
         }
         await engine.resync(calendarKey: key)
     }

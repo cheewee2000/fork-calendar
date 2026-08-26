@@ -14,6 +14,14 @@ struct SidebarView: View {
         accounts.accounts.first(where: { $0.email == source })?.needsReauth == true
     }
 
+    /// "OFFLINE", "3 QUEUED", or "OFFLINE · 3 QUEUED".
+    private var offlineStatus: String {
+        var parts: [String] = []
+        if store.isOffline { parts.append("OFFLINE") }
+        if store.pendingCount > 0 { parts.append("\(store.pendingCount) QUEUED") }
+        return parts.joined(separator: " · ")
+    }
+
     /// Persist a drag reorder within one account section: the saved order is
     /// the full sidebar sequence with that section's new arrangement in place.
     private func moveCalendars(in group: (source: String, calendars: [CalCalendar]), from: IndexSet, to: Int) {
@@ -83,6 +91,22 @@ struct SidebarView: View {
             // CW&T ID label: the codename is the logo.
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 1) {
+                    if store.isOffline || store.pendingCount > 0 {
+                        Button {
+                            store.refresh()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: store.isOffline ? "wifi.slash" : "arrow.triangle.2.circlepath")
+                                Text(offlineStatus)
+                                    .kerning(0.4)
+                            }
+                            .font(CWT.mono(9, .bold))
+                            .foregroundStyle(CWT.signalOrange)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Changes made offline sync automatically when you're back online — tap to retry now")
+                        .padding(.bottom, 3)
+                    }
                     Text("CWT_STE0GW1_2607")
                         .font(CWT.mono(9, .bold))
                         .kerning(0.5)
