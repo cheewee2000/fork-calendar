@@ -17,6 +17,31 @@ enum ViewMode: Hashable {
         }
     }
 
+    /// Stable UserDefaults form, so the app reopens in the mode it quit in.
+    var saveKey: String {
+        switch self {
+        case .day: return "day"
+        case .week: return "week"
+        case .days(let n): return "days:\(n)"
+        case .month: return "month"
+        case .year: return "year"
+        }
+    }
+
+    init?(saveKey: String?) {
+        switch saveKey {
+        case "day": self = .day
+        case "week": self = .week
+        case "month": self = .month
+        case "year": self = .year
+        default:
+            guard let saveKey, saveKey.hasPrefix("days:"),
+                  let n = Int(saveKey.dropFirst(5)), (2...14).contains(n)
+            else { return nil }
+            self = .days(n)
+        }
+    }
+
     /// Which screen this mode renders. Modes in the same family (all the
     /// time-grid variants) animate internally by adding/removing columns;
     /// crossing families plays the row-band zoom. Raw value = zoom depth.
@@ -77,8 +102,11 @@ final class PanModel: ObservableObject {
 @MainActor
 final class AppState: ObservableObject {
     @Published var currentDate = Date()
-    @Published var viewMode: ViewMode = .week {
-        didSet { if viewMode != oldValue { gridAnchor = nil } }
+    @Published var viewMode: ViewMode = ViewMode(saveKey: UserDefaults.standard.string(forKey: "lastViewMode")) ?? .week {
+        didSet {
+            if viewMode != oldValue { gridAnchor = nil }
+            UserDefaults.standard.set(viewMode.saveKey, forKey: "lastViewMode")
+        }
     }
     /// Geometry of the last cross-family view change. Published so the
     /// outgoing view re-renders with the right transition before the swap

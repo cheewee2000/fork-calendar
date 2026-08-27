@@ -255,8 +255,10 @@ struct CalendarDetailView: View {
         .background(CWT.paper)
         .onAppear {
             #if os(iOS)
-            if !didSetInitialMode, sizeClass == .compact {
+            if !didSetInitialMode, sizeClass == .compact,
+               UserDefaults.standard.string(forKey: "lastViewMode") == nil {
                 // Direct set: the launch default should not play a zoom.
+                // A saved mode from the last quit wins over this default.
                 appState.viewMode = .days(3)
             }
             #endif
