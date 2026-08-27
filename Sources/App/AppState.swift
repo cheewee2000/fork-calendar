@@ -453,7 +453,13 @@ final class AppState: ObservableObject {
     @Published var panelContext: EditorContext?
     @Published var pendingSpanAction: PendingSpanAction?
     @Published var showSpanDialog = false
-    @Published var columnVisibility: NavigationSplitViewVisibility = .all
+    /// Sidebar shown/hidden survives relaunch, like the view mode.
+    @Published var columnVisibility: NavigationSplitViewVisibility =
+        UserDefaults.standard.bool(forKey: "sidebarHidden") ? .detailOnly : .all {
+        didSet {
+            UserDefaults.standard.set(columnVisibility == .detailOnly, forKey: "sidebarHidden")
+        }
+    }
     /// iPhone: presents the calendar list (sidebar equivalent) as a sheet.
     @Published var showCalendarsSheet = false
     /// iOS: settings/accounts sheet (macOS uses the Settings window).
