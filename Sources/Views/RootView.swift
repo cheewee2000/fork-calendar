@@ -52,6 +52,11 @@ struct RootView: View {
         }
         .task {
             await store.requestAccess()
+            // Don't rely on onChange(accessState) for the first fetch: the
+            // accounts sink can flip it to .granted before this view attaches,
+            // so no change ever fires and the window stays empty until a
+            // keypress moves the date.
+            fetchVisible()
             #if os(macOS)
             KeyMonitor.install(appState: appState, store: store)
             #endif
