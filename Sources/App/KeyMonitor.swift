@@ -188,7 +188,23 @@ enum KeyMonitor {
             case 126: appState.palette.move(-1); return true   // up
             case 36, 76: appState.palette.confirmTick += 1; return true // return
             case 53: appState.paletteOpen = false; return true // esc
-            default: return false
+            default:
+                // FocusState on the palette's field can fail to land (the
+                // overlay inserts mid-event stream), leaving typing with no
+                // destination — route it straight into the query so search
+                // works even with a dead text field.
+                guard !isTyping else { return false }
+                let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                guard mods.subtracting([.shift, .option, .capsLock]).isEmpty else { return false }
+                if event.keyCode == 51 { // delete
+                    if !appState.palette.query.isEmpty { appState.palette.query.removeLast() }
+                    return true
+                }
+                guard let chars = event.characters, !chars.isEmpty,
+                      chars.unicodeScalars.allSatisfy({ $0.value >= 0x20 && !(0xF700...0xF8FF).contains($0.value) })
+                else { return false }
+                appState.palette.query += chars
+                return true
             }
         }
 

@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct PaletteItem: Identifiable {
@@ -24,8 +25,17 @@ private struct PaletteBody: View {
     @FocusState private var focused: Bool
     @Environment(\.openURL) private var openURL
 
+    /// Results live in view state and are rebuilt through Combine
+    /// subscriptions created ONCE in `onAppear` — not `onReceive` (whose
+    /// publisher is recreated every render, and each resubscription re-emits
+    /// the current query, which re-renders: a livelock that starved real
+    /// updates), and not inline in `body` (query publishes during the
+    /// overlay's insertion could wedge that observation: the field kept
+    /// accepting text while the list stayed stale).
+    @State private var items: [PaletteItem] = []
+    @State private var subs: [AnyCancellable] = []
+
     var body: some View {
-        let items = buildItems()
         ZStack(alignment: .top) {
             Color.black.opacity(0.2)
                 .ignoresSafeArea()
@@ -33,25 +43,40 @@ private struct PaletteBody: View {
             card(items: items)
         }
         .onAppear {
-            model.reset()
-            model.itemCount = items.count
-            // Focus can fail while the overlay is still being inserted — retry.
-            focused = true
-            DispatchQueue.main.async { focused = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focused = true }
+            subs = [
+                model.$query.removeDuplicates().receive(on: DispatchQueue.main).sink { _ in
+                    model.index = 0
+                    refresh()
+                },
+                store.objectWillChange
+                    .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
+                    .sink { _ in refresh() },
+                model.$confirmTick.dropFirst().receive(on: DispatchQueue.main).sink { _ in
+                    guard items.indices.contains(model.index) else { return }
+                    appState.paletteOpen = false
+                    items[model.index].action()
+                },
+                // The palette stays mounted for the window's whole life;
+                // each open resets the query and takes keyboard focus here.
+                appState.$paletteOpen.removeDuplicates().receive(on: DispatchQueue.main).sink { open in
+                    if open {
+                        model.reset()
+                        refresh()
+                        focused = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focused = true }
+                    } else {
+                        focused = false
+                    }
+                },
+            ]
         }
-        .onChange(of: model.query) {
-            model.index = 0
-        }
-        .onChange(of: items.count) {
-            model.itemCount = items.count
-        }
-        .onChange(of: model.confirmTick) {
-            let current = buildItems()
-            guard current.indices.contains(model.index) else { return }
-            appState.paletteOpen = false
-            current[model.index].action()
-        }
+        .onDisappear { subs = [] }
+    }
+
+    private func refresh() {
+        items = buildItems()
+        model.itemCount = items.count
+        if model.index >= items.count { model.index = max(0, items.count - 1) }
     }
 
     private func card(items: [PaletteItem]) -> some View {
@@ -85,8 +110,11 @@ private struct PaletteBody: View {
     private func resultsList(items: [PaletteItem]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                // Plain VStack, rows keyed by position: LazyVStack cached rows
+                // by the .id(i) override while the ForEach was keyed on
+                // per-build UUIDs, so refreshed results never re-rendered.
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                         PaletteRow(item: item, selected: i == model.index)
                             .id(i)
                             .onTapGesture {

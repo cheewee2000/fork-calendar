@@ -46,6 +46,8 @@ struct ForkCalendarApp: App {
                     .keyboardShortcut("n", modifiers: [.command])
                 Button("Search & Commands") { appState.paletteOpen.toggle() }
                     .keyboardShortcut("k", modifiers: [.command])
+                Button("Find Events…") { appState.paletteOpen = true }
+                    .keyboardShortcut("f", modifiers: [.command])
             }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Sidebar") {

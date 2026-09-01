@@ -444,7 +444,19 @@ final class AppState: ObservableObject {
                 case "t": self.goToToday()
                 case "1"..."9": self.setDayCount(Int(key) ?? 7)
                 case "!": Self.slowZoom.toggle()
-                default: break
+                case "k": self.paletteOpen = true
+                case "esc": self.handleEscape()
+                default:
+                    // "type:<text>" fills the palette query (opening it first)
+                    // so search results can be verified without a keyboard.
+                    if key.hasPrefix("type:") {
+                        self.paletteOpen = true
+                        // After the palette's open-reset (delivered on the
+                        // next main-queue tick), so the query survives it.
+                        DispatchQueue.main.async {
+                            self.palette.query = String(key.dropFirst(5))
+                        }
+                    }
                 }
             }
         }

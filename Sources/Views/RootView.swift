@@ -71,9 +71,13 @@ struct RootView: View {
             }
         }
         .overlay {
-            if appState.paletteOpen {
-                CommandPalette()
-            }
+            // Always mounted, shown by opacity: inserting the palette on
+            // demand wedged its first open (the insertion transaction left
+            // the subtree's updates dead — typing searched but the list
+            // never changed). A mounted-but-hidden view has no insertion.
+            CommandPalette()
+                .opacity(appState.paletteOpen ? 1 : 0)
+                .allowsHitTesting(appState.paletteOpen)
         }
         .overlay(alignment: .bottom) {
             if appState.availabilityMode {
