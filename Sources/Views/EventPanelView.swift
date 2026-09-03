@@ -128,10 +128,6 @@ struct EventPanelView: View {
         !context.isNew && !(context.event.calendar?.allowsContentModifications ?? true)
     }
 
-    private var selectedCalendar: CalCalendar? {
-        store.calendars.first { $0.calendarIdentifier == calendarID }
-    }
-
     /// All-day pickers show the last day the event covers; the model (like
     /// Google) keeps an exclusive end — midnight after that last day.
     private var inclusiveEnd: Binding<Date> {
@@ -175,7 +171,7 @@ struct EventPanelView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField("Add title", text: $title, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(CWT.mono(15, .bold))
+                        .font(CWT.mono(15))
                         .focused($titleFocused)
                         .lineLimit(3)
                         .disabled(isReadOnly)
@@ -259,7 +255,7 @@ struct EventPanelView: View {
                         row(icon: "person.2") {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(attendees.enumerated()), id: \.offset) { _, attendee in
-                                    let status = attendee.participantStatus
+                                    let status = attendee.responseStatus
                                     HStack(spacing: 6) {
                                         Image(systemName: statusIcon(status))
                                             .font(CWT.mono(10))
@@ -267,7 +263,7 @@ struct EventPanelView: View {
                                         Text(attendee.name ?? "Unknown")
                                             .font(CWT.mono(12))
                                             .lineLimit(1)
-                                        if attendee.isCurrentUser {
+                                        if attendee.isSelf {
                                             Text("(you)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
                                         } else if attendee.isOrganizer {
                                             Text("(organizer)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
@@ -475,7 +471,7 @@ struct EventPanelView: View {
     }
 
     private func rsvpButton(_ label: String, status: ParticipantStatus) -> some View {
-        let isCurrent = store.effectiveStatus(context.event) == status
+        let isCurrent = context.event.myParticipantStatus == status
         return Button(label) {
             let event = context.event
             let s = store
@@ -595,8 +591,8 @@ enum HTMLNotes {
             }
             #endif
             let range = run.range
-            attr[range].font = CWT.mono(12, bold ? .bold : .regular)
-            if italic { attr[range].font = CWT.mono(12, bold ? .bold : .regular).italic() }
+            attr[range].font = CWT.mono(12)
+            if italic { attr[range].font = CWT.mono(12).italic() }
             attr[range].foregroundColor = run.link != nil ? Color.accentColor : CWT.ink
             attr[range].backgroundColor = nil
             #if os(macOS)

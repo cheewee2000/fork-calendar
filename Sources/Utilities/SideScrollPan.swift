@@ -72,11 +72,11 @@ struct SideScrollPan: UIViewRepresentable {
                 panSession = appState.panSession
                 gestureActive = true
                 appState.isPanning = true
-                applyPan(pan.translation(in: pan.view).x)
+                appState.applyPan(pan.translation(in: pan.view).x)
                 pan.setTranslation(.zero, in: pan.view)
             case .changed:
                 guard panSession == appState.panSession else { return }
-                applyPan(pan.translation(in: pan.view).x)
+                appState.applyPan(pan.translation(in: pan.view).x)
                 pan.setTranslation(.zero, in: pan.view)
             case .ended:
                 gestureActive = false
@@ -113,7 +113,7 @@ struct SideScrollPan: UIViewRepresentable {
             let now = CACurrentMediaTime()
             let dt = now - lastTick
             lastTick = now
-            applyPan(velocity * CGFloat(dt))
+            appState.applyPan(velocity * CGFloat(dt))
             velocity *= pow(UIScrollView.DecelerationRate.normal.rawValue, CGFloat(dt * 1000))
             if abs(velocity) < 20 {
                 stopDecay()
@@ -121,40 +121,10 @@ struct SideScrollPan: UIViewRepresentable {
             }
         }
 
-        // MARK: - Pan math (mirrors KeyMonitor.applyPan / settlePan on macOS)
-
-        private func applyPan(_ dx: CGFloat) {
-            var offset = appState.pan.offset + dx
-            let pageWidth = appState.weekPageWidth
-            let dayCount = max(1, appState.visibleDays.count)
-            if pageWidth > 0 {
-                while offset <= -pageWidth {
-                    appState.panShiftDays(dayCount)
-                    offset += pageWidth
-                }
-                while offset >= pageWidth {
-                    appState.panShiftDays(-dayCount)
-                    offset -= pageWidth
-                }
-            }
-            var t = Transaction()
-            t.disablesAnimations = true
-            withTransaction(t) { appState.pan.offset = offset }
-        }
-
-        /// End of a pan: columns rest where the swipe left them; only
-        /// currentDate is re-pointed at the day nearest the visible left edge.
         private func settle() {
-            if let anchor = appState.gridAnchor, appState.gridColumnWidth > 4 {
-                let dayShift = Int((-appState.pan.offset / appState.gridColumnWidth).rounded())
-                if dayShift != 0,
-                   let visualFirst = appState.calendar.date(byAdding: .day, value: dayShift, to: anchor) {
-                    appState.currentDate = visualFirst
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                guard let self, self.displayLink == nil, !self.gestureActive else { return }
-                self.appState.isPanning = false
+            appState.settlePan { [weak self] in
+                guard let self else { return true }
+                return self.displayLink != nil || self.gestureActive
             }
         }
     }

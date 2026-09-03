@@ -17,7 +17,7 @@ struct YearView: View {
                 Color.clear.frame(width: gutter, height: 1)
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(CWT.mono(9, .semibold))
+                        .font(CWT.mono(9))
                         .foregroundStyle(CWT.inkSoft)
                         .frame(maxWidth: .infinity)
                 }
@@ -68,7 +68,7 @@ private struct YearWeekRow: View {
         let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
         HStack(spacing: 0) {
             Text(monthLabel(calendar: cal))
-                .font(CWT.mono(9, .semibold))
+                .font(CWT.mono(9))
                 .foregroundStyle(CWT.inkSoft)
                 .frame(width: gutter, alignment: .leading)
                 .padding(.leading, 6)
@@ -101,16 +101,9 @@ private struct YearWeekRow: View {
 
     /// Show the month name on the row containing the 1st of that month.
     private func monthLabel(calendar: Calendar) -> String {
-        for offset in 0..<7 {
-            if let day = calendar.date(byAdding: .day, value: offset, to: weekStart),
-               calendar.component(.day, from: day) == 1,
-               calendar.component(.year, from: day) == year {
-                let f = DateFormatter()
-                f.setLocalizedDateFormatFromTemplate("MMM")
-                return f.string(from: day)
-            }
-        }
-        return ""
+        guard let day = calendar.firstOfMonth(inWeekStarting: weekStart),
+              calendar.component(.year, from: day) == year else { return "" }
+        return Fmt.month.string(from: day)
     }
 }
 
@@ -124,7 +117,7 @@ private struct YearSpanChip: View {
         Group {
             if showTitle {
                 Text(event.title ?? "Untitled")
-                    .font(CWT.mono(7, .medium))
+                    .font(CWT.mono(7))
                     .lineLimit(1)
                     .foregroundStyle(color)
                     .padding(.horizontal, 3)
@@ -154,7 +147,7 @@ private struct YearDayCell: View {
 
         HStack(spacing: 3) {
             Text(Fmt.dayNum.string(from: day))
-                .font(CWT.mono(9, isToday ? .bold : .regular))
+                .font(CWT.mono(9))
                 .frame(width: 16, height: 13)
                 .background { if isToday { Rectangle().fill(CWT.signalRed) } }
                 .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : CWT.inkSoft.opacity(0.35))

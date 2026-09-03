@@ -526,6 +526,39 @@ final class AppState: ObservableObject {
     }
 
     /// Shift the free-scroll anchor by whole days (during trackpad panning).
+    /// Shared by the macOS trackpad (KeyMonitor) and iOS touch (SideScrollPan)
+    /// pans: shift the strip by dx, re-anchoring a whole page at a time (the
+    /// strip is 3 pages wide) so expensive re-renders happen once per page.
+    func applyPan(_ dx: CGFloat) {
+        var offset = pan.offset + dx
+        let pageWidth = weekPageWidth
+        let dayCount = max(1, visibleDays.count)
+        if pageWidth > 0 {
+            while offset <= -pageWidth { panShiftDays(dayCount); offset += pageWidth }
+            while offset >= pageWidth { panShiftDays(-dayCount); offset -= pageWidth }
+        }
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { pan.offset = offset }
+    }
+
+    /// End of a pan: columns rest where the gesture left them — layout is
+    /// never touched. Only currentDate is re-pointed at the day nearest the
+    /// visible left edge (header label, fetch window). isPanning clears after
+    /// the currentDate onChange pass unless `stillPanning` says a new gesture
+    /// already latched.
+    func settlePan(stillPanning: @escaping () -> Bool) {
+        if let anchor = gridAnchor, gridColumnWidth > 4 {
+            let dayShift = Int((-pan.offset / gridColumnWidth).rounded())
+            if dayShift != 0, let visualFirst = calendar.date(byAdding: .day, value: dayShift, to: anchor) {
+                currentDate = visualFirst
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            if !stillPanning() { self?.isPanning = false }
+        }
+    }
+
     func panShiftDays(_ dayDelta: Int) {
         let cal = calendar
         let anchor = gridAnchor ?? visibleDays.first ?? currentDate

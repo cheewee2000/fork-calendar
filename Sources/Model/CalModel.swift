@@ -19,8 +19,6 @@ struct CalAttendee: Codable, Hashable {
     var isResource: Bool
 
     var name: String? { displayName ?? email }
-    var isCurrentUser: Bool { isSelf }
-    var participantStatus: ParticipantStatus { responseStatus }
 
     func googleJSON() -> [String: Any] {
         var d: [String: Any] = ["email": email, "responseStatus": responseStatus.rawValue]
@@ -64,8 +62,6 @@ final class CalCalendar: Codable, Identifiable, Hashable {
 
     var id: String { calendarIdentifier }
     var allowsContentModifications: Bool { accessRole == "owner" || accessRole == "writer" }
-    /// Grouping label in the sidebar (the account's email).
-    var sourceTitle: String { accountID }
 
     var displayColor: Color {
         if let hex = AppSettings.shared.calendarColors[calendarIdentifier], let c = Color(hex: hex) { return c }
@@ -209,7 +205,6 @@ final class CalEvent: Identifiable, Hashable {
     var isLocal: Bool { id.hasPrefix(CalEvent.localPrefix) }
     var isInstance: Bool { recurringEventId != nil }
     var isMaster: Bool { recurringEventId == nil && !(recurrence ?? []).isEmpty }
-    var hasRecurrenceRules: Bool { isInstance || isMaster }
     /// Google instance ids carry the master id before "_".
     var masterID: String? { recurringEventId ?? (isMaster ? id : nil) }
 

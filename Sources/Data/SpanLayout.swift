@@ -96,9 +96,9 @@ struct SpanBarView: View {
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
         let isSelected = appState.selectedKey == eventKey(event)
-        let awaiting = store.awaitingResponse(event)
+        let awaiting = event.needsMyResponse
         Text(event.title ?? "Untitled")
-            .font(CWT.mono(compact ? 9 : 10, .medium))
+            .font(CWT.mono(compact ? 9 : 10))
             .lineLimit(1)
             .foregroundStyle(color)
             .padding(.leading, 3 + CalendarStrips.totalWidth(count: copies.count) + 3)

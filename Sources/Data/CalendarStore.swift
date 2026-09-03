@@ -396,11 +396,6 @@ final class CalendarStore: ObservableObject {
         return (allDay, timed)
     }
 
-    // MARK: - RSVP state (the local record reflects an answer immediately)
-
-    func awaitingResponse(_ event: CalEvent) -> Bool { event.needsMyResponse }
-    func effectiveStatus(_ event: CalEvent) -> ParticipantStatus? { event.myParticipantStatus }
-
     func spanningEvents(from: Date, to: Date) -> [CalEvent] {
         events.filter { event in
             guard passesFilters(event) else { return false }
@@ -427,11 +422,6 @@ final class CalendarStore: ObservableObject {
         }
         dayIndexCache = index
         return index
-    }
-
-    func eventColors(on day: Date, calendar: Calendar, max maxCount: Int = 3) -> [Color] {
-        let key = calendar.startOfDay(for: day)
-        return (dayIndex()[key] ?? []).prefix(maxCount).map { $0.calendar?.displayColor ?? .accentColor }
     }
 
     var nextUpcomingEvent: CalEvent? {
@@ -575,8 +565,6 @@ final class CalendarStore: ObservableObject {
         event.calendar = calendar
         saveWithUndo(event, snapshot: snapshot, isNew: false, span: .thisEvent)
     }
-
-    var canUndo: Bool { !undoStack.isEmpty }
 
     func undo() {
         guard let action = undoStack.popLast() else { return }

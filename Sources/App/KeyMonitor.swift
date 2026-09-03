@@ -62,7 +62,7 @@ enum KeyMonitor {
         if event.phase == [] && event.momentumPhase == [] {
             guard abs(dx) > abs(dy) else { return false }
             appState.isPanning = true
-            applyPan(dx, appState)
+            appState.applyPan(dx)
             scheduleSettle(appState, delay: 0.25)
             return true
         }
@@ -77,7 +77,7 @@ enum KeyMonitor {
             }
             guard capture == .horizontal else { return false }
             snapWork?.cancel()
-            applyPan(dx, appState)
+            appState.applyPan(dx)
             return true
         }
 
@@ -106,7 +106,7 @@ enum KeyMonitor {
         switch capture {
         case .horizontal:
             snapWork?.cancel()
-            applyPan(dx, appState)
+            appState.applyPan(dx)
             return true
         case .passthrough:
             return false
@@ -121,33 +121,12 @@ enum KeyMonitor {
                 capture = .horizontal
                 appState.isPanning = true
                 snapWork?.cancel()
-                applyPan(decideX, appState)
+                appState.applyPan(decideX)
                 return true
             }
             if decideAbsY >= decideAbsX { capture = .passthrough }
             return false
         }
-    }
-
-    private static func applyPan(_ dx: CGFloat, _ appState: AppState) {
-        var pan = appState.pan.offset + dx
-        // Re-anchor a whole page at a time (the strip is 3 pages wide), so
-        // expensive re-renders happen once per page instead of once per day
-        let pageWidth = appState.weekPageWidth
-        let dayCount = max(1, appState.visibleDays.count)
-        if pageWidth > 0 {
-            while pan <= -pageWidth {
-                appState.panShiftDays(dayCount)
-                pan += pageWidth
-            }
-            while pan >= pageWidth {
-                appState.panShiftDays(-dayCount)
-                pan -= pageWidth
-            }
-        }
-        var t = Transaction()
-        t.disablesAnimations = true
-        withTransaction(t) { appState.pan.offset = pan }
     }
 
     private static func scheduleSettle(_ appState: AppState, delay: TimeInterval) {
@@ -157,24 +136,9 @@ enum KeyMonitor {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// End of a pan: the columns are left exactly where the scroll ended —
-    /// layout is never touched here. Only currentDate is re-pointed at the day
-    /// nearest the visible left edge (header label, fetch window); layout
-    /// reads gridAnchor, so that update is invisible.
     private static func settlePan(_ appState: AppState) {
         snapWork?.cancel()
-        if let anchor = appState.gridAnchor, appState.gridColumnWidth > 4 {
-            let dayShift = Int((-appState.pan.offset / appState.gridColumnWidth).rounded())
-            if dayShift != 0,
-               let visualFirst = appState.calendar.date(byAdding: .day, value: dayShift, to: anchor) {
-                appState.currentDate = visualFirst
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Keep isPanning through the currentDate onChange pass so the
-            // resting offset isn't reset; skip if a new pan already latched.
-            if capture != .horizontal { appState.isPanning = false }
-        }
+        appState.settlePan { capture == .horizontal }
     }
 
     private static func handle(_ event: NSEvent, appState: AppState, store: CalendarStore) -> Bool {

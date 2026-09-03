@@ -18,6 +18,12 @@ extension Calendar {
         return (0..<42).compactMap { self.date(byAdding: .day, value: $0, to: gridStart) }
     }
 
+    /// The 1st of a month within the 7 days starting at `weekStart`, if any.
+    func firstOfMonth(inWeekStarting weekStart: Date) -> Date? {
+        (0..<7).lazy.compactMap { self.date(byAdding: .day, value: $0, to: weekStart) }
+            .first { self.component(.day, from: $0) == 1 }
+    }
+
     func orderedVeryShortWeekdaySymbols() -> [String] {
         let symbols = veryShortWeekdaySymbols
         let first = firstWeekday - 1
@@ -56,6 +62,17 @@ enum Fmt {
     static let interval: DateIntervalFormatter = {
         let f = DateIntervalFormatter()
         f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+    static let month: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("MMM")
+        return f
+    }()
+    static let dateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
         f.timeStyle = .short
         return f
     }()

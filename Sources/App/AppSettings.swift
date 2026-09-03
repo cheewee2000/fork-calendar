@@ -66,13 +66,7 @@ final class AppSettings: ObservableObject {
         showDeclined = d.object(forKey: "showDeclined") as? Bool ?? true
         showWeekends = d.object(forKey: "showWeekends") as? Bool ?? true
         monthAllDayOnly = d.object(forKey: "monthAllDayOnly") as? Bool ?? false
-        if let list = d.stringArray(forKey: "secondaryTZs") {
-            secondaryTZs = list
-        } else if let legacy = d.string(forKey: "secondaryTZ"), !legacy.isEmpty {
-            secondaryTZs = [legacy] // migrate the old single-zone setting
-        } else {
-            secondaryTZs = []
-        }
+        secondaryTZs = d.stringArray(forKey: "secondaryTZs") ?? []
         zoomLink = d.string(forKey: "zoomLink") ?? ""
         calendarColors = d.dictionary(forKey: "calendarColors") as? [String: String] ?? [:]
         googleClientID = d.string(forKey: "googleClientID") ?? ""

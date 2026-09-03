@@ -47,7 +47,7 @@ struct MenuBarView: View {
         let all = dayEvents.allDay + dayEvents.timed
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(CWT.mono(10, .bold))
+                .font(CWT.mono(10))
                 .foregroundStyle(CWT.inkSoft)
             if all.isEmpty {
                 Text("No events")

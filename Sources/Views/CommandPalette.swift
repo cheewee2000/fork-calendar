@@ -158,12 +158,9 @@ private struct PaletteBody: View {
 
         // Natural-language quick add ("Lunch with Amy tomorrow 1pm")
         if let parsed = QuickAdd.parse(q, defaultDurationMinutes: appState.settings.defaultDuration) {
-            let f = DateFormatter()
-            f.dateStyle = .medium
-            f.timeStyle = .short
             items.append(PaletteItem(
                 title: "Create “\(parsed.title)”",
-                subtitle: "\(f.string(from: parsed.start)) – \(Fmt.time.string(from: parsed.end))",
+                subtitle: "\(Fmt.dateTime.string(from: parsed.start)) – \(Fmt.time.string(from: parsed.end))",
                 icon: "plus.circle.fill",
                 shortcut: "↩"
             ) {
@@ -200,13 +197,10 @@ private struct PaletteBody: View {
 
         // Event search
         if q.count >= 2 {
-            let f = DateFormatter()
-            f.dateStyle = .medium
-            f.timeStyle = .short
             for event in store.searchEvents(q).prefix(12) {
                 items.append(PaletteItem(
                     title: event.title ?? "Untitled",
-                    subtitle: f.string(from: event.startDate) + (event.calendar.map { " · \($0.title)" } ?? ""),
+                    subtitle: Fmt.dateTime.string(from: event.startDate) + (event.calendar.map { " · \($0.title)" } ?? ""),
                     icon: "calendar.day.timeline.left",
                     shortcut: nil
                 ) {
@@ -277,7 +271,7 @@ private struct PaletteRow: View {
             Spacer()
             if let shortcut = item.shortcut {
                 Text(shortcut)
-                    .font(CWT.mono(11, .medium))
+                    .font(CWT.mono(11))
                     .foregroundStyle(CWT.inkSoft)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)

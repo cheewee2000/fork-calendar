@@ -7,9 +7,7 @@ struct PositionedEvent: Identifiable {
     let duplicates: [CalEvent]
     let column: Int
     let columnCount: Int
-    var id: String {
-        (event.eventIdentifier ?? "new") + "-" + String(event.startDate?.timeIntervalSinceReferenceDate ?? 0)
-    }
+    var id: String { eventKey(event) }
 }
 
 enum EventLayout {

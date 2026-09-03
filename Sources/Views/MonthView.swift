@@ -51,7 +51,7 @@ struct MonthView: View {
                 Color.clear.frame(width: gutter, height: 1)
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(CWT.mono(10, .semibold))
+                        .font(CWT.mono(10))
                         .foregroundStyle(CWT.inkSoft)
                         .frame(maxWidth: .infinity)
                 }
@@ -177,7 +177,7 @@ struct SpanOverflowMarkers: View {
                 let n = hidden.filter { $0.startIndex <= idx && idx <= $0.endIndex }.count
                 if n > 0 {
                     Text("+\(n)")
-                        .font(CWT.mono(8, .semibold))
+                        .font(CWT.mono(8))
                         .foregroundStyle(CWT.inkSoft)
                         .frame(width: cellW - 8, alignment: .trailing)
                         .offset(x: CGFloat(idx) * cellW + 4, y: 6)
@@ -197,7 +197,7 @@ struct MonthRowGutter: View {
 
     var body: some View {
         Text(label)
-            .font(CWT.mono(9, .semibold))
+            .font(CWT.mono(9))
             .foregroundStyle(CWT.inkSoft)
             .padding(.leading, 6)
             .padding(.top, 4)
@@ -205,16 +205,7 @@ struct MonthRowGutter: View {
     }
 
     private var label: String {
-        let cal = appState.calendar
-        for offset in 0..<7 {
-            if let day = cal.date(byAdding: .day, value: offset, to: weekStart),
-               cal.component(.day, from: day) == 1 {
-                let f = DateFormatter()
-                f.setLocalizedDateFormatFromTemplate("MMM")
-                return f.string(from: day)
-            }
-        }
-        return ""
+        appState.calendar.firstOfMonth(inWeekStarting: weekStart).map(Fmt.month.string) ?? ""
     }
 }
 
@@ -413,7 +404,7 @@ struct MonthCell: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(dayOfMonth == 1 ? monthDayLabel : Fmt.dayNum.string(from: day))
-                    .font(CWT.mono(11, isToday || dayOfMonth == 1 ? .bold : .regular))
+                    .font(CWT.mono(11))
                     .padding(.horizontal, isToday ? 5 : 0)
                     .frame(height: 20)
                     .background { if isToday { Rectangle().fill(CWT.signalRed) } }
@@ -557,7 +548,7 @@ struct MonthChip: View {
                     .foregroundStyle(CWT.inkSoft)
             }
             Text(event.title ?? "Untitled")
-                .font(CWT.mono(9, .medium))
+                .font(CWT.mono(9))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -567,7 +558,7 @@ struct MonthChip: View {
             isDragging ? color.opacity(0.35) : color.opacity(isSelected ? 0.3 : event.isAllDay ? 0.16 : 0)
         ))
         .overlay {
-            if store.awaitingResponse(event) {
+            if event.needsMyResponse {
                 Rectangle()
                     .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }
@@ -642,27 +633,4 @@ struct MonthChip: View {
                 commitMove(value.translation)
             }
     }
-
-    #if os(iOS)
-    private var moveLongPress: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard isEditable, case .second(true, let drag) = value else { return }
-                if !isDragging {
-                    isDragging = true
-                    Haptics.tap()
-                }
-                if let drag { dragOffset = drag.translation }
-            }
-            .onEnded { value in
-                defer {
-                    isDragging = false
-                    dragOffset = .zero
-                }
-                guard isEditable, case .second(true, let drag?) = value else { return }
-                commitMove(drag.translation)
-            }
-    }
-    #endif
 }

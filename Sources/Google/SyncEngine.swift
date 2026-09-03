@@ -131,7 +131,7 @@ final class SyncEngine: ObservableObject {
     static var cacheURL: URL {
         let fm = FileManager.default
         #if os(iOS)
-        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: WidgetBridge.suiteName) {
+        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: WidgetData.suiteName) {
             return group.appendingPathComponent("cache.json")
         }
         #endif
@@ -252,12 +252,6 @@ final class SyncEngine: ObservableObject {
         }
     }
 
-    /// Await a full pass (used by ⌘R and the launch sync).
-    func syncAllAndWait() async {
-        await withCheckedContinuation { cont in
-            syncAll { cont.resume() }
-        }
-    }
 
     private func runSync() async {
         isSyncing = true
@@ -590,10 +584,6 @@ final class SyncEngine: ObservableObject {
                 records[old.calendarKey, default: [:]][old.id] = old
             }
         }
-    }
-
-    func masterRules(calendarKey: String, masterID: String) -> [String]? {
-        masters[calendarKey + "|" + masterID]
     }
 
     func setMasterRules(_ rules: [String]?, calendarKey: String, masterID: String) {

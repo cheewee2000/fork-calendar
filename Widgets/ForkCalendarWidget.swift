@@ -96,21 +96,6 @@ enum WFmt {
         f.setLocalizedDateFormatFromTemplate("j:mm")
         return f
     }()
-    static let weekday: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("EEE")
-        return f
-    }()
-    static let month: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("MMM")
-        return f
-    }()
-    static let dayNum: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("d")
-        return f
-    }()
 
     /// "9:00 AM" → "9:00a", 24h locales stay "14:00".
     static func compact(_ d: Date) -> String {
@@ -162,7 +147,7 @@ struct EventRow: View {
                 .foregroundStyle(isNow ? CWT.signalRed : CWT.inkFaint)
                 .frame(width: 44, alignment: .leading)
             Text(event.title)
-                .font(CWT.mono(11, isNow ? .bold : .regular))
+                .font(CWT.mono(11))
                 .foregroundStyle(CWT.ink)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -175,7 +160,7 @@ struct SectionLabel: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(CWT.mono(9, .bold))
+            .font(CWT.mono(9))
             .foregroundStyle(CWT.inkFaint)
             .frame(height: 12)
     }
@@ -232,12 +217,12 @@ struct SmallView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(WFmt.weekday.string(from: entry.date).uppercased())
-                    .font(CWT.mono(11, .bold))
+                Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
+                    .font(CWT.mono(11))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer()
-                Text(WFmt.dayNum.string(from: entry.date))
-                    .font(CWT.mono(18, .bold))
+                Text(Fmt.dayNum.string(from: entry.date))
+                    .font(CWT.mono(18))
                     .foregroundStyle(CWT.ink)
             }
             Rectangle().fill(CWT.rule).frame(height: 1)
@@ -252,13 +237,13 @@ struct MediumView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(WFmt.weekday.string(from: entry.date).uppercased())
-                    .font(CWT.mono(11, .bold))
+                Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
+                    .font(CWT.mono(11))
                     .foregroundStyle(CWT.inkFaint)
-                Text(WFmt.dayNum.string(from: entry.date))
-                    .font(CWT.mono(30, .bold))
+                Text(Fmt.dayNum.string(from: entry.date))
+                    .font(CWT.mono(30))
                     .foregroundStyle(CWT.ink)
-                Text(WFmt.month.string(from: entry.date).uppercased())
+                Text(Fmt.month.string(from: entry.date).uppercased())
                     .font(CWT.mono(11))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer(minLength: 0)
@@ -277,12 +262,12 @@ struct LargeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(WFmt.weekday.string(from: entry.date).uppercased())
-                    .font(CWT.mono(12, .bold))
+                Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
+                    .font(CWT.mono(12))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer()
-                Text("\(WFmt.month.string(from: entry.date).uppercased()) \(WFmt.dayNum.string(from: entry.date))")
-                    .font(CWT.mono(12, .bold))
+                Text("\(Fmt.month.string(from: entry.date).uppercased()) \(Fmt.dayNum.string(from: entry.date))")
+                    .font(CWT.mono(12))
                     .foregroundStyle(CWT.ink)
             }
             Rectangle().fill(CWT.rule).frame(height: 1)
@@ -300,7 +285,7 @@ struct RectangularView: View {
         VStack(alignment: .leading, spacing: 1) {
             if let next {
                 Text(next.title)
-                    .font(CWT.mono(13, .bold))
+                    .font(CWT.mono(13))
                     .lineLimit(1)
                 Text(next.start.isTomorrow(from: entry.date)
                      ? "TMRW \(WFmt.compact(next.start))"
@@ -337,7 +322,7 @@ struct AccessView: View {
     var body: some View {
         VStack(spacing: 4) {
             Text("FORK CALENDAR")
-                .font(CWT.mono(10, .bold))
+                .font(CWT.mono(10))
                 .foregroundStyle(CWT.ink)
             Text("Open the app to sign in to Google")
                 .font(CWT.mono(10))

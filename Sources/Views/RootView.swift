@@ -350,9 +350,9 @@ struct HeaderBar: View {
             }
             Text(Fmt.monthYear.string(from: appState.currentDate))
                 #if os(iOS)
-                .font(CWT.mono(12, .bold))
+                .font(CWT.mono(12))
                 #else
-                .font(CWT.mono(15, .bold))
+                .font(CWT.mono(15))
                 #endif
                 .lineLimit(1)
             Spacer()
@@ -501,7 +501,7 @@ struct AccessDeniedView: View {
                 .font(CWT.mono(40))
                 .foregroundStyle(CWT.inkSoft)
             Text("No Google account connected")
-                .font(CWT.mono(13, .bold))
+                .font(CWT.mono(13))
             Text("Fork Calendar talks to Google Calendar directly. Sign in with each account you want to see.")
                 .font(CWT.mono(12))
                 .foregroundStyle(CWT.inkSoft)

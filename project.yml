@@ -27,8 +27,8 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.40"
-        CFBundleVersion: "94"
+        CFBundleShortVersionString: "0.15.41"
+        CFBundleVersion: "95"
         NSHumanReadableCopyright: © 2026 CW&T
         ATSApplicationFontsPath: .
     entitlements:
@@ -53,8 +53,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.40"
-        CFBundleVersion: "94"
+        CFBundleShortVersionString: "0.15.41"
+        CFBundleVersion: "95"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
@@ -78,6 +78,7 @@ targets:
       - Sources/App/Theme.swift
       - Sources/App/WidgetShared.swift
       - Sources/Utilities/ColorUtils.swift
+      - Sources/Utilities/DateUtils.swift
       - Sources/Fonts
     settings:
       base:
@@ -91,8 +92,8 @@ targets:
       path: Support/Info-Widgets.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.40"
-        CFBundleVersion: "94"
+        CFBundleShortVersionString: "0.15.41"
+        CFBundleVersion: "95"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf

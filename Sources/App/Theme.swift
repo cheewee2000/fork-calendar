@@ -49,15 +49,8 @@ enum CWT {
 
     // MARK: Type — Space Mono, bundled
 
-    /// Space Mono ships regular + bold only; snap intermediate weights.
-    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        let name: String
-        switch weight {
-        case .bold, .heavy, .black, .semibold: name = "SpaceMono-Bold"
-        default: name = "SpaceMono-Regular"
-        }
-        return .custom(name, fixedSize: size)
-    }
+    /// Space Mono 400 only — the design system has no bold or italic.
+    static func mono(_ size: CGFloat) -> Font { .custom("SpaceMono-Regular", fixedSize: size) }
 }
 
 extension View {
