@@ -542,7 +542,7 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    func deleteWithUndo(_ event: CalEvent, span: EditSpan) {
+    func deleteWithUndo(_ event: CalEvent, span: EditSpan, notify: Bool = true) {
         guard let cal = event.calendar else { return }
         let snapshot = EventSnapshot(event)
         let key = cal.calendarIdentifier
@@ -553,7 +553,7 @@ final class CalendarStore: ObservableObject {
         }
         undoStack.append(.recreate(snapshot: snapshot))
         reload()
-        Task { await pushDelete(event, calendar: cal, span: span) }
+        Task { await pushDelete(event, calendar: cal, span: span, notify: notify) }
     }
 
     func duplicate(_ event: CalEvent, dayOffset: Double = 0) {
@@ -864,14 +864,14 @@ final class CalendarStore: ObservableObject {
         await engine.resync(calendarKey: key)
     }
 
-    private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan) async {
+    private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan, notify: Bool = true) async {
         let key = cal.calendarIdentifier
         if event.isLocal {
             // Never reached the server — just cancel any queued insert.
             engine.cancelPending(eventID: event.id, calendarKey: key)
             return
         }
-        let updates = await sendUpdates(for: event, old: nil, verb: "Cancel")
+        let updates = notify ? await sendUpdates(for: event, old: nil, verb: "Cancel") : "none"
         do {
             let token = try await accounts.validToken(for: cal.accountID)
             if span == .futureEvents, let masterID = event.recurringEventId {
