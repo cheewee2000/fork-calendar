@@ -50,7 +50,7 @@ struct ForkCalendarApp: App {
                     .keyboardShortcut("f", modifiers: [.command])
                 Button("Delete Event") { appState.quickDelete(store: store) }
                     .keyboardShortcut(.delete, modifiers: [.command])
-                    .disabled(appState.panelContext == nil || appState.panelContext?.isNew == true)
+                    .disabled(appState.selectedKey == nil)
             }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Sidebar") {

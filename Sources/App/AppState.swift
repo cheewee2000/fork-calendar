@@ -673,8 +673,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// ⌘⌫: delete the selected event — this occurrence only, no span dialog,
-    /// no guest email.
+    /// ⌘⌫: delete the selected event — this occurrence only, no span dialog.
     func quickDelete(store: CalendarStore) {
         guard let ctx = panelContext, !ctx.isNew else { return }
         store.deleteWithUndo(ctx.event, span: .thisEvent, notify: false)

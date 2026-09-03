@@ -607,7 +607,7 @@ final class CalendarStore: ObservableObject {
             if let event = findEvent(id: id), let cal = event.calendar {
                 engine.remove(id: id, calendarKey: cal.calendarIdentifier)
                 reload()
-                Task { await pushDelete(event, calendar: cal, span: .thisEvent) }
+                Task { await pushDelete(event, calendar: cal, span: .thisEvent, notify: true) }
             }
         }
     }
@@ -864,7 +864,7 @@ final class CalendarStore: ObservableObject {
         await engine.resync(calendarKey: key)
     }
 
-    private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan, notify: Bool = true) async {
+    private func pushDelete(_ event: CalEvent, calendar cal: CalCalendar, span: EditSpan, notify: Bool) async {
         let key = cal.calendarIdentifier
         if event.isLocal {
             // Never reached the server — just cancel any queued insert.
