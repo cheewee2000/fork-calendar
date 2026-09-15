@@ -51,6 +51,9 @@ struct ForkCalendarApp: App {
                 Button("Delete Event") { appState.quickDelete(store: store) }
                     .keyboardShortcut(.delete, modifiers: [.command])
                     .disabled(appState.selectedKey == nil)
+                Button("Bill Event to Invoice…") { appState.billEvent() }
+                    .keyboardShortcut("b", modifiers: [.command])
+                    .disabled(appState.selectedKey == nil)
             }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Sidebar") {

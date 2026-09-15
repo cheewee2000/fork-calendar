@@ -51,6 +51,9 @@ private struct PaletteBody: View {
                 store.objectWillChange
                     .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
                     .sink { _ in refresh() },
+                InvoiceLink.shared.objectWillChange
+                    .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
+                    .sink { _ in refresh() },
                 model.$confirmTick.dropFirst().receive(on: DispatchQueue.main).sink { _ in
                     guard items.indices.contains(model.index) else { return }
                     appState.paletteOpen = false
@@ -66,6 +69,7 @@ private struct PaletteBody: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focused = true }
                     } else {
                         focused = false
+                        model.billing = nil
                     }
                 },
             ]
@@ -97,7 +101,7 @@ private struct PaletteBody: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(CWT.inkSoft)
-            TextField("Search events or type a command…", text: $model.query)
+            TextField(model.billing.map { "Bill “\($0.title ?? "Untitled")” to draft invoice…" } ?? "Search events or type a command…", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(CWT.mono(16))
                 .focused($focused)
@@ -155,6 +159,27 @@ private struct PaletteBody: View {
     private func buildItems() -> [PaletteItem] {
         let q = model.query.trimmingCharacters(in: .whitespaces)
         var items: [PaletteItem] = []
+
+        // Billing mode: draft invoices only
+        if let event = model.billing {
+            let link = InvoiceLink.shared
+            let drafts = q.isEmpty ? link.drafts : link.drafts.filter { ($0.client + " " + $0.id).localizedCaseInsensitiveContains(q) }
+            if drafts.isEmpty {
+                return [PaletteItem(title: link.error ?? "No draft invoices", subtitle: "Create one at invoice.cwandt.com", icon: "doc.text", shortcut: nil) {}]
+            }
+            return drafts.map { d in
+                PaletteItem(title: "\(d.client) — \(d.id)", subtitle: "draft · \(String(format: "%g", d.hours))h so far", icon: "dollarsign.circle", shortcut: nil) {
+                    Task {
+                        do {
+                            try await link.bill(event, to: d)
+                            appState.toast = "Billed to \(d.id)"
+                        } catch {
+                            appState.toast = error.localizedDescription
+                        }
+                    }
+                }
+            }
+        }
 
         // Natural-language quick add ("Lunch with Amy tomorrow 1pm")
         if let parsed = QuickAdd.parse(q, defaultDurationMinutes: appState.settings.defaultDuration) {

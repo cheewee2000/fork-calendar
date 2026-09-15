@@ -155,6 +155,14 @@ struct EventPanelView: View {
                     }
                     .help("Delete (⌫)")
                 }
+                if !context.isNew {
+                    Button {
+                        appState.billEvent(context.event)
+                    } label: {
+                        Image(systemName: "dollarsign.circle")
+                    }
+                    .help("Bill to invoice (B)")
+                }
                 Spacer()
                 Button {
                     close()

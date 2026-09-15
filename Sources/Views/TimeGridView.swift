@@ -483,6 +483,7 @@ struct NowLine: View {
 struct EventBlockView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var invoices = InvoiceLink.shared
     @Environment(\.openURL) private var openURL
     let item: PositionedEvent
     let day: Date
@@ -535,6 +536,10 @@ struct EventBlockView: View {
                     .lineLimit(height > 32 ? 2 : 1)
                 if joinURL != nil, height > 20, subWidth > 60 {
                     Image(systemName: "video.fill")
+                        .font(CWT.mono(8))
+                }
+                if invoices.billed.contains(item.event.id) {
+                    Image(systemName: "dollarsign")
                         .font(CWT.mono(8))
                 }
             }
@@ -668,6 +673,11 @@ struct EventBlockView: View {
             Clipboard.copy(item.event.title ?? "")
         } label: {
             Label("Copy title", systemImage: "doc.on.doc")
+        }
+        Button {
+            appState.billEvent(item.event)
+        } label: {
+            Label(invoices.billed.contains(item.event.id) ? "Bill to another invoice…" : "Bill to invoice…", systemImage: "dollarsign.circle")
         }
         if isEditable {
             Divider()

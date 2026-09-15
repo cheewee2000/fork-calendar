@@ -713,6 +713,15 @@ final class AppState: ObservableObject {
         panelContext = nil
     }
 
+    /// B / ⌘B: open the palette listing draft invoices on invoice.cwandt.com
+    /// to bill `event` (default: the selected event) to.
+    func billEvent(_ event: CalEvent? = nil) {
+        guard let event = event ?? panelContext.flatMap({ $0.isNew ? nil : $0.event }) else { return }
+        palette.billing = event
+        paletteOpen = true
+        Task { await InvoiceLink.shared.refresh() }
+    }
+
     func resolveSpanAction(span: EditSpan?, store: CalendarStore) {
         defer {
             pendingSpanAction = nil
