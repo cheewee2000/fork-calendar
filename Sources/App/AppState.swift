@@ -75,9 +75,12 @@ struct ZoomSpec: Equatable {
 }
 
 struct EditorContext: Identifiable {
-    let id = UUID()
     let event: CalEvent
     let isNew: Bool
+    /// Keyed on the event, not a UUID: reresolveSelection swaps in a fresh
+    /// CalEvent after every store reload, and a fresh id made .sheet(item:)
+    /// dismiss + re-present on each sync tick (iPhone sheet flickered 3×).
+    var id: String { (isNew ? "new-" : "") + eventKey(event) }
 }
 
 enum PendingSpanAction {
