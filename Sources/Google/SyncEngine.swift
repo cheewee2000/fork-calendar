@@ -325,9 +325,28 @@ final class SyncEngine: ObservableObject {
         }
     }
 
+    /// One listing per calendar at a time: a post-save `resync` that overlaps
+    /// the timer's pass would race it — each listing snapshots `records[key]`
+    /// at start and writes it back wholesale, so whichever finished last
+    /// erased the other's results (a new series' instances vanished until
+    /// the next pass), and its older sync token won.
+    private var listings: [String: Task<Void, Error>] = [:]
+
+    func syncCalendar(_ cal: CalCalendar, token: String) async throws {
+        let key = cal.calendarIdentifier
+        let previous = listings[key]
+        let task = Task { @MainActor in
+            _ = await previous?.result
+            try await self.listCalendar(cal, token: token)
+        }
+        listings[key] = task
+        defer { if listings[key] == task { listings[key] = nil } }
+        try await task.value
+    }
+
     /// Incremental sync for one calendar; falls back to a full windowed
     /// listing when there's no token or Google says it expired.
-    func syncCalendar(_ cal: CalCalendar, token: String) async throws {
+    private func listCalendar(_ cal: CalCalendar, token: String) async throws {
         let key = cal.calendarIdentifier
         liveListings += 1
         defer {
