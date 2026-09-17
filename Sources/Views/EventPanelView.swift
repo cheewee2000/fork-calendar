@@ -25,12 +25,8 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable {
     }
 
     static func from(_ event: CalEvent) -> RecurrenceChoice {
-        guard let line = event.recurrence?.first(where: { $0.hasPrefix("RRULE:") }) else { return .none }
-        var parts: [String: String] = [:]
-        for kv in line.dropFirst(6).split(separator: ";") {
-            let pair = kv.split(separator: "=", maxSplits: 1).map(String.init)
-            if pair.count == 2 { parts[pair[0]] = pair[1] }
-        }
+        let parts = RRule.parts(event.recurrence)
+        guard !parts.isEmpty else { return .none }
         let interval = Int(parts["INTERVAL"] ?? "1") ?? 1
         switch parts["FREQ"] {
         case "DAILY": return .daily
@@ -67,6 +63,13 @@ struct EventPanelView: View {
     @State private var urlString: String
     @State private var calendarID: String
     @State private var recurrence: RecurrenceChoice
+    enum RepeatEnd: String, CaseIterable, Identifiable {
+        case never = "Never ends", onDate = "Ends on", after = "Ends after"
+        var id: String { rawValue }
+    }
+    @State private var repeatEnd: RepeatEnd
+    @State private var repeatUntil: Date
+    @State private var repeatCount: Int
     @State private var inviteEmails: String = ""
     @State private var addMeetOnSave = false
     @State private var editingNotes = false
@@ -86,6 +89,10 @@ struct EventPanelView: View {
         _urlString = State(initialValue: context.event.url?.absoluteString ?? "")
         _calendarID = State(initialValue: context.event.calendar?.calendarIdentifier ?? "")
         _recurrence = State(initialValue: RecurrenceChoice.from(context.event))
+        let until = RRule.untilDay(context.event.recurrence), count = RRule.count(context.event.recurrence)
+        _repeatEnd = State(initialValue: until != nil ? .onDate : count != nil ? .after : .never)
+        _repeatUntil = State(initialValue: until ?? Calendar.autoupdatingCurrent.date(byAdding: .month, value: 3, to: context.event.startDate ?? Date()) ?? Date())
+        _repeatCount = State(initialValue: count ?? 10)
         originalSnapshot = context.isNew ? nil : EventSnapshot(context.event)
     }
 
@@ -231,6 +238,31 @@ struct EventPanelView: View {
                         .labelsHidden()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .disabled(isReadOnly)
+                    }
+
+                    if recurrence != .none {
+                        row(icon: "repeat.1") {
+                            HStack(spacing: 8) {
+                                Picker("", selection: $repeatEnd) {
+                                    ForEach(RepeatEnd.allCases) { Text($0.rawValue).tag($0) }
+                                }
+                                .labelsHidden()
+                                .fixedSize()
+                                switch repeatEnd {
+                                case .never: EmptyView()
+                                case .onDate:
+                                    DatePicker("", selection: $repeatUntil, in: start..., displayedComponents: [.date])
+                                        .labelsHidden()
+                                        .font(CWT.mono(12))
+                                case .after:
+                                    Stepper("\(repeatCount) times", value: $repeatCount, in: 1...999)
+                                        .font(CWT.mono(12))
+                                        .fixedSize()
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(isReadOnly)
+                        }
                     }
 
                     row(icon: "calendar") {
@@ -532,8 +564,15 @@ struct EventPanelView: View {
         event.location = location.isEmpty ? nil : location
         event.notes = notes.isEmpty ? nil : notes
         event.url = urlString.isEmpty ? nil : URL(string: urlString)
-        if RecurrenceChoice.from(event) != recurrence {
-            event.recurrence = recurrence.rules
+        let newRules = recurrence.rules.map {
+            RRule.ending($0, onDay: repeatEnd == .onDate ? repeatUntil : nil,
+                         count: repeatEnd == .after ? repeatCount : nil, allDay: event.isAllDay)
+        }
+        let endChanged = RRule.untilDay(newRules).map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+            != RRule.untilDay(event.recurrence).map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+            || RRule.count(newRules) != RRule.count(event.recurrence)
+        if RecurrenceChoice.from(event) != recurrence || endChanged {
+            event.recurrence = newRules
         }
         if let cal = store.writableCalendars.first(where: { $0.calendarIdentifier == calendarID }),
            cal.calendarIdentifier != event.calendar?.calendarIdentifier {

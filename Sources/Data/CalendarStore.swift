@@ -1007,13 +1007,52 @@ enum RRule {
         }
     }
 
-    /// Drop UNTIL/COUNT so a new series runs open-ended.
+    /// Drop COUNT so a split-off series doesn't repeat the whole count again
+    /// (ponytail: the remainder isn't computed, the new series runs until
+    /// the original UNTIL or open-ended).
     static func stripped(_ rules: [String]) -> [String] {
         rules.map { line in
+            guard line.hasPrefix("RRULE:") else { return line }
+            let parts = line.dropFirst(6).split(separator: ";").map(String.init)
+                .filter { !$0.hasPrefix("COUNT=") }
+            return "RRULE:" + parts.joined(separator: ";")
+        }
+    }
+
+    /// The RRULE's key/value parts.
+    static func parts(_ rules: [String]?) -> [String: String] {
+        guard let line = rules?.first(where: { $0.hasPrefix("RRULE:") }) else { return [:] }
+        var parts: [String: String] = [:]
+        for kv in line.dropFirst(6).split(separator: ";") {
+            let pair = kv.split(separator: "=", maxSplits: 1).map(String.init)
+            if pair.count == 2 { parts[pair[0]] = pair[1] }
+        }
+        return parts
+    }
+
+    /// The day an UNTIL rule ends on (local), if any.
+    static func untilDay(_ rules: [String]?) -> Date? {
+        guard let raw = parts(rules)["UNTIL"] else { return nil }
+        return GoogleDates.rruleUTC.date(from: raw) ?? dayFormatter.date(from: String(raw.prefix(8)))
+    }
+
+    static func count(_ rules: [String]?) -> Int? {
+        parts(rules)["COUNT"].flatMap(Int.init)
+    }
+
+    /// Rules ending on `day` (inclusive) or after `count` occurrences; nil for both = open-ended.
+    static func ending(_ rules: [String], onDay day: Date?, count: Int?, allDay: Bool) -> [String] {
+        let open = rules.map { line -> String in
             guard line.hasPrefix("RRULE:") else { return line }
             let parts = line.dropFirst(6).split(separator: ";").map(String.init)
                 .filter { !$0.hasPrefix("UNTIL=") && !$0.hasPrefix("COUNT=") }
             return "RRULE:" + parts.joined(separator: ";")
         }
+        if let day {
+            let next = Calendar.autoupdatingCurrent.date(byAdding: .day, value: 1, to: Calendar.autoupdatingCurrent.startOfDay(for: day)) ?? day
+            return truncated(open, before: next, allDay: allDay)
+        }
+        if let count { return open.map { $0.hasPrefix("RRULE:") ? $0 + ";COUNT=\(count)" : $0 } }
+        return open
     }
 }
