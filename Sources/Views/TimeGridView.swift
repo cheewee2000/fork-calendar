@@ -572,6 +572,7 @@ struct EventBlockView: View {
                 .padding(.vertical, 1)
         }
         .clipShape(Rectangle())
+        .overlay { if item.event.myParticipantStatus == .declined { DeclinedSlash(color: color) } }
         .overlay {
             if awaiting {
                 Rectangle()

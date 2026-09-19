@@ -113,6 +113,7 @@ struct SpanBarView: View {
                 CalendarStrips(copies: copies)
                     .padding(.vertical, 1)
             }
+            .overlay { if event.myParticipantStatus == .declined { DeclinedSlash(color: color) } }
             .overlay {
                 if awaiting {
                     Rectangle()
@@ -163,6 +164,24 @@ struct CalendarStrips: View {
             var p = Path()
             p.move(to: CGPoint(x: rect.midX, y: rect.minY))
             p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            return p
+        }
+    }
+}
+
+/// Diagonal slash (bottom-left → top-right) drawn across a declined event.
+struct DeclinedSlash: View {
+    let color: Color
+
+    var body: some View {
+        Slash().stroke(color, lineWidth: 1).allowsHitTesting(false)
+    }
+
+    private struct Slash: Shape {
+        func path(in rect: CGRect) -> Path {
+            var p = Path()
+            p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
             return p
         }
     }
