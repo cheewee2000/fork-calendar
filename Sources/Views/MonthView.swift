@@ -473,6 +473,7 @@ struct MonthCell: View {
         }
         .onTapGesture { appState.currentDate = day }
         .gesture(createDrag)
+        .onHover { inside in if inside { appState.pasteTarget = (day, false) } }
         #endif
     }
 
@@ -597,6 +598,7 @@ struct MonthChip: View {
         #if os(macOS)
         .gesture(moveDrag)
         .contextMenu {
+            Button("Copy") { appState.copyEvent(event, store: store) }
             if isEditable {
                 Button("Duplicate") { store.duplicate(event) }
                 Button("Delete", role: .destructive) { appState.requestDelete(event, store: store) }

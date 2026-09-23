@@ -547,10 +547,16 @@ final class CalendarStore: ObservableObject {
     }
 
     func duplicate(_ event: CalEvent, dayOffset: Double = 0) {
-        let copy = CalEvent()
         var snapshot = EventSnapshot(event)
         snapshot.start = snapshot.start.addingTimeInterval(dayOffset * 86400)
         snapshot.end = snapshot.end.addingTimeInterval(dayOffset * 86400)
+        paste(snapshot)
+    }
+
+    /// Insert a fresh event from a snapshot (guests and repeat rules dropped).
+    func paste(_ snapshot: EventSnapshot) {
+        let copy = CalEvent()
+        var snapshot = snapshot
         snapshot.attendees = nil
         snapshot.recurrence = nil
         snapshot.apply(to: copy, in: self)

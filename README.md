@@ -51,6 +51,7 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 | S | Share availability |
 | ⌘K | Search & commands |
 | ⌘Z | Undo |
+| ⌘C / ⌘V | Copy selected event / paste it at the slot or day under the pointer |
 | ⌘N | New event |
 | ⌘\ | Toggle sidebar |
 | Esc | Close panel / palette / availability |

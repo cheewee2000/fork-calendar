@@ -410,6 +410,11 @@ struct DayColumn: View {
         .overlay(alignment: .leading) {
             Rectangle().fill(CWT.rule).frame(width: 1)
         }
+        #if os(macOS)
+        .onContinuousHover { phase in
+            if case .active(let p) = phase { appState.pasteTarget = (date(atY: snap(p.y)), true) }
+        }
+        #endif
     }
 
     private var draftColor: Color {
@@ -658,6 +663,13 @@ struct EventBlockView: View {
         } label: {
             Label("Open", systemImage: "sidebar.right")
         }
+        #if os(macOS)
+        Button {
+            appState.copyEvent(item.event, store: store)
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        #endif
         if isEditable {
             Button {
                 store.duplicate(item.event)

@@ -680,6 +680,35 @@ final class AppState: ObservableObject {
         panelContext = EditorContext(event: event, isNew: false)
     }
 
+    /// ⌘C's event. In-app only; not the system pasteboard.
+    var clipboard: EventSnapshot?
+    /// Where ⌘V lands: the grid slot (timed) or month day under the pointer.
+    /// Plain var — hover updates it on every mouse move, no re-render wanted.
+    var pasteTarget: (date: Date, timed: Bool)?
+
+    func copyEvent(_ event: CalEvent? = nil, store: CalendarStore) {
+        guard let event = event ?? panelContext.flatMap({ $0.isNew ? nil : $0.event }) else { return }
+        clipboard = EventSnapshot(event)
+        store.toast = "Copied"
+    }
+
+    /// Timed events keep their length; on a day-only target (month cell) they
+    /// keep their time of day too. All-day events land on the target's day.
+    func pasteEvent(store: CalendarStore) {
+        guard var s = clipboard, store.accessState == .granted else { return }
+        let length = s.end.timeIntervalSince(s.start)
+        let target = pasteTarget ?? (date: defaultStart, timed: true)
+        if s.isAllDay || !target.timed {
+            let day = calendar.startOfDay(for: target.date)
+            let timeOfDay = s.isAllDay ? 0 : s.start.timeIntervalSince(calendar.startOfDay(for: s.start))
+            s.start = day.addingTimeInterval(timeOfDay)
+        } else {
+            s.start = target.date
+        }
+        s.end = s.start.addingTimeInterval(length)
+        store.paste(s)
+    }
+
     func closePanel() {
         panelContext = nil
     }

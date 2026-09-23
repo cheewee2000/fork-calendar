@@ -174,11 +174,15 @@ enum KeyMonitor {
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // ⌘Z → app undo, but only when not editing text
-        if flags == .command, event.charactersIgnoringModifiers == "z" {
-            if isTyping { return false }
-            store.undo()
-            return true
+        // ⌘Z / ⌘C / ⌘V → app undo / copy event / paste event, but only when
+        // not editing text (then the Edit menu gets them as usual).
+        if flags == .command, !isTyping {
+            switch event.charactersIgnoringModifiers {
+            case "z": store.undo(); return true
+            case "c": appState.copyEvent(store: store); return true
+            case "v": appState.pasteEvent(store: store); return true
+            default: break
+            }
         }
         guard flags.isEmpty || flags == .numericPad || flags == .function || flags == [.numericPad, .function] else { return false }
 
