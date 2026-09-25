@@ -1,0 +1,370 @@
+/* ============================================================
+   CW&T Base Stylesheet
+   Source of truth: cwandt.com production CSS
+   Merged: August 2026 (Taylor's CWT-stylesheet + Che-Wei's
+   cwt-design-system — see STYLESHEET.md for the full system)
+
+   Drop this into any CW&T project and import it first,
+   before any other stylesheet.
+   ============================================================ */
+
+/* --- Font Loading ---
+   Space Mono Regular is the ONLY declared face. No bold, no
+   italic — deliberately. Emphasis is carried by UPPERCASE +
+   tracking, size, or a hairline rule (see the emphasis reset
+   below). Copy fonts/ alongside this file; if the local file is
+   missing the CDN fallback below keeps the exact same face. */
+
+@font-face {
+  font-family: "Space Mono";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("fonts/SpaceMono-Regular.ttf") format("truetype"),
+       url("https://cwandt.com/cdn/fonts/space_mono/space_mono_n4.woff2") format("woff2");
+}
+
+/* --- CSS Custom Properties --- */
+
+:root {
+  /* Colors - Primary */
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  /* Colors - Secondary */
+  --color-gray: #dcdcdc;
+
+  /* Colors - Accent */
+  --color-orange: #ef8933;
+  --color-highlight: #bbff00;
+
+  /* Colors - Status (values from cwandt.com production CSS)
+     Text stays black; these appear only as status marks:
+     WAITLIST / errors, and quiet in-stock indicators. */
+  --color-critical: #d72c0d;
+  --color-success: #008060;
+
+  /* Colors - Materials (sampled from CW&T product photography:
+     stainless, titanium, brass, copper, graphite, cerakote).
+     Surfaces, swatches, and diagram fills ONLY — never text. */
+  --material-stainless: #b9b8b3;
+  --material-titanium: #8c8c87;
+  --material-brass: #b08a4d;
+  --material-copper: #b56b3f;
+  --material-graphite: #3a3a38;
+  --material-cerakote: #1a1a18;
+
+  /* Colors - Semantic aliases */
+  --color-text: var(--color-black);
+  --color-background: var(--color-white);
+  --color-border: var(--color-black);
+  --color-heading: var(--color-black);
+  --color-price: var(--color-black);
+  --color-link: var(--color-black);
+  --color-link-hover: var(--color-black);
+  --color-rule: var(--color-gray); /* hairline dividers */
+
+  /* Typography */
+  --font-family: "Space Mono", "JetBrains Mono", "Menlo", "Courier New", monospace;
+  --font-weight-normal: 400;
+  --font-weight-heading: 400;
+  --font-body-scale: 1.0;
+  --font-size-base: 1.5rem;       /* 15px at 10px root */
+  --font-size-desktop: 1.6rem;    /* 16px at 10px root */
+  --font-size-button: 12px;
+  --font-size-nav: 14px;
+  --font-size-h1: 36px;
+  --font-size-h2: 30px;
+  --font-size-h3: 24px;
+  --font-size-h4: 18px;
+  --font-size-h5: 14px;
+  --font-size-h6: 12px;
+  --line-height-body: calc(1 + 0.8 / var(--font-body-scale));
+  --line-height-heading: 1.1;
+  --letter-spacing-label: 0.04em; /* uppercase nav, labels, emphasis */
+
+  /* Spacing - 4px base grid, additive scale.
+     72px stays the section-bottom value measured from production. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* Layout */
+  --page-width: 160rem;
+  --page-margin: 0rem;
+  --spacing-section-desktop: 0px;
+  --spacing-section-mobile: 0px;
+  --spacing-section-bottom: 72px;
+
+  /* Components */
+  --button-radius: 0px;
+  --button-border-width: 1px;
+  --card-radius: 0px;
+  --card-border-width: 0px;
+  --card-shadow: none;
+  --input-border-width: 2px;
+  --input-radius: 0px;
+
+  /* Header */
+  --header-padding: 14px 20px;
+  --header-bg: var(--color-black);
+  --header-text: var(--color-white);
+  --header-z-index: 100;
+
+  /* Footer */
+  --footer-bg: var(--color-gray);
+  --footer-text: var(--color-black);
+  --footer-accent: var(--color-orange);
+
+  /* Navigation */
+  --nav-menu-bg: var(--color-black);
+  --nav-item-bg: var(--color-gray);
+  --nav-item-text: var(--color-black);
+  --nav-item-height: 45px;
+  --nav-item-hover-bg: var(--color-black);
+  --nav-item-hover-text: var(--color-white);
+  --nav-submenu-bg: var(--color-gray);
+  --nav-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Transitions */
+  --transition-fast: 0.2s ease-in-out;
+  --transition-medium: 0.3s ease;
+
+}
+
+/* --- Reset & Base --- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 10px;
+}
+
+body {
+  font-family: var(--font-family);
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-body);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media screen and (min-width: 750px) {
+  body {
+    font-size: var(--font-size-desktop);
+  }
+}
+
+/* --- Emphasis reset ---
+   No italics, no bold — anywhere, ever. Only Space Mono Regular
+   ships. Emphasis is UPPERCASE + tracking; strong/em enforce it
+   so markdown-generated and CMS content complies automatically. */
+
+em, i, cite, address, dfn, var {
+  font-style: normal;
+}
+
+b, strong, em, th, h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--font-weight-normal);
+}
+
+b, strong, em {
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-label);
+}
+
+/* --- Typography --- */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family);
+  line-height: var(--line-height-heading);
+  color: var(--color-heading);
+}
+
+h1 { font-size: var(--font-size-h1); }
+h2 { font-size: var(--font-size-h2); }
+h3 { font-size: var(--font-size-h3); }
+h4 { font-size: var(--font-size-h4); }
+h5 { font-size: var(--font-size-h5); }
+h6 { font-size: var(--font-size-h6); }
+
+p {
+  margin-bottom: 0;
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: none;
+}
+
+/* --- Labels & captions ---
+   All text is full black. Hierarchy comes from size, caps, and
+   spacing — never from grey or reduced opacity. */
+
+.label {
+  font-size: var(--font-size-nav);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-label);
+}
+
+.caption {
+  font-size: var(--font-size-nav);
+  line-height: 1.4;
+}
+
+/* --- ID Label ---
+   The CW&T identity device — a spec plate, not a logo. Placed in
+   the footer of every page. e.g.
+     CWT_HSM4PW4_1610
+     (H)ard (S)mall (M)etal (4)CNC (P)ocket (W)rite (4)<10,000
+   Never decorated, never colored, never below 12px. */
+
+.id-label {
+  font-size: var(--font-size-nav);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.id-label__expansion {
+  font-size: var(--font-size-nav);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* --- Hairline rule --- */
+
+.hr {
+  height: 1px;
+  background: var(--color-rule);
+  border: 0;
+  margin: 0;
+}
+
+/* --- Code --- */
+
+code {
+  font-family: var(--font-family);
+  font-size: 0.95em;
+  background: var(--color-white);
+  border: 1px solid var(--color-rule);
+  padding: 1px 6px;
+}
+
+/* --- Buttons ---
+   One button style. No secondary or ghost variants — a lesser
+   action is a text link. */
+
+.btn,
+button[type="submit"] {
+  display: inline-block;
+  font-family: var(--font-family);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-normal);
+  text-transform: uppercase;
+  background-color: var(--color-black);
+  color: var(--color-white);
+  border: var(--button-border-width) solid var(--color-black);
+  border-radius: var(--button-radius);
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  text-decoration: none;
+}
+
+.btn:hover,
+button[type="submit"]:hover {
+  background-color: var(--color-white);
+  color: var(--color-black);
+  text-decoration: none;
+}
+
+.btn:disabled,
+button[type="submit"]:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* --- Form Inputs --- */
+
+input[type="text"],
+input[type="email"],
+input[type="search"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+textarea,
+select {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  background-color: var(--color-white);
+  border: var(--input-border-width) solid var(--color-black);
+  border-radius: var(--input-radius);
+  padding: 10px 20px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-black);
+}
+
+@media screen and (min-width: 750px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="search"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  textarea,
+  select {
+    font-size: var(--font-size-desktop);
+  }
+}
+
+/* --- Images --- */
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* --- Layout Utilities --- */
+
+.page-width {
+  max-width: var(--page-width);
+  margin: 0 auto;
+}
+
+/* --- Focus Accessibility --- */
+
+*:focus-visible {
+  outline: 2px solid var(--color-black);
+  outline-offset: 2px;
+}
