@@ -14,12 +14,23 @@ struct SidebarView: View {
         accounts.accounts.first(where: { $0.email == source })?.needsReauth == true
     }
 
-    /// "OFFLINE", "3 QUEUED", or "OFFLINE · 3 QUEUED".
+    private var reauthAccounts: [GoogleAccount] { accounts.accounts.filter(\.needsReauth) }
+
+    /// "OFFLINE", "3 QUEUED", "SIGN IN: cw@cwandt.com", or joined with " · ".
     private var offlineStatus: String {
         var parts: [String] = []
         if store.isOffline { parts.append("OFFLINE") }
         if store.pendingCount > 0 { parts.append("\(store.pendingCount) QUEUED") }
+        for a in reauthAccounts { parts.append("SIGN IN: \(a.email)") }
         return parts.joined(separator: " · ")
+    }
+
+    private func openSettingsUI() {
+        #if os(macOS)
+        openSettings()
+        #else
+        showSettings = true
+        #endif
     }
 
     /// Persist a drag reorder within one account section: the saved order is
@@ -58,11 +69,7 @@ struct SidebarView: View {
                             .foregroundStyle(CWT.inkSoft)
                         if needsReauth(group.source) {
                             Button {
-                                #if os(macOS)
-                                openSettings()
-                                #else
-                                showSettings = true
-                                #endif
+                                openSettingsUI()
                             } label: {
                                 HStack(spacing: 3) {
                                     Image(systemName: "exclamationmark.triangle.fill")
@@ -91,12 +98,14 @@ struct SidebarView: View {
             // CW&T ID label: the codename is the logo.
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 1) {
-                    if store.isOffline || store.pendingCount > 0 {
+                    // The per-account "SIGN IN AGAIN" header only exists once that account has
+                    // cached calendars; this pill covers a dead token on a fresh import.
+                    if store.isOffline || store.pendingCount > 0 || !reauthAccounts.isEmpty {
                         Button {
-                            store.refresh()
+                            if reauthAccounts.isEmpty { store.refresh() } else { openSettingsUI() }
                         } label: {
                             HStack(spacing: 3) {
-                                Image(systemName: store.isOffline ? "wifi.slash" : "arrow.triangle.2.circlepath")
+                                Image(systemName: !reauthAccounts.isEmpty ? "exclamationmark.triangle.fill" : store.isOffline ? "wifi.slash" : "arrow.triangle.2.circlepath")
                                 Text(offlineStatus)
                                     .kerning(0.4)
                             }

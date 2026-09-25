@@ -63,7 +63,6 @@ extension Error {
                 return false
             }
         }
-        if let auth = self as? AuthError, case .needsReauth = auth { return true }
         if let api = self as? GoogleAPIError, let code = api.statusCode,
            code >= 500 || code == 429 { return true }
         return false

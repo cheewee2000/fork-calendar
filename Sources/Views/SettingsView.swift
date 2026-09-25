@@ -43,7 +43,8 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(account.email).font(CWT.mono(12))
                         if account.needsReauth {
-                            Text("Needs sign-in again").font(CWT.mono(9)).foregroundStyle(CWT.signalOrange)
+                            Text("Needs sign-in again — \(account.reauthReason ?? "sign-in expired")")
+                                .font(CWT.mono(9)).foregroundStyle(CWT.signalOrange)
                         } else if let name = account.name {
                             Text(name).font(CWT.mono(9)).foregroundStyle(CWT.inkSoft)
                         }

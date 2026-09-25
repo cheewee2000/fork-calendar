@@ -23,6 +23,8 @@ struct GoogleAccount: Codable, Identifiable, Hashable {
     var syncEnabled: Bool = true
     /// Set when refresh fails with invalid_grant — user must sign in again.
     var needsReauth: Bool = false
+    /// Google's error_description + when, so Settings can say *why* (e.g. "Token has been expired or revoked").
+    var reauthReason: String?
     var addedAt: Date = Date()
 
     var id: String { email }
@@ -122,18 +124,11 @@ final class AccountManager: ObservableObject {
         update(a)
     }
 
+    /// Local only: the refresh token is shared with the other device via "Copy setup",
+    /// so revoking it here would sign that device out too (myaccount.google.com/permissions revokes for real).
     func remove(_ id: String) {
         accounts.removeAll { $0.email == id }
         persist()
-        Task { await revoke(id) }
-    }
-
-    private func revoke(_ id: String) async {
-        // Best effort; tokens are already gone locally.
-        guard let token = account(id)?.refreshToken else { return }
-        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/revoke?token=\(token)")!)
-        req.httpMethod = "POST"
-        _ = try? await URLSession.shared.data(for: req)
     }
 
     /// Sign in (or re-sign-in) a Google account through the browser.
@@ -234,6 +229,7 @@ final class AccountManager: ObservableObject {
             if err == "invalid_grant" || err == "invalid_client" {
                 var a = account
                 a.needsReauth = true
+                a.reauthReason = "\(json["error_description"] as? String ?? err) · \(Date().formatted(date: .abbreviated, time: .shortened))"
                 update(a)
                 throw AuthError.needsReauth(account.email)
             }
