@@ -796,8 +796,7 @@ final class AppState: ObservableObject {
                 .joined(separator: ", ")
             lines.append("• \(dayFmt.string(from: day)): \(ranges)")
         }
-        let tz = TimeZone.current.abbreviation() ?? TimeZone.current.identifier
-        return "Would any of these times work? (times in \(tz))\n" + lines.joined(separator: "\n")
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Escape / palette
