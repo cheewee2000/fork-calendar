@@ -421,7 +421,7 @@ struct HeaderBar: View {
             Button { appState.setViewMode(.month) } label: { menuLabel("Month", "M", appState.viewMode == .month) }
             Button { appState.setViewMode(.year) } label: { menuLabel("Year", "Y", appState.viewMode == .year) }
             Divider()
-            ForEach([2, 3, 4, 5], id: \.self) { n in
+            ForEach([2, 3, 4, 5, 9], id: \.self) { n in
                 Button { appState.setViewMode(.days(n)) } label: {
                     menuLabel("\(n) days", "\(n)", appState.viewMode == .days(n))
                 }

@@ -77,6 +77,8 @@ struct ForkCalendarApp: App {
                     .keyboardShortcut("1", modifiers: [.command])
                 Button("Week") { appState.setViewMode(.week) }
                     .keyboardShortcut("2", modifiers: [.command])
+                Button("9 Days") { appState.setViewMode(.days(9)) }
+                    .keyboardShortcut("9", modifiers: [.command])
                 Button("Month") { appState.setViewMode(.month) }
                     .keyboardShortcut("3", modifiers: [.command])
                 Divider()
