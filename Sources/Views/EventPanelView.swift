@@ -73,6 +73,7 @@ struct EventPanelView: View {
     @State private var inviteEmails: String = ""
     @State private var addMeetOnSave = false
     @State private var editingNotes = false
+    @State private var renderedNotes: AttributedString?
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
     @FocusState private var inviteFocused: Bool
@@ -388,10 +389,10 @@ struct EventPanelView: View {
 
                     row(icon: "text.alignleft") {
                         VStack(alignment: .leading, spacing: 4) {
-                            if !editingNotes, let rendered = HTMLNotes.render(notes) {
+                            if !editingNotes, HTMLNotes.looksLikeHTML(notes) {
                                 // Google descriptions are usually HTML; show
                                 // them formatted, with links tappable.
-                                Text(rendered)
+                                Text(renderedNotes ?? AttributedString())
                                     .font(CWT.mono(12))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -443,6 +444,13 @@ struct EventPanelView: View {
         }
         .onAppear {
             if context.isNew { titleFocused = true }
+        }
+        // Never render inside body: the HTML importer spins the run loop
+        // (WebKit), which re-entered SwiftUI mid-update and left the iPhone
+        // sheet blank for every event with an HTML description.
+        .task {
+            renderedNotes = HTMLNotes.render(notes)
+            if renderedNotes == nil { editingNotes = true }
         }
     }
 
