@@ -2,20 +2,20 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Fork Calendar</title>
-    <link>https://experiments.cwandt.com/forkcalendar/</link>
+    <link>https://www.experiments.cwandt.com/forkcalendar/</link>
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.0</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.0</link>
-      <sparkle:version>105</sparkle:version>
-      <sparkle:shortVersionString>0.16.0</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.1</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.1</link>
+      <sparkle:version>106</sparkle:version>
+      <sparkle:shortVersionString>0.16.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Sparkle auto-updates. Fork Calendar now checks for new versions itself (Fork Calendar ▸ Check for Updates…). Release builds are Developer ID signed and notarized.</p>]]></description>
+      <description><![CDATA[<p>Update feed URL points at the canonical host directly.</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.0/Fork-Calendar-0.16.0.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.1/Fork-Calendar-0.16.1.zip"
         type="application/octet-stream"
-        sparkle:edSignature="Lh0vASBaAaHYGoSosHyVE8rGKhyaOfZRh7a4QQwjX5H4uqdsVYGCMkozT0F/BmYBlda1WHs0KBSXp1rTsINPDQ==" length="2772850"/>
+        sparkle:edSignature="3JQnxlnoc5oN9Xh/FH31J+/7aBdVpLMRhUCh7eLS+W0H7qQbCYWFAGP5jaqbYdpOUwYSl86l+TuNLMAJKvWpAQ==" length="2775757"/>
     </item>
   </channel>
 </rss>
