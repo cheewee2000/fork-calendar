@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cut a notarized Mac release: build (Developer ID), notarize, publish the zip to
+# Cut a notarized Mac release: archive + export (Developer ID, re-signs Sparkle's XPC services), notarize, publish the zip to
 # GitHub Releases, write site/appcast.xml, deploy site/ to the VPS, install to /Applications.
 #   ./release.sh "release notes"
 # Bump CFBundleShortVersionString + CFBundleVersion in project.yml (all three targets) and commit first.
@@ -12,15 +12,19 @@ NOTES=${1:-$(git log -1 --pretty=%s)}
 REPO=cheewee2000/fork-calendar
 VPS=cwandt@vps52023.dreamhostps.com:experiments.cwandt.com/forkcalendar/
 ZIP="$PWD/dist/Fork-Calendar-$V.zip"
-APP="build/Build/Products/Release/Fork Calendar.app"
+APP="build/export/Fork Calendar.app"
 git diff --quiet || { echo "working tree dirty — commit first"; exit 1; }
 gh release view "v$V" >/dev/null 2>&1 && { echo "v$V already released"; exit 1; }
 
 echo "── building $V ($B)"
 mkdir -p dist
 xcodegen generate
-xcodebuild -project ForkCalendar.xcodeproj -scheme ForkCalendar -configuration Release \
-  -derivedDataPath build -skipPackagePluginValidation build -quiet
+rm -rf build/ForkCalendar.xcarchive build/export
+xcodebuild archive -project ForkCalendar.xcodeproj -scheme ForkCalendar -configuration Release \
+  -archivePath build/ForkCalendar.xcarchive -derivedDataPath build \
+  -allowProvisioningUpdates -skipPackagePluginValidation -quiet
+xcodebuild -exportArchive -archivePath build/ForkCalendar.xcarchive \
+  -exportOptionsPlist Support/ExportOptions.plist -exportPath build/export -allowProvisioningUpdates -quiet
 
 echo "── notarizing"
 ditto -c -k --keepParent "$APP" "$ZIP"

@@ -27,10 +27,6 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      configs:
-        Release:  # Developer ID so release.sh can notarize; Debug stays Apple Development
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: Developer ID Application
     dependencies:
       - package: Sparkle
     info:
