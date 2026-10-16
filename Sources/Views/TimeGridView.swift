@@ -37,9 +37,7 @@ struct TimeGridView: View {
                     PagedStrip(pan: appState.pan, pageWidth: pageWidth) {
                         HStack(spacing: 0) {
                             ForEach(extDays, id: \.self) { day in
-                                Text(weekdaySymbol(day))
-                                    .font(CWT.mono(10))
-                                    .foregroundStyle(CWT.inkSoft)
+                                dayHeader(day)
                                     .frame(width: colWidth)
                                     // New columns are pushed in by the layout,
                                     // not faded in (no-fade zoom policy).
@@ -48,7 +46,9 @@ struct TimeGridView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                // Same height as the month view's header, so the strip below
+                // sits where the month's first row does at the zoom handoff.
+                .frame(height: dayHeaderHeight)
                 .background(CWT.paper)
                 .overlay(alignment: .leading) {
                     // Zone labels for the gutter columns; doubles as the click
@@ -57,7 +57,7 @@ struct TimeGridView: View {
                     HStack(spacing: 0) {
                         ForEach(settings.secondaryTZs, id: \.self) { id in
                             Text(TimeZone(identifier: id)?.abbreviation() ?? AppSettings.timeZoneLabel(id))
-                                .font(CWT.mono(8))
+                                .font(CWT.ui(9))
                                 .foregroundStyle(CWT.inkFaint)
                                 .lineLimit(1)
                                 .frame(width: 42, alignment: .trailing)
@@ -88,8 +88,13 @@ struct TimeGridView: View {
                         ZStack(alignment: .topLeading) {
                             HStack(spacing: 0) {
                                 ForEach(extDays, id: \.self) { day in
+                                    // The day number lives in the column header
+                                    // above; it shows here only while the month
+                                    // zoom runs, so the handoff to the month's
+                                    // rows stays pixel-identical.
                                     MonthCell(day: day, cellW: colWidth, rowH: monthRowHeight,
-                                              laneInset: CGFloat(stripLanes) * 16, showsTimedEvents: false)
+                                              laneInset: CGFloat(stripLanes) * 16, showsTimedEvents: false,
+                                              showsDayNumber: appState.gridMonthOverlap)
                                         .frame(width: colWidth, height: monthRowHeight)
                                         .transition(.identity)
                                 }
@@ -205,9 +210,24 @@ struct TimeGridView: View {
             }
     }
 
-    private func weekdaySymbol(_ day: Date) -> String {
+    /// "Mon 13" column header (Calendar.app pattern); today's number in the
+    /// red badge, weekends in the secondary ink.
+    private func dayHeader(_ day: Date) -> some View {
         let cal = appState.calendar
-        return cal.veryShortWeekdaySymbols[cal.component(.weekday, from: day) - 1]
+        let isToday = day.isSameDay(as: Date(), calendar: cal)
+        let ink = cal.isDateInWeekend(day) ? CWT.inkSoft : CWT.ink
+        return HStack(spacing: 4) {
+            Text(Fmt.weekdayShort.string(from: day))
+                .foregroundStyle(ink)
+            Text(Fmt.dayNum.string(from: day))
+                .padding(.horizontal, isToday ? 5 : 0)
+                .frame(height: 20)
+                .background { if isToday { Rectangle().fill(CWT.signalRed) } }
+                .foregroundStyle(isToday ? Color.white : ink)
+        }
+        .font(CWT.ui(12))
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
     }
 
     private var timeGutter: some View {
@@ -218,7 +238,7 @@ struct TimeGridView: View {
                         Group {
                             if hour > 0, let tz = TimeZone(identifier: id) {
                                 Text(hourLabel(hour, timeZone: tz))
-                                    .font(CWT.mono(9))
+                                    .font(CWT.mono(10))
                                     .foregroundStyle(CWT.inkFaint)
                                     .offset(y: -6)
                             }
@@ -228,7 +248,7 @@ struct TimeGridView: View {
                     Group {
                         if hour > 0 {
                             Text(hourLabel(hour, timeZone: nil))
-                                .font(CWT.mono(10))
+                                .font(CWT.mono(11))
                                 .foregroundStyle(CWT.inkSoft)
                                 .padding(.trailing, 8)
                                 .offset(y: -6)
@@ -537,15 +557,15 @@ struct EventBlockView: View {
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 3) {
                 Text(item.event.title ?? "Untitled")
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(12))
                     .lineLimit(height > 32 ? 2 : 1)
                 if joinURL != nil, height > 20, subWidth > 60 {
                     Image(systemName: "video.fill")
-                        .font(CWT.mono(8))
+                        .font(CWT.ui(9))
                 }
                 if invoices.billed.contains(item.event.id) {
                     Image(systemName: "dollarsign")
-                        .font(CWT.mono(8))
+                        .font(CWT.ui(9))
                 }
             }
             if height > 34 || isResizing || isDragging, let s = item.event.startDate, let e = item.event.endDate {
@@ -558,7 +578,7 @@ struct EventBlockView: View {
                 let de = isResizing ? (resizingTop ? e : e.addingTimeInterval(resizeMin * 60))
                        : isDragging ? e.addingTimeInterval(moveMin * 60) : e
                 Text(Fmt.interval.string(from: ds, to: de))
-                    .font(CWT.mono(9))
+                    .font(CWT.ui(10))
                     .opacity(0.75)
                     .lineLimit(1)
             }

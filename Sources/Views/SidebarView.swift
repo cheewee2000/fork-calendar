@@ -64,8 +64,8 @@ struct SidebarView: View {
                 } header: {
                     HStack(spacing: 5) {
                         Text(group.source.uppercased())
-                            .font(CWT.mono(9))
-                            .kerning(0.4)
+                            .font(CWT.ui(10))
+                            .tracking(0.6)
                             .foregroundStyle(CWT.inkSoft)
                         if needsReauth(group.source) {
                             Button {
@@ -76,7 +76,7 @@ struct SidebarView: View {
                                     Text("SIGN IN AGAIN")
                                         .kerning(0.4)
                                 }
-                                .font(CWT.mono(9))
+                                .font(CWT.ui(10))
                                 .foregroundStyle(CWT.signalOrange)
                             }
                             .buttonStyle(.plain)
@@ -109,7 +109,7 @@ struct SidebarView: View {
                                 Text(offlineStatus)
                                     .kerning(0.4)
                             }
-                            .font(CWT.mono(9))
+                            .font(CWT.ui(10))
                             .foregroundStyle(CWT.signalOrange)
                         }
                         .buttonStyle(.plain)
@@ -117,30 +117,34 @@ struct SidebarView: View {
                         .padding(.bottom, 3)
                     }
                     Text("CWT_STE0GW1_2607")
-                        .font(CWT.mono(9))
+                        .font(CWT.ui(10))
                         .kerning(0.5)
                         .foregroundStyle(CWT.inkSoft)
                     Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")")
-                        .font(CWT.mono(9))
+                        .font(CWT.ui(10))
                         .foregroundStyle(CWT.inkFaint)
                 }
                 Spacer()
                 #if os(macOS)
                 SettingsLink {
-                    Image(systemName: "gearshape").font(CWT.mono(11)).foregroundStyle(CWT.inkSoft)
+                    Image(systemName: "gearshape").font(CWT.ui(12)).foregroundStyle(CWT.inkSoft)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Accounts & settings (⌘,)")
+                .accessibilityLabel("Accounts & settings")
                 #else
                 Button {
                     showSettings = true
                 } label: {
-                    Image(systemName: "gearshape").font(CWT.mono(15)).foregroundStyle(CWT.inkSoft)
+                    Image(systemName: "gearshape").font(CWT.ui(15)).foregroundStyle(CWT.inkSoft)
                         // Finger-sized target — the bare glyph is ~15pt.
                         .frame(width: 44, height: 44, alignment: .trailing)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Accounts & settings")
                 #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,16 +173,18 @@ struct CalendarRow: View {
                         .overlay {
                             if store.isVisible(cal) {
                                 Image(systemName: "checkmark")
-                                    .font(CWT.mono(8))
+                                    .font(CWT.ui(9))
                                     .foregroundStyle(.white)
                             }
                         }
                     Text(cal.title)
-                        .font(CWT.mono(12))
+                        .font(CWT.ui(13))
                         .foregroundStyle(store.isVisible(cal) ? AnyShapeStyle(CWT.ink) : AnyShapeStyle(CWT.inkSoft))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
+                // HIG ≥24pt target: the whole row toggles, not just the label.
+                .frame(minHeight: 24)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -186,12 +192,15 @@ struct CalendarRow: View {
                 showColorPicker = true
             } label: {
                 Image(systemName: "paintpalette")
-                    .font(CWT.mono(10))
+                    .font(CWT.ui(11))
                     .foregroundStyle(CWT.inkSoft)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .opacity(hovering || showColorPicker ? 1 : 0)
             .help("Change color")
+            .accessibilityLabel("Change color")
         }
         #if os(macOS)
         .onHover { hovering = $0 }
@@ -219,7 +228,7 @@ struct CalendarColorPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(cal.title)
-                .font(CWT.mono(10))
+                .font(CWT.ui(11))
                 .lineLimit(1)
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(24), spacing: 6), count: 6), spacing: 6) {
                 ForEach(Self.presets, id: \.self) { hex in
@@ -232,7 +241,7 @@ struct CalendarColorPicker: View {
                             .overlay {
                                 if settings.calendarColors[cal.calendarIdentifier] == hex {
                                     Image(systemName: "checkmark")
-                                        .font(CWT.mono(9))
+                                        .font(CWT.ui(10))
                                         .foregroundStyle(.white)
                                 }
                             }
@@ -241,7 +250,7 @@ struct CalendarColorPicker: View {
                 }
             }
             ColorPicker("Custom", selection: $custom, supportsOpacity: false)
-                .font(CWT.mono(10))
+                .font(CWT.ui(11))
                 .onChange(of: custom) {
                     if let hex = custom.hexString {
                         settings.calendarColors[cal.calendarIdentifier] = hex
@@ -250,7 +259,7 @@ struct CalendarColorPicker: View {
             Button("Reset to account color") {
                 settings.calendarColors.removeValue(forKey: cal.calendarIdentifier)
             }
-            .font(CWT.mono(10))
+            .font(CWT.ui(11))
             .disabled(settings.calendarColors[cal.calendarIdentifier] == nil)
         }
         .padding(12)
@@ -268,24 +277,32 @@ struct MiniMonthView: View {
         VStack(spacing: 6) {
             HStack {
                 Text(Fmt.monthYear.string(from: appState.currentDate))
-                    .font(CWT.mono(10))
+                    .font(CWT.ui(11))
                 Spacer()
                 Button {
                     appState.currentDate = cal.date(byAdding: .month, value: -1, to: appState.currentDate) ?? appState.currentDate
                 } label: {
-                    Image(systemName: "chevron.left").font(CWT.mono(9))
+                    Image(systemName: "chevron.left").font(CWT.ui(10))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
+                .help("Previous month")
+                .accessibilityLabel("Previous month")
                 Button {
                     appState.currentDate = cal.date(byAdding: .month, value: 1, to: appState.currentDate) ?? appState.currentDate
                 } label: {
-                    Image(systemName: "chevron.right").font(CWT.mono(9))
+                    Image(systemName: "chevron.right").font(CWT.ui(10))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
+                .help("Next month")
+                .accessibilityLabel("Next month")
             }
             .buttonStyle(.plain)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(CWT.mono(9))
+                        .font(CWT.ui(10))
                         .foregroundStyle(CWT.inkSoft)
                 }
                 ForEach(Array(cal.monthGrid(for: appState.currentDate).enumerated()), id: \.offset) { _, day in
@@ -293,8 +310,8 @@ struct MiniMonthView: View {
                     let isSelected = day.isSameDay(as: appState.currentDate, calendar: cal)
                     let inMonth = cal.isDate(day, equalTo: appState.currentDate, toGranularity: .month)
                     Text(Fmt.dayNum.string(from: day))
-                        .font(CWT.mono(10))
-                        .frame(maxWidth: .infinity, minHeight: 18)
+                        .font(CWT.ui(11))
+                        .frame(maxWidth: .infinity, minHeight: 24)
                         .background {
                             if isSelected {
                                 Rectangle().fill(Color.accentColor.opacity(0.18))

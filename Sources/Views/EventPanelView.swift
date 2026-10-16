@@ -162,6 +162,7 @@ struct EventPanelView: View {
                         Image(systemName: "trash")
                     }
                     .help("Delete (⌫)")
+                    .accessibilityLabel("Delete")
                 }
                 if !context.isNew {
                     Button {
@@ -170,6 +171,7 @@ struct EventPanelView: View {
                         Image(systemName: "dollarsign.circle")
                     }
                     .help("Bill to invoice (B)")
+                    .accessibilityLabel("Bill to invoice")
                 }
                 Spacer()
                 Button {
@@ -178,6 +180,7 @@ struct EventPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .help("Close (esc)")
+                .accessibilityLabel("Close")
             }
             .buttonStyle(.borderless)
             .padding(.horizontal, 14)
@@ -187,7 +190,7 @@ struct EventPanelView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField("Add title", text: $title, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(CWT.mono(15))
+                        .font(CWT.ui(15))
                         .focused($titleFocused)
                         .lineLimit(3)
                         .disabled(isReadOnly)
@@ -199,11 +202,11 @@ struct EventPanelView: View {
                             Label("Join meeting", systemImage: "video.fill")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.cwt(on: true, size: 13))
                         .prominentLabel()
                     } else if addMeetOnSave {
                         Label("Google Meet will be created on save", systemImage: "video.badge.checkmark")
-                            .font(CWT.mono(12))
+                            .font(CWT.ui(13))
                             .foregroundStyle(CWT.inkSoft)
                     } else if !isReadOnly {
                         conferencingMenu
@@ -212,52 +215,48 @@ struct EventPanelView: View {
                     row(icon: "clock") {
                         VStack(alignment: .leading, spacing: 6) {
                             Toggle("All day", isOn: $isAllDay)
-                                .font(CWT.mono(12))
+                                .font(CWT.ui(13))
                             DatePicker(
                                 "Starts",
                                 selection: $start,
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
-                            .font(CWT.mono(12))
+                            .font(CWT.ui(13))
+                            .fieldDatePickerStyle()
                             DatePicker(
                                 "Ends",
                                 selection: isAllDay ? inclusiveEnd : $end,
                                 in: (isAllDay ? Calendar.autoupdatingCurrent.startOfDay(for: start) : start)...,
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
-                            .font(CWT.mono(12))
+                            .font(CWT.ui(13))
+                            .fieldDatePickerStyle()
                         }
                         .disabled(isReadOnly)
                     }
 
                     row(icon: "repeat") {
-                        Picker("", selection: $recurrence) {
-                            ForEach(RecurrenceChoice.allCases) { choice in
-                                Text(choice.rawValue).tag(choice)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .disabled(isReadOnly)
+                        CWTMenuPicker(selection: $recurrence,
+                                      options: RecurrenceChoice.allCases.map { ($0, $0.rawValue) })
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(isReadOnly)
                     }
 
                     if recurrence != .none {
                         row(icon: "repeat.1") {
                             HStack(spacing: 8) {
-                                Picker("", selection: $repeatEnd) {
-                                    ForEach(RepeatEnd.allCases) { Text($0.rawValue).tag($0) }
-                                }
-                                .labelsHidden()
-                                .fixedSize()
+                                CWTMenuPicker(selection: $repeatEnd,
+                                              options: RepeatEnd.allCases.map { ($0, $0.rawValue) })
                                 switch repeatEnd {
                                 case .never: EmptyView()
                                 case .onDate:
                                     DatePicker("", selection: $repeatUntil, in: start..., displayedComponents: [.date])
                                         .labelsHidden()
-                                        .font(CWT.mono(12))
+                                        .font(CWT.ui(13))
+                                        .fieldDatePickerStyle()
                                 case .after:
                                     Stepper("\(repeatCount) times", value: $repeatCount, in: 1...999)
-                                        .font(CWT.mono(12))
+                                        .font(CWT.ui(13))
                                         .fixedSize()
                                 }
                             }
@@ -267,21 +266,18 @@ struct EventPanelView: View {
                     }
 
                     row(icon: "calendar") {
-                        Picker("", selection: $calendarID) {
-                            ForEach(context.isNew || !isReadOnly ? store.writableCalendars : store.orderedCalendars, id: \.calendarIdentifier) { cal in
-                                Text(cal.title).tag(cal.calendarIdentifier)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .disabled(isReadOnly)
+                        CWTMenuPicker(selection: $calendarID,
+                                      options: (context.isNew || !isReadOnly ? store.writableCalendars : store.orderedCalendars)
+                                        .map { ($0.calendarIdentifier, $0.title) })
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(isReadOnly)
                     }
 
                     if !context.isNew, context.event.attendees?.isEmpty == false {
                         row(icon: "envelope.badge") {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Your response")
-                                    .font(CWT.mono(10))
+                                    .font(CWT.ui(11))
                                     .foregroundStyle(CWT.inkSoft)
                                 HStack(spacing: 6) {
                                     rsvpButton("Going", status: .accepted)
@@ -299,15 +295,15 @@ struct EventPanelView: View {
                                     let status = attendee.responseStatus
                                     HStack(spacing: 6) {
                                         Image(systemName: statusIcon(status))
-                                            .font(CWT.mono(10))
+                                            .font(CWT.ui(11))
                                             .foregroundStyle(statusColor(status))
                                         Text(attendee.name ?? "Unknown")
-                                            .font(CWT.mono(12))
+                                            .font(CWT.ui(13))
                                             .lineLimit(1)
                                         if attendee.isSelf {
-                                            Text("(you)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                                            Text("(you)").font(CWT.ui(11)).foregroundStyle(CWT.inkSoft)
                                         } else if attendee.isOrganizer {
-                                            Text("(organizer)").font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                                            Text("(organizer)").font(CWT.ui(11)).foregroundStyle(CWT.inkSoft)
                                         }
                                     }
                                 }
@@ -319,7 +315,7 @@ struct EventPanelView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             TextField("Invite people (emails, comma-separated)", text: $inviteEmails)
                                 .textFieldStyle(.plain)
-                                .font(CWT.mono(12))
+                                .font(CWT.ui(13))
                                 .disabled(isReadOnly)
                                 .focused($inviteFocused)
                                 .onSubmit(acceptFirstInviteSuggestion)
@@ -336,14 +332,14 @@ struct EventPanelView: View {
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: "person.crop.circle")
-                                            .font(CWT.mono(10))
+                                            .font(CWT.ui(11))
                                             .foregroundStyle(CWT.inkSoft)
                                         if let name = s.name, !name.isEmpty, name.lowercased() != s.email {
-                                            Text(name).font(CWT.mono(11)).lineLimit(1)
-                                            Text(s.email).font(CWT.mono(10))
+                                            Text(name).font(CWT.ui(12)).lineLimit(1)
+                                            Text(s.email).font(CWT.ui(11))
                                                 .foregroundStyle(CWT.inkSoft).lineLimit(1)
                                         } else {
-                                            Text(s.email).font(CWT.mono(11)).lineLimit(1)
+                                            Text(s.email).font(CWT.ui(12)).lineLimit(1)
                                         }
                                     }
                                     .contentShape(Rectangle())
@@ -354,7 +350,7 @@ struct EventPanelView: View {
                                 Text(settings.guestNotifyPolicy == .never
                                      ? "Added to the guest list on save (no email — see Settings)"
                                      : "Added to the guest list and emailed on save")
-                                    .font(CWT.mono(9))
+                                    .font(CWT.ui(10))
                                     .foregroundStyle(CWT.inkFaint)
                             }
                         }
@@ -364,14 +360,14 @@ struct EventPanelView: View {
                         HStack(spacing: 6) {
                             TextField("Add location", text: $location)
                                 .textFieldStyle(.plain)
-                                .font(CWT.mono(12))
+                                .font(CWT.ui(13))
                                 .disabled(isReadOnly)
                             if let maps = mapsURL {
                                 Button {
                                     openURL(maps)
                                 } label: {
                                     Image(systemName: "arrow.up.right.square")
-                                        .font(CWT.mono(12))
+                                        .font(CWT.ui(13))
                                         .foregroundStyle(CWT.inkSoft)
                                 }
                                 .buttonStyle(.plain)
@@ -383,7 +379,7 @@ struct EventPanelView: View {
                     row(icon: "link") {
                         TextField("Add URL", text: $urlString)
                             .textFieldStyle(.plain)
-                            .font(CWT.mono(12))
+                            .font(CWT.ui(13))
                             .disabled(isReadOnly)
                     }
 
@@ -393,7 +389,7 @@ struct EventPanelView: View {
                                 // Google descriptions are usually HTML; show
                                 // them formatted, with links tappable.
                                 Text(renderedNotes ?? AttributedString())
-                                    .font(CWT.mono(12))
+                                    .font(CWT.ui(13))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(6)
@@ -401,12 +397,12 @@ struct EventPanelView: View {
                                 if !isReadOnly {
                                     Button("Edit notes") { editingNotes = true }
                                         .buttonStyle(.plain)
-                                        .font(CWT.mono(10))
+                                        .font(CWT.ui(11))
                                         .foregroundStyle(CWT.inkSoft)
                                 }
                             } else {
                                 TextEditor(text: $notes)
-                                    .font(CWT.mono(12))
+                                    .font(CWT.ui(13))
                                     .frame(minHeight: 70)
                                     .scrollContentBackground(.hidden)
                                     .background(CWT.paper2, in: Rectangle())
@@ -422,22 +418,23 @@ struct EventPanelView: View {
             HStack {
                 if isReadOnly {
                     Text("Read-only calendar")
-                        .font(CWT.mono(10))
+                        .font(CWT.ui(11))
                         .foregroundStyle(CWT.inkSoft)
                 }
                 Spacer()
                 Button("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.cwt(size: 13))
                 Button(context.isNew ? "Create" : "Save") { save() }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.cwt(on: true, size: 13))
                     .prominentLabel()
                     .disabled(isReadOnly)
             }
             .padding(12)
         }
         // Controls (buttons, pickers, toggles) don't inherit the root font.
-        .font(CWT.mono(12))
+        .font(CWT.ui(13))
         .background(BackgroundColor())
         .onChange(of: start) { oldValue, newValue in
             end = end.addingTimeInterval(newValue.timeIntervalSince(oldValue))
@@ -510,7 +507,7 @@ struct EventPanelView: View {
     private func row(icon: String, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(CWT.mono(13))
+                .font(CWT.ui(13))
                 .foregroundStyle(CWT.inkSoft)
                 .frame(width: 18)
                 .padding(.top, 3)
@@ -525,9 +522,7 @@ struct EventPanelView: View {
             let s = store
             Task { await s.respond(event, status: status) }
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(isCurrent ? .accentColor : nil)
+        .buttonStyle(.cwt(on: isCurrent))
     }
 
     private func statusIcon(_ status: ParticipantStatus) -> String {
@@ -646,8 +641,8 @@ enum HTMLNotes {
             }
             #endif
             let range = run.range
-            attr[range].font = CWT.mono(12)
-            if italic { attr[range].font = CWT.mono(12).italic() }
+            attr[range].font = CWT.ui(13)
+            if italic { attr[range].font = CWT.ui(13).italic() }
             attr[range].foregroundColor = run.link != nil ? Color.accentColor : CWT.ink
             attr[range].backgroundColor = nil
             #if os(macOS)
@@ -667,5 +662,18 @@ enum HTMLNotes {
 private struct BackgroundColor: View {
     var body: some View {
         CWT.paper
+    }
+}
+
+private extension View {
+    /// HIG prefers the system date picker; on macOS use the plain field
+    /// variant (no stepper arrows) to sit with the CW&T controls.
+    @ViewBuilder
+    func fieldDatePickerStyle() -> some View {
+        #if os(macOS)
+        datePickerStyle(.field)
+        #else
+        self
+        #endif
     }
 }

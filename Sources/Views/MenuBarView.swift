@@ -47,11 +47,11 @@ struct MenuBarView: View {
         let all = dayEvents.allDay + dayEvents.timed
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(CWT.mono(10))
+                .font(CWT.ui(11))
                 .foregroundStyle(CWT.inkSoft)
             if all.isEmpty {
                 Text("No events")
-                    .font(CWT.mono(12))
+                    .font(CWT.ui(12))
                     .foregroundStyle(CWT.inkFaint)
             }
             ForEach(Array(all.prefix(6).enumerated()), id: \.offset) { _, event in
@@ -60,18 +60,17 @@ struct MenuBarView: View {
                         .fill(event.calendar?.displayColor ?? .accentColor)
                         .frame(width: 6, height: 6)
                     Text(event.title ?? "Untitled")
-                        .font(CWT.mono(12))
+                        .font(CWT.ui(12))
                         .lineLimit(1)
                     Spacer()
                     if !event.isAllDay, let s = event.startDate {
                         Text(Fmt.time.string(from: s))
-                            .font(CWT.mono(10))
+                            .font(CWT.ui(11))
                             .foregroundStyle(CWT.inkSoft)
                     }
                     if let url = MeetLink.url(for: event) {
                         Button("Join") { openURL(url) }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.mini)
+                            .buttonStyle(.cwt(on: true, size: 11))
                     }
                 }
             }

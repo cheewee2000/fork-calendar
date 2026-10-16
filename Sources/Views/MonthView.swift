@@ -4,6 +4,10 @@ import SwiftUI
 /// must render identically for the grid↔month zoom to hand off invisibly.
 let monthRowHeight: CGFloat = 108
 
+/// Weekday header height shared by the month view and the time grid, so the
+/// grid's week strip and the month's rows line up at the zoom handoff.
+let dayHeaderHeight: CGFloat = 28
+
 /// All-day lanes that fit a 108pt row (24pt header + 5 × 16pt bars). Bars
 /// past the cap are dropped and surface as a per-day "+N" marker instead.
 let monthSpanLaneCap = 5
@@ -49,14 +53,15 @@ struct MonthView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: gutter, height: 1)
-                ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(CWT.mono(10))
-                        .foregroundStyle(CWT.inkSoft)
+                // "Mon"…"Sun", matching the time grid's "Mon 13" headers.
+                ForEach(cal.week(containing: Date()), id: \.self) { day in
+                    Text(Fmt.weekdayShort.string(from: day))
+                        .font(CWT.ui(12))
+                        .foregroundStyle(cal.isDateInWeekend(day) ? CWT.inkSoft : CWT.ink)
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.vertical, 4)
+            .frame(height: dayHeaderHeight)
             Divider()
             GeometryReader { geo in
                 let cellW = (geo.size.width - gutter) / 7
@@ -177,7 +182,7 @@ struct SpanOverflowMarkers: View {
                 let n = hidden.filter { $0.startIndex <= idx && idx <= $0.endIndex }.count
                 if n > 0 {
                     Text("+\(n)")
-                        .font(CWT.mono(8))
+                        .font(CWT.ui(10))
                         .foregroundStyle(CWT.inkSoft)
                         .frame(width: cellW - 8, alignment: .trailing)
                         .offset(x: CGFloat(idx) * cellW + 4, y: 6)
@@ -197,7 +202,7 @@ struct MonthRowGutter: View {
 
     var body: some View {
         Text(label)
-            .font(CWT.mono(9))
+            .font(CWT.ui(10))
             .foregroundStyle(CWT.inkSoft)
             .padding(.leading, 6)
             .padding(.top, 4)
@@ -373,6 +378,9 @@ struct MonthCell: View {
     /// The time grid's week strip reuses this cell but shows timed events on
     /// the hour grid instead of as title chips.
     var showsTimedEvents = true
+    /// The time grid's strip hides the number (its column header shows it)
+    /// but keeps the line, which anchors the all-day bars below.
+    var showsDayNumber = true
 
     /// Highlighted while drag-creating an all-day span, or covered by a
     /// drag-created event still open (unsaved) in the details panel.
@@ -404,11 +412,13 @@ struct MonthCell: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(dayOfMonth == 1 ? monthDayLabel : Fmt.dayNum.string(from: day))
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(11))
                     .padding(.horizontal, isToday ? 5 : 0)
                     .frame(height: 20)
                     .background { if isToday { Rectangle().fill(CWT.signalRed) } }
                     .foregroundStyle(isToday ? Color.white : Color.primary)
+                    .opacity(showsDayNumber ? 1 : 0)
+                    .accessibilityHidden(!showsDayNumber)
                 Spacer(minLength: 0)
             }
             .padding(.leading, 3)
@@ -420,7 +430,7 @@ struct MonthCell: View {
             }
             if events.count > 3 {
                 Text("\(events.count - 3) more")
-                    .font(CWT.mono(9))
+                    .font(CWT.ui(10))
                     .foregroundStyle(CWT.inkSoft)
                     .padding(.leading, 4)
             }
@@ -545,11 +555,11 @@ struct MonthChip: View {
             }
             if !event.isAllDay, let s = event.startDate {
                 Text(Fmt.time.string(from: s))
-                    .font(CWT.mono(9))
+                    .font(CWT.ui(10))
                     .foregroundStyle(CWT.inkSoft)
             }
             Text(event.title ?? "Untitled")
-                .font(CWT.mono(9))
+                .font(CWT.ui(10))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }

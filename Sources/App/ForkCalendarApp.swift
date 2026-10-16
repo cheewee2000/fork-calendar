@@ -13,11 +13,12 @@ struct ForkCalendarApp: App {
     init() {
         #if os(iOS)
         // UIKit-drawn navigation bar titles don't see SwiftUI fonts.
-        if let bold16 = UIFont(name: "SpaceMono-Bold", size: 16) {
-            UINavigationBar.appearance().titleTextAttributes = [.font: bold16]
+        // CWT.helveticaNow registers the bundled Helvetica Now files first.
+        if CWT.helveticaNow, let medium16 = UIFont(name: "HelveticaNowText-Medium", size: 16) {
+            UINavigationBar.appearance().titleTextAttributes = [.font: medium16]
         }
-        if let bold26 = UIFont(name: "SpaceMono-Bold", size: 26) {
-            UINavigationBar.appearance().largeTitleTextAttributes = [.font: bold26]
+        if CWT.helveticaNow, let medium26 = UIFont(name: "HelveticaNowText-Medium", size: 26) {
+            UINavigationBar.appearance().largeTitleTextAttributes = [.font: medium26]
         }
         #endif
     }
@@ -28,7 +29,7 @@ struct ForkCalendarApp: App {
                 .environmentObject(store)
                 .environmentObject(appState)
                 .environmentObject(settings)
-                .font(CWT.mono(12))
+                .font(CWT.ui(12))
                 .tint(CWT.ink)
                 #if os(macOS)
                 .frame(minWidth: 960, minHeight: 600)
@@ -36,6 +37,8 @@ struct ForkCalendarApp: App {
         }
         #if os(macOS)
         .defaultSize(width: 1320, height: 840)
+        // One header strip (HIG): RootView's HeaderBar is the title area.
+        .windowStyle(.hiddenTitleBar)
         #endif
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.syncIfDue() }

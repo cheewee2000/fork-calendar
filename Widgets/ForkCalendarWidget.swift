@@ -147,7 +147,7 @@ struct EventRow: View {
                 .foregroundStyle(isNow ? CWT.signalRed : CWT.inkFaint)
                 .frame(width: 44, alignment: .leading)
             Text(event.title)
-                .font(CWT.mono(11))
+                .font(CWT.ui(11))
                 .foregroundStyle(CWT.ink)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -160,7 +160,7 @@ struct SectionLabel: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(CWT.mono(9))
+            .font(CWT.ui(10))
             .foregroundStyle(CWT.inkFaint)
             .frame(height: 12)
     }
@@ -170,7 +170,7 @@ struct MoreLabel: View {
     let count: Int
     var body: some View {
         Text("+\(count) MORE")
-            .font(CWT.mono(9))
+            .font(CWT.ui(10))
             .foregroundStyle(CWT.inkFaint)
     }
 }
@@ -178,7 +178,7 @@ struct MoreLabel: View {
 struct EmptyLabel: View {
     var body: some View {
         Text("NO EVENTS")
-            .font(CWT.mono(10))
+            .font(CWT.ui(10))
             .foregroundStyle(CWT.inkFaint)
     }
 }
@@ -218,11 +218,11 @@ struct SmallView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(11))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer()
                 Text(Fmt.dayNum.string(from: entry.date))
-                    .font(CWT.mono(18))
+                    .font(CWT.ui(18))
                     .foregroundStyle(CWT.ink)
             }
             Rectangle().fill(CWT.rule).frame(height: 1)
@@ -238,13 +238,13 @@ struct MediumView: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(11))
                     .foregroundStyle(CWT.inkFaint)
                 Text(Fmt.dayNum.string(from: entry.date))
-                    .font(CWT.mono(30))
+                    .font(CWT.ui(30))
                     .foregroundStyle(CWT.ink)
                 Text(Fmt.month.string(from: entry.date).uppercased())
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(11))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer(minLength: 0)
             }
@@ -263,11 +263,11 @@ struct LargeView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Fmt.weekdayShort.string(from: entry.date).uppercased())
-                    .font(CWT.mono(12))
+                    .font(CWT.ui(12))
                     .foregroundStyle(CWT.inkFaint)
                 Spacer()
                 Text("\(Fmt.month.string(from: entry.date).uppercased()) \(Fmt.dayNum.string(from: entry.date))")
-                    .font(CWT.mono(12))
+                    .font(CWT.ui(12))
                     .foregroundStyle(CWT.ink)
             }
             Rectangle().fill(CWT.rule).frame(height: 1)
@@ -285,14 +285,14 @@ struct RectangularView: View {
         VStack(alignment: .leading, spacing: 1) {
             if let next {
                 Text(next.title)
-                    .font(CWT.mono(13))
+                    .font(CWT.ui(13))
                     .lineLimit(1)
                 Text(next.start.isTomorrow(from: entry.date)
                      ? "TMRW \(WFmt.compact(next.start))"
                      : "\(WFmt.compact(next.start))–\(WFmt.compact(next.end))")
-                    .font(CWT.mono(12))
+                    .font(CWT.ui(12))
             } else {
-                Text("NO EVENTS").font(CWT.mono(12))
+                Text("NO EVENTS").font(CWT.ui(12))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -322,10 +322,10 @@ struct AccessView: View {
     var body: some View {
         VStack(spacing: 4) {
             Text("FORK CALENDAR")
-                .font(CWT.mono(10))
+                .font(CWT.ui(10))
                 .foregroundStyle(CWT.ink)
             Text("Open the app to sign in to Google")
-                .font(CWT.mono(10))
+                .font(CWT.ui(10))
                 .foregroundStyle(CWT.inkFaint)
                 .multilineTextAlignment(.center)
         }

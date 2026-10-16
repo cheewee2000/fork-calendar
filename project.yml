@@ -27,8 +27,8 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.15.52"
+        CFBundleVersion: "105"
         NSHumanReadableCopyright: © 2026 CW&T
         ATSApplicationFontsPath: .
     entitlements:
@@ -53,11 +53,11 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.15.52"
+        CFBundleVersion: "105"
         UIAppFonts:
-          - SpaceMono-Regular.ttf
-          - SpaceMono-Bold.ttf
+          - JetBrainsMono-Regular.ttf
+          - JetBrainsMono-Bold.ttf
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -92,11 +92,11 @@ targets:
       path: Support/Info-Widgets.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.15.52"
+        CFBundleVersion: "105"
         UIAppFonts:
-          - SpaceMono-Regular.ttf
-          - SpaceMono-Bold.ttf
+          - JetBrainsMono-Regular.ttf
+          - JetBrainsMono-Bold.ttf
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

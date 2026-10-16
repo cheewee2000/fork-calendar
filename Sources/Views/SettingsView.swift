@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: CalendarStore
     @ObservedObject private var accounts = AccountManager.shared
     @State private var transferStatus = ""
+    @State private var oauthExpanded = false
 
     private static let timeZones = AppSettings.curatedTimeZones
 
@@ -20,13 +21,16 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Form {
-            accountsSection
-            syncSection
-            notifySection
-            generalSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                accountsSection
+                syncSection
+                notifySection
+                generalSection
+            }
+            .padding(16)
         }
-        .formStyle(.grouped)
+        .background(CWT.paper)
         #if os(macOS)
         .frame(width: 480, height: 640)
         #endif
@@ -35,18 +39,18 @@ struct SettingsView: View {
     // MARK: - Accounts
 
     private var accountsSection: some View {
-        Section {
+        SettingsSection("Google accounts") {
             ForEach(accounts.accounts) { account in
                 HStack(spacing: 10) {
                     Image(systemName: account.needsReauth ? "exclamationmark.triangle.fill" : "person.crop.circle")
                         .foregroundStyle(account.needsReauth ? CWT.signalOrange : CWT.inkSoft)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(account.email).font(CWT.mono(12))
+                        Text(account.email).font(CWT.ui(13))
                         if account.needsReauth {
                             Text("Needs sign-in again — \(account.reauthReason ?? "sign-in expired")")
-                                .font(CWT.mono(9)).foregroundStyle(CWT.signalOrange)
+                                .font(CWT.ui(10)).foregroundStyle(CWT.signalOrange)
                         } else if let name = account.name {
-                            Text(name).font(CWT.mono(9)).foregroundStyle(CWT.inkSoft)
+                            Text(name).font(CWT.ui(10)).foregroundStyle(CWT.inkSoft)
                         }
                     }
                     Spacer()
@@ -57,9 +61,10 @@ struct SettingsView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.mini)
+                    .tint(CWT.accent)
                     if account.needsReauth {
                         Button("Sign in…") { Task { await accounts.addAccount() } }
-                            .controlSize(.small)
+                            .buttonStyle(.cwt(size: 13))
                     }
                     Button(role: .destructive) {
                         accounts.remove(account.email)
@@ -69,27 +74,44 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .help("Remove account")
                 }
+                .settingsRow()
             }
             HStack {
                 Button(accounts.isSigningIn ? "Waiting for Google…" : "Add Google account…") {
                     Task { await accounts.addAccount() }
                 }
+                .buttonStyle(.cwt(size: 13))
                 .disabled(accounts.isSigningIn || effectiveClientID.isEmpty)
                 Spacer()
                 if !accounts.statusMessage.isEmpty {
                     Text(accounts.statusMessage)
-                        .font(CWT.mono(10))
+                        .font(CWT.ui(11))
                         .foregroundStyle(CWT.inkSoft)
                         .lineLimit(2)
                 }
             }
-            DisclosureGroup("OAuth client") {
-                TextField("Desktop client ID", text: $settings.googleClientID)
-                TextField("Desktop client secret", text: $settings.googleClientSecret)
+            .settingsRow()
+            Button {
+                oauthExpanded.toggle()
+            } label: {
+                Text((oauthExpanded ? "⌄ " : "› ") + "OAuth client")
+                    .font(CWT.ui(13))
+                    .foregroundStyle(CWT.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .settingsRow()
+            if oauthExpanded {
+                SettingsField("Desktop client ID", text: $settings.googleClientID)
+                    .settingsRow()
+                SettingsField("Desktop client secret", text: $settings.googleClientSecret)
+                    .settingsRow()
                 #if os(iOS)
-                TextField("iOS client ID (optional)", text: $settings.googleIOSClientID)
+                SettingsField("iOS client ID (optional)", text: $settings.googleIOSClientID)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .settingsRow()
                 HStack {
                     Button("Paste setup from Mac") {
                         if let t = AppSettings.decodeSetupTransfer(Clipboard.paste()) {
@@ -102,9 +124,11 @@ struct SettingsView: View {
                             transferStatus = "Clipboard has no Fork Calendar setup"
                         }
                     }
+                    .buttonStyle(.cwt(size: 13))
                     Spacer()
-                    Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                    Text(transferStatus).font(CWT.ui(11)).foregroundStyle(CWT.inkSoft)
                 }
+                .settingsRow()
                 #else
                 HStack {
                     Button("Copy setup for iPhone") {
@@ -112,17 +136,14 @@ struct SettingsView: View {
                             accounts: accounts.accounts, hiddenCalendarIDs: store.hiddenCalendarIDs))
                         transferStatus = "Copied (OAuth client, \(accounts.accounts.count) account(s), calendar visibility) — on the iPhone: Settings → OAuth client → Paste setup from Mac"
                     }
+                    .buttonStyle(.cwt(size: 13))
                     Spacer()
-                    Text(transferStatus).font(CWT.mono(10)).foregroundStyle(CWT.inkSoft)
+                    Text(transferStatus).font(CWT.ui(11)).foregroundStyle(CWT.inkSoft)
                 }
+                .settingsRow()
                 #endif
-                Text("Create OAuth clients at console.cloud.google.com (APIs & Services → Credentials) in a project with the Google Calendar API enabled. macOS uses a **Desktop app** client; iOS works best with an **iOS** client for bundle ID com.cwandt.forkcalendar.app (falls back to the desktop client). Each account you add signs in through Google's own page.")
-                    .font(CWT.mono(10))
-                    .foregroundStyle(CWT.inkFaint)
+                SettingsFootnote("Create OAuth clients at console.cloud.google.com (APIs & Services → Credentials) in a project with the Google Calendar API enabled. macOS uses a **Desktop app** client; iOS works best with an **iOS** client for bundle ID com.cwandt.forkcalendar.app (falls back to the desktop client). Each account you add signs in through Google's own page.")
             }
-            .font(CWT.mono(12))
-        } header: {
-            Text("Google accounts")
         }
     }
 
@@ -137,79 +158,84 @@ struct SettingsView: View {
     // MARK: - Sync
 
     private var syncSection: some View {
-        Section("Sync") {
-            Picker("Check for changes", selection: $settings.syncInterval) {
-                Text("Manually (⌘R)").tag(0)
-                Text("Every minute").tag(60)
-                Text("Every 2 minutes").tag(120)
-                Text("Every 5 minutes").tag(300)
-                Text("Every 15 minutes").tag(900)
+        SettingsSection("Sync") {
+            SettingsRow("Check for changes") {
+                CWTMenuPicker(selection: $settings.syncInterval, options: [
+                    (0, "Manually (⌘R)"),
+                    (60, "Every minute"),
+                    (120, "Every 2 minutes"),
+                    (300, "Every 5 minutes"),
+                    (900, "Every 15 minutes"),
+                ])
             }
-            Toggle("Also sync when the app becomes active", isOn: $settings.syncOnActivate)
+            SettingsToggle("Also sync when the app becomes active", isOn: $settings.syncOnActivate)
             HStack {
                 Button(store.isRefreshing ? "Syncing…" : "Sync now") { store.refresh() }
+                    .buttonStyle(.cwt(size: 13))
                     .disabled(store.isRefreshing || store.accessState != .granted)
                 Spacer()
                 if let last = store.lastSync {
                     Text("Last sync \(last.formatted(date: .omitted, time: .shortened))")
-                        .font(CWT.mono(10))
+                        .font(CWT.ui(11))
                         .foregroundStyle(CWT.inkSoft)
                 }
             }
+            .settingsRow()
             Button("Clear local cache and re-download") {
                 store.engine.resetCache()
                 store.refresh()
             }
-            .font(CWT.mono(11))
-            Text("Edits you make are sent to Google immediately; this controls how often changes made elsewhere are pulled in.")
-                .font(CWT.mono(10))
-                .foregroundStyle(CWT.inkFaint)
+            .buttonStyle(.cwt(size: 13))
+            .settingsRow()
+            SettingsFootnote("Edits you make are sent to Google immediately; this controls how often changes made elsewhere are pulled in.")
         }
     }
 
     // MARK: - Notifications
 
     private var notifySection: some View {
-        Section("Emails to guests & organizers") {
-            Picker("When I change an event with guests", selection: $settings.guestNotifyPolicy) {
-                ForEach(GuestNotifyPolicy.allCases) { policy in
-                    Text(policy.label).tag(policy)
-                }
+        SettingsSection("Emails to guests & organizers") {
+            SettingsRow("When I change an event with guests") {
+                CWTMenuPicker(selection: $settings.guestNotifyPolicy,
+                              options: GuestNotifyPolicy.allCases.map { ($0, $0.label) })
             }
-            Toggle("Email the organizer when I RSVP", isOn: $settings.rsvpNotifyOrganizer)
-            Text("Applies to creating, moving, editing and deleting events that have other guests, and to inviting people. Google sends the emails; nothing is sent from your Mail.")
-                .font(CWT.mono(10))
-                .foregroundStyle(CWT.inkFaint)
+            SettingsToggle("Email the organizer when I RSVP", isOn: $settings.rsvpNotifyOrganizer)
+            SettingsFootnote("Applies to creating, moving, editing and deleting events that have other guests, and to inviting people. Google sends the emails; nothing is sent from your Mail.")
         }
     }
 
     // MARK: - General
 
     private var generalSection: some View {
-        Section("Calendar") {
-            Picker("New events go to", selection: $settings.defaultCalendarID) {
-                Text("First account's primary").tag("")
-                ForEach(store.writableCalendars, id: \.calendarIdentifier) { cal in
-                    Text("\(cal.title) — \(cal.accountID)").tag(cal.calendarIdentifier)
-                }
+        SettingsSection("Calendar") {
+            SettingsRow("New events go to") {
+                CWTMenuPicker(selection: $settings.defaultCalendarID,
+                              options: [("", "First account's primary")]
+                                + store.writableCalendars.map { ($0.calendarIdentifier, "\($0.title) — \($0.accountID)") })
             }
-            Picker("Start week on", selection: $settings.firstWeekday) {
-                Text("System default").tag(0)
-                Text("Sunday").tag(1)
-                Text("Monday").tag(2)
+            SettingsRow("Start week on") {
+                CWTMenuPicker(selection: $settings.firstWeekday, options: [
+                    (0, "System default"),
+                    (1, "Sunday"),
+                    (2, "Monday"),
+                ])
             }
-            Picker("Default event duration", selection: $settings.defaultDuration) {
-                ForEach([15, 30, 45, 60, 90, 120], id: \.self) { minutes in
-                    Text("\(minutes) min").tag(minutes)
-                }
+            SettingsRow("Default event duration") {
+                CWTMenuPicker(selection: $settings.defaultDuration,
+                              options: [15, 30, 45, 60, 90, 120].map { ($0, "\($0) min") })
             }
-            Toggle("Show weekends in week view", isOn: $settings.showWeekends)
-            Toggle("Show declined events", isOn: $settings.showDeclined)
-            Toggle("Month view: all-day events only", isOn: $settings.monthAllDayOnly)
-            TextField("Zoom personal meeting URL", text: $settings.zoomLink, prompt: Text("https://zoom.us/j/…"))
+            SettingsToggle("Show weekends in week view", isOn: $settings.showWeekends)
+            SettingsToggle("Show declined events", isOn: $settings.showDeclined)
+            SettingsToggle("Month view: all-day events only", isOn: $settings.monthAllDayOnly)
+            SettingsRow("Zoom personal meeting URL") {
+                SettingsField("https://zoom.us/j/…", text: $settings.zoomLink)
+                    .frame(maxWidth: 220)
+            }
             ForEach(settings.secondaryTZs, id: \.self) { id in
                 HStack {
                     Text("Time zone: \(AppSettings.timeZoneLabel(id))")
+                        .font(CWT.ui(13))
+                        .foregroundStyle(CWT.ink)
                     Spacer()
                     Button {
                         settings.secondaryTZs.removeAll { $0 == id }
@@ -218,13 +244,155 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .settingsRow()
             }
-            Picker("Add time zone", selection: addTimeZoneBinding) {
-                Text("Choose…").tag("")
-                ForEach(Self.timeZones.filter { !settings.secondaryTZs.contains($0) }, id: \.self) { id in
-                    Text(id.replacingOccurrences(of: "_", with: " ")).tag(id)
-                }
+            SettingsRow("Add time zone") {
+                CWTMenuPicker(selection: addTimeZoneBinding,
+                              options: [("", "Choose…")]
+                                + Self.timeZones.filter { !settings.secondaryTZs.contains($0) }
+                                    .map { ($0, $0.replacingOccurrences(of: "_", with: " ")) })
             }
         }
+    }
+}
+
+// MARK: - Settings building blocks
+
+/// A section: medium-weight header over a hairline-bordered panel whose rows
+/// are separated by 1px rules.
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(CWT.ui(13, bold: true))
+                .foregroundStyle(CWT.ink)
+            VStack(spacing: 0) {
+                Group(subviews: content) { rows in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 {
+                            Rectangle().fill(CWT.rule).frame(height: 1)
+                        }
+                        row
+                    }
+                }
+            }
+            .foregroundStyle(CWT.ink)
+            .background(CWT.paper2)
+            .overlay(Rectangle().stroke(CWT.rule, lineWidth: 1))
+        }
+    }
+}
+
+private extension View {
+    /// Row padding inside a settings panel.
+    func settingsRow() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+    }
+}
+
+/// Label on the left, control on the right.
+private struct SettingsRow<Control: View>: View {
+    let label: String
+    @ViewBuilder let control: Control
+
+    init(_ label: String, @ViewBuilder control: () -> Control) {
+        self.label = label
+        self.control = control()
+    }
+
+    var body: some View {
+        HStack {
+            Text(label).font(CWT.ui(13)).foregroundStyle(CWT.ink)
+            Spacer()
+            control
+        }
+        .settingsRow()
+    }
+}
+
+private struct SettingsToggle: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    init(_ label: String, isOn: Binding<Bool>) {
+        self.label = label
+        self._isOn = isOn
+    }
+
+    var body: some View {
+        SettingsRow(label) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(CWT.accent)
+        }
+    }
+}
+
+/// Explanatory sentence under a group of rows. Markdown (`**bold**`) renders.
+private struct SettingsFootnote: View {
+    let text: LocalizedStringKey
+
+    init(_ text: LocalizedStringKey) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(CWT.ui(11))
+            .foregroundStyle(CWT.inkFaint)
+            .fixedSize(horizontal: false, vertical: true)
+            .settingsRow()
+    }
+}
+
+/// Plain text field in a 1px ruled box; the placeholder doubles as the label.
+private struct SettingsField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    init(_ placeholder: String, text: Binding<String>) {
+        self.placeholder = placeholder
+        self._text = text
+    }
+
+    var body: some View {
+        TextField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(CWT.inkFaint))
+            .textFieldStyle(.plain)
+            .font(CWT.ui(13))
+            .foregroundStyle(CWT.ink)
+            .padding(6)
+            .overlay(Rectangle().stroke(CWT.rule, lineWidth: 1))
+    }
+}
+
+/// A `Picker` replacement: a CW&T-faced menu whose items mark the current
+/// choice with "✓ ".
+struct CWTMenuPicker<T: Hashable>: View {
+    @Binding var selection: T
+    let options: [(T, String)]
+
+    var body: some View {
+        Menu {
+            ForEach(options.indices, id: \.self) { i in
+                let (value, label) = options[i]
+                Button((value == selection ? "✓ " : "   ") + label) { selection = value }
+            }
+        } label: {
+            Text((options.first { $0.0 == selection }?.1 ?? "") + " ▾")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.cwt(size: 13))
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 }

@@ -17,7 +17,7 @@ struct YearView: View {
                 Color.clear.frame(width: gutter, height: 1)
                 ForEach(Array(cal.orderedVeryShortWeekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(CWT.mono(9))
+                        .font(CWT.ui(10))
                         .foregroundStyle(CWT.inkSoft)
                         .frame(maxWidth: .infinity)
                 }
@@ -68,7 +68,7 @@ private struct YearWeekRow: View {
         let days = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
         HStack(spacing: 0) {
             Text(monthLabel(calendar: cal))
-                .font(CWT.mono(9))
+                .font(CWT.ui(10))
                 .foregroundStyle(CWT.inkSoft)
                 .frame(width: gutter, alignment: .leading)
                 .padding(.leading, 6)
@@ -81,7 +81,7 @@ private struct YearWeekRow: View {
                 // All-day/multi-day events as compact bars along the row bottom
                 GeometryReader { geo in
                     let cellW = geo.size.width / 7
-                    let barH: CGFloat = rowH >= 26 ? 9 : 4
+                    let barH: CGFloat = rowH >= 26 ? 10 : 4
                     let laneCap = rowH >= 38 ? 2 : 1
                     let bars = SpanLayout.bars(days: days, store: store, calendar: cal)
                         .filter { $0.lane < laneCap }
@@ -117,7 +117,7 @@ private struct YearSpanChip: View {
         Group {
             if showTitle {
                 Text(event.title ?? "Untitled")
-                    .font(CWT.mono(7))
+                    .font(CWT.ui(9))
                     .lineLimit(1)
                     .foregroundStyle(color)
                     .padding(.horizontal, 3)
@@ -147,7 +147,7 @@ private struct YearDayCell: View {
 
         HStack(spacing: 3) {
             Text(Fmt.dayNum.string(from: day))
-                .font(CWT.mono(9))
+                .font(CWT.ui(9))
                 .frame(width: 16, height: 13)
                 .background { if isToday { Rectangle().fill(CWT.signalRed) } }
                 .foregroundStyle(isToday ? Color.white : inYear ? Color.primary : CWT.inkSoft.opacity(0.35))

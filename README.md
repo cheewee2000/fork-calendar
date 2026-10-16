@@ -73,4 +73,4 @@ Targets: macOS 15+, iOS 18+. Add a Google account on first launch.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Space Mono is bundled under the [SIL Open Font License](https://scripts.sil.org/OFL).
+MIT — see [LICENSE](LICENSE). JetBrains Mono is bundled under the [SIL Open Font License](https://scripts.sil.org/OFL). The chrome is set in Helvetica Now Text (licensed, not in the repo — drop the .otf files into `Sources/Fonts`; without them the UI falls back to the system font).

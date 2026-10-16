@@ -33,6 +33,11 @@ struct RootView: View {
                 NavigationSplitView(columnVisibility: $appState.columnVisibility) {
                     SidebarView()
                         .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
+                        #if os(macOS)
+                        // The header bar carries the sidebar toggle; with the
+                        // title bar hidden there's no toolbar to host this one.
+                        .toolbar(removing: .sidebarToggle)
+                        #endif
                 } detail: {
                     // Drawer overlays the calendar instead of pushing it aside.
                     CalendarDetailView()
@@ -88,7 +93,7 @@ struct RootView: View {
         .overlay(alignment: .bottomTrailing) {
             if let toast = appState.toast {
                 Text(toast)
-                    .font(CWT.mono(12))
+                    .font(CWT.ui(12))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(CWT.paper)
@@ -257,6 +262,11 @@ struct CalendarDetailView: View {
             }
         }
         .background(CWT.paper)
+        #if os(macOS)
+        // Title bar hidden: the header bar takes the title-bar row itself,
+        // level with the traffic lights, instead of sitting below an empty band.
+        .ignoresSafeArea(.container, edges: .top)
+        #endif
         .onAppear {
             #if os(iOS)
             if !didSetInitialMode, sizeClass == .compact,
@@ -328,14 +338,9 @@ struct HeaderBar: View {
         #endif
     }
 
-    /// Compact controls on iOS keep the bar short.
-    private var barControlSize: ControlSize {
-        #if os(iOS)
-        return .mini
-        #else
-        return .small
-        #endif
-    }
+    #if os(macOS)
+    private var sidebarCollapsed: Bool { appState.columnVisibility == .detailOnly }
+    #endif
 
     var body: some View {
         HStack(spacing: 10) {
@@ -344,15 +349,28 @@ struct HeaderBar: View {
                     appState.showCalendarsSheet = true
                 } label: {
                     Image(systemName: "sidebar.leading")
+                        .frame(minWidth: Self.iconMinWidth)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(barControlSize)
+                .buttonStyle(.cwt)
+                .help("Calendars")
+                .accessibilityLabel("Calendars")
             }
+            #if os(macOS)
+            Button {
+                appState.columnVisibility = sidebarCollapsed ? .all : .detailOnly
+            } label: {
+                Image(systemName: "sidebar.leading")
+                    .frame(minWidth: Self.iconMinWidth)
+            }
+            .buttonStyle(.cwt)
+            .help("Toggle sidebar (⌘\\)" as String)
+            .accessibilityLabel("Toggle sidebar")
+            #endif
             Text(Fmt.monthYear.string(from: appState.currentDate))
                 #if os(iOS)
-                .font(CWT.mono(12))
+                .font(CWT.ui(12))
                 #else
-                .font(CWT.mono(15))
+                .font(CWT.ui(17, bold: true))
                 #endif
                 .lineLimit(1)
             Spacer()
@@ -362,27 +380,28 @@ struct HeaderBar: View {
                     .padding(.trailing, 2)
             }
             Button("Today") { appState.goToToday() }
-                .buttonStyle(.bordered)
-                .controlSize(barControlSize)
+                .buttonStyle(.cwt)
                 .help("Today (T)")
             viewMenu
             Button {
                 appState.toggleAvailabilityMode()
             } label: {
                 Image(systemName: "square.and.arrow.up.on.square")
+                    .frame(minWidth: Self.iconMinWidth)
             }
-            .buttonStyle(appState.availabilityMode ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+            .buttonStyle(.cwt(on: appState.availabilityMode))
             .prominentLabel(appState.availabilityMode)
-            .controlSize(barControlSize)
             .help("Share availability (S)")
+            .accessibilityLabel("Share availability")
             Button {
                 appState.paletteOpen = true
             } label: {
                 Image(systemName: "magnifyingglass")
+                    .frame(minWidth: Self.iconMinWidth)
             }
-            .buttonStyle(.bordered)
-            .controlSize(barControlSize)
+            .buttonStyle(.cwt)
             .help("Search & commands (⌘K)")
+            .accessibilityLabel("Search & commands")
             // No accounts yet: a disabled prominent button renders nearly invisible
             // on iOS, so show a plain one that leads to Settings instead.
             Button {
@@ -397,22 +416,37 @@ struct HeaderBar: View {
                 }
             } label: {
                 Image(systemName: "plus")
+                    .frame(minWidth: Self.iconMinWidth)
             }
-            .buttonStyle(store.accessState == .granted ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+            .buttonStyle(.cwt(on: store.accessState == .granted))
             .prominentLabel(store.accessState == .granted)
-            .controlSize(barControlSize)
             .help(store.accessState == .granted ? "New event (C)" : "Add a Google account in Settings")
+            .accessibilityLabel(store.accessState == .granted ? "New event" : "Add a Google account in Settings")
         }
         // Bordered controls don't inherit the root environment font.
-        .font(CWT.mono(11))
+        .font(CWT.ui(12))
         #if os(iOS)
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
         #else
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        // The title bar is hidden (single header, HIG): clear the traffic
+        // lights when the sidebar no longer sits under them, and let the
+        // header's empty space drag the window.
+        .padding(.leading, sidebarCollapsed ? 78 : 14)
+        // Clears the window's rounded top-trailing corner.
+        .padding(.trailing, 18)
+        // 4pt top centers the 24pt controls on the traffic lights.
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .contentShape(Rectangle())
+        .gesture(WindowDragGesture())
+        .allowsWindowActivationEvents(true)
         #endif
     }
+
+    /// Icon-only header buttons share one width, wider than they are tall
+    /// (label + the face's 2×10pt padding ≥ 28pt).
+    private static let iconMinWidth: CGFloat = 18
 
     private var viewMenu: some View {
         Menu {
@@ -427,11 +461,11 @@ struct HeaderBar: View {
                 }
             }
         } label: {
-            Text(appState.viewMode.title)
+            Text(appState.viewMode.title + " ▾")
         }
         .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(barControlSize)
+        .buttonStyle(.cwt)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Day (D) · Week (W) · Month (M) · 1–9 days")
     }
@@ -446,17 +480,6 @@ struct HeaderBar: View {
     }
 }
 
-/// Type-erased button style so a style can be chosen conditionally.
-struct AnyButtonStyle: PrimitiveButtonStyle {
-    private let make: (Configuration) -> AnyView
-    init<S: PrimitiveButtonStyle>(_ style: S) {
-        make = { AnyView(Button($0).buttonStyle(style)) }
-    }
-    func makeBody(configuration: Configuration) -> some View {
-        make(configuration)
-    }
-}
-
 struct AvailabilityBar: View {
     @EnvironmentObject var appState: AppState
 
@@ -466,23 +489,22 @@ struct AvailabilityBar: View {
             Text(appState.availabilitySlots.isEmpty
                  ? "Drag on the calendar to select available times"
                  : "\(appState.availabilitySlots.count) slot\(appState.availabilitySlots.count == 1 ? "" : "s") selected")
-                .font(CWT.mono(12))
+                .font(CWT.ui(12))
             if !appState.availabilitySlots.isEmpty {
                 Button("Copy availability") {
                     Clipboard.copy(appState.availabilityText())
                     appState.toggleAvailabilityMode()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.cwt(on: true))
                 .prominentLabel()
-                .controlSize(.small)
                 Button("Clear") { appState.availabilitySlots.removeAll() }
-                    .controlSize(.small)
+                    .buttonStyle(.cwt)
             }
             Button("Done") { appState.toggleAvailabilityMode() }
-                .controlSize(.small)
+                .buttonStyle(.cwt)
                 .help("Esc")
         }
-        .font(CWT.mono(11))
+        .font(CWT.ui(12))
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(CWT.paper)
@@ -498,12 +520,12 @@ struct AccessDeniedView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "person.crop.circle.badge.plus")
-                .font(CWT.mono(40))
+                .font(CWT.ui(40))
                 .foregroundStyle(CWT.inkSoft)
             Text("No Google account connected")
-                .font(CWT.mono(13))
+                .font(CWT.ui(13))
             Text("Fork Calendar talks to Google Calendar directly. Sign in with each account you want to see.")
-                .font(CWT.mono(12))
+                .font(CWT.ui(12))
                 .foregroundStyle(CWT.inkSoft)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
@@ -517,13 +539,13 @@ struct AccessDeniedView: View {
                 Button(accounts.isSigningIn ? "Waiting for Google…" : "Add Google account…") {
                     Task { await accounts.addAccount() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.cwt(on: true, size: 13))
                 .prominentLabel()
                 .disabled(accounts.isSigningIn)
             }
             if !accounts.statusMessage.isEmpty {
                 Text(accounts.statusMessage)
-                    .font(CWT.mono(10))
+                    .font(CWT.ui(11))
                     .foregroundStyle(CWT.inkSoft)
             }
         }

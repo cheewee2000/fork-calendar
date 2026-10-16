@@ -103,7 +103,7 @@ private struct PaletteBody: View {
                 .foregroundStyle(CWT.inkSoft)
             TextField(model.billing.map { "Bill “\($0.title ?? "Untitled")” to draft invoice…" } ?? "Search events or type a command…", text: $model.query)
                 .textFieldStyle(.plain)
-                .font(CWT.mono(16))
+                .font(CWT.ui(16))
                 .focused($focused)
         }
         .padding(14)
@@ -129,7 +129,7 @@ private struct PaletteBody: View {
                     }
                     if items.isEmpty {
                         Text("No results")
-                            .font(CWT.mono(12))
+                            .font(CWT.ui(13))
                             .foregroundStyle(CWT.inkSoft)
                             .padding(20)
                     }
@@ -150,7 +150,7 @@ private struct PaletteBody: View {
             Text("esc close")
             Spacer()
         }
-        .font(CWT.mono(9))
+        .font(CWT.ui(10))
         .foregroundStyle(CWT.inkFaint)
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
@@ -284,11 +284,11 @@ private struct PaletteRow: View {
                 .foregroundStyle(CWT.inkSoft)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title)
-                    .font(CWT.mono(13))
+                    .font(CWT.ui(13))
                     .lineLimit(1)
                 if let subtitle = item.subtitle {
                     Text(subtitle)
-                        .font(CWT.mono(11))
+                        .font(CWT.ui(12))
                         .foregroundStyle(CWT.inkSoft)
                         .lineLimit(1)
                 }
@@ -296,7 +296,7 @@ private struct PaletteRow: View {
             Spacer()
             if let shortcut = item.shortcut {
                 Text(shortcut)
-                    .font(CWT.mono(11))
+                    .font(CWT.ui(12))
                     .foregroundStyle(CWT.inkSoft)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
