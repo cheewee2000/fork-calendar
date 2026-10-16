@@ -33,11 +33,11 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.16.0"
-        CFBundleVersion: "105"
+        CFBundleShortVersionString: "0.16.1"
+        CFBundleVersion: "106"
         NSHumanReadableCopyright: © 2026 CW&T
         ATSApplicationFontsPath: .
-        SUFeedURL: https://experiments.cwandt.com/forkcalendar/appcast.xml
+        SUFeedURL: https://www.experiments.cwandt.com/forkcalendar/appcast.xml
         SUPublicEDKey: IsZ2LtddRqNHFHsp6U40Gw/A6sWIJO4m5xJYr1r4qic=
         SUEnableAutomaticChecks: true
         SUEnableInstallerLauncherService: true  # required for sandboxed apps
@@ -66,8 +66,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.16.0"
-        CFBundleVersion: "105"
+        CFBundleShortVersionString: "0.16.1"
+        CFBundleVersion: "106"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
@@ -105,8 +105,8 @@ targets:
       path: Support/Info-Widgets.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.16.0"
-        CFBundleVersion: "105"
+        CFBundleShortVersionString: "0.16.1"
+        CFBundleVersion: "106"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf

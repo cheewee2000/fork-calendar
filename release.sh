@@ -40,7 +40,7 @@ cat > site/appcast.xml <<XML
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Fork Calendar</title>
-    <link>https://experiments.cwandt.com/forkcalendar/</link>
+    <link>https://www.experiments.cwandt.com/forkcalendar/</link>
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
