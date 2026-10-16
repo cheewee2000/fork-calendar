@@ -9,6 +9,10 @@ settings:
   base:
     SWIFT_VERSION: "5.10"
     GENERATE_INFOPLIST_FILE: false
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
 targets:
   ForkCalendar:
     type: application
@@ -18,25 +22,38 @@ targets:
       base:
         PRODUCT_NAME: Fork Calendar
         PRODUCT_BUNDLE_IDENTIFIER: com.cwandt.forkcalendar.mac
-        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: L6DVQR8JB9
         CODE_SIGN_STYLE: Automatic
-        ENABLE_HARDENED_RUNTIME: false
+        ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Release:  # Developer ID so release.sh can notarize; Debug stays Apple Development
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Developer ID Application
+    dependencies:
+      - package: Sparkle
     info:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.16.0"
+        CFBundleVersion: "105"
         NSHumanReadableCopyright: © 2026 CW&T
         ATSApplicationFontsPath: .
+        SUFeedURL: https://experiments.cwandt.com/forkcalendar/appcast.xml
+        SUPublicEDKey: IsZ2LtddRqNHFHsp6U40Gw/A6sWIJO4m5xJYr1r4qic=
+        SUEnableAutomaticChecks: true
+        SUEnableInstallerLauncherService: true  # required for sandboxed apps
     entitlements:
       path: Support/ForkCalendar-macOS.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.network.server: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:  # Sparkle XPC services
+          - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
+          - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
   ForkCalendar-iOS:
     type: application
     platform: iOS
@@ -53,8 +70,8 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.16.0"
+        CFBundleVersion: "105"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
@@ -92,8 +109,8 @@ targets:
       path: Support/Info-Widgets.plist
       properties:
         CFBundleDisplayName: Fork Calendar
-        CFBundleShortVersionString: "0.15.51"
-        CFBundleVersion: "104"
+        CFBundleShortVersionString: "0.16.0"
+        CFBundleVersion: "105"
         UIAppFonts:
           - SpaceMono-Regular.ttf
           - SpaceMono-Bold.ttf
