@@ -1,11 +1,18 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var accounts = AccountManager.shared
+    @ObservedObject private var personalOS = PersonalOS.shared
     @State private var showSettings = false
+    @State private var showSaveSet = false
+    @State private var renameTarget: CalendarSet?
+    @State private var showRenameSet = false
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -53,6 +60,10 @@ struct SidebarView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 8, trailing: 10))
                     .listRowSeparator(.hidden)
             }
+            focusSection
+            if personalOS.isConfigured {
+                callSheetSection
+            }
             ForEach(store.calendarsBySource, id: \.source) { group in
                 Section {
                     ForEach(group.calendars, id: \.calendarIdentifier) { cal in
@@ -87,6 +98,17 @@ struct SidebarView: View {
             }
         }
         .navigationTitle("Fork Calendar")
+        // Own prompts (not AppState's): on iPhone this list sits in a sheet,
+        // where RootView can't present over it.
+        .calendarSetNameAlert("Save calendar set", isPresented: $showSaveSet,
+                              message: "Saves which calendars are showing now.") { name in
+            store.saveCurrentAsSet(named: name)
+        }
+        .calendarSetNameAlert("Rename calendar set", isPresented: $showRenameSet,
+                              initial: renameTarget?.name ?? "", confirm: "Rename",
+                              message: "") { name in
+            if let target = renameTarget { store.renameSet(target, to: name) }
+        }
         #if os(iOS)
         // Programmatic push: a NavigationLink inside a List's safeAreaInset
         // doesn't reliably activate on iOS, so the gear drives this instead.
@@ -152,6 +174,217 @@ struct SidebarView: View {
             .padding(.vertical, 6)
         }
     }
+
+    /// "FOCUS": saved calendar sets (named visibility configurations) with
+    /// one-click All / None, and + to save what's showing now as a new set.
+    private var focusSection: some View {
+        Section {
+            if store.calendarSets.isEmpty {
+                Text("Save the current calendars as a set with +")
+                    .font(CWT.ui(11))
+                    .foregroundStyle(CWT.inkFaint)
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            } else {
+                ForEach(store.calendarSets) { set in
+                    CalendarSetRow(set: set) {
+                        renameTarget = set
+                        showRenameSet = true
+                    }
+                }
+            }
+        } header: {
+            HStack(spacing: 2) {
+                Text("FOCUS")
+                    .font(CWT.ui(10))
+                    .tracking(0.6)
+                    .foregroundStyle(CWT.inkSoft)
+                Spacer(minLength: 4)
+                focusHeaderButton(label: "ALL", help: "Show all calendars") { store.showAllCalendars() }
+                focusHeaderButton(label: "NONE", help: "Hide all calendars") { store.hideAllCalendars() }
+                focusHeaderButton(systemImage: "plus", help: "Save the calendars showing now as a set") {
+                    showSaveSet = true
+                }
+            }
+        }
+    }
+
+    /// "CALL SHEET": today's people to call, from Personal OS. Click opens
+    /// the person in the browser. Refreshed with every sync pass.
+    private var callSheetSection: some View {
+        Section {
+            if let error = personalOS.callSheetError {
+                callSheetNote(error)
+            } else if personalOS.callSheet.isEmpty {
+                callSheetNote("Nothing on the call sheet today")
+            } else {
+                ForEach(personalOS.callSheet) { item in
+                    CallSheetRow(item: item)
+                }
+            }
+        } header: {
+            HStack(spacing: 2) {
+                Text("CALL SHEET")
+                    .font(CWT.ui(10))
+                    .tracking(0.6)
+                    .foregroundStyle(CWT.inkSoft)
+                Spacer(minLength: 4)
+                focusHeaderButton(systemImage: "arrow.clockwise", help: "Refresh the call sheet") {
+                    Task { await personalOS.refreshCallSheet() }
+                }
+            }
+        }
+    }
+
+    private func callSheetNote(_ text: String) -> some View {
+        Text(text)
+            .font(CWT.ui(11))
+            .foregroundStyle(CWT.inkFaint)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+    }
+
+    /// Compact header control, header-styled, with a ≥24pt target.
+    private func focusHeaderButton(label: String? = nil, systemImage: String? = nil,
+                                   help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                } else if let label {
+                    Text(label).kerning(0.4)
+                }
+            }
+            .font(CWT.ui(10))
+            .foregroundStyle(CWT.inkSoft)
+            .frame(minWidth: 24, minHeight: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+/// One call-sheet person: name, then the reason in faint smaller type;
+/// done calls fade behind a check.
+struct CallSheetRow: View {
+    @Environment(\.openURL) private var openURL
+    let item: PersonalOS.CallSheetItem
+
+    var body: some View {
+        Button {
+            if let url = URL(string: item.url) { openURL(url) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: item.done ? "checkmark" : "phone")
+                    .font(CWT.ui(10))
+                    .foregroundStyle(CWT.inkSoft)
+                    .frame(width: 14)
+                Text(item.name)
+                    .font(CWT.ui(13))
+                    .foregroundStyle(CWT.ink)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if let reason = item.reason, !reason.isEmpty {
+                    Text(reason)
+                        .font(CWT.ui(11))
+                        .foregroundStyle(CWT.inkFaint)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .opacity(item.done ? 0.5 : 1)
+            // HIG ≥24pt target, like CalendarRow.
+            .frame(minHeight: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(item.reason.map { "\(item.name) — \($0)" } ?? item.name)
+    }
+}
+
+/// One saved focus set: click applies it; the active one (what's showing
+/// matches the set exactly) reads as selected.
+struct CalendarSetRow: View {
+    @EnvironmentObject var store: CalendarStore
+    let set: CalendarSet
+    let rename: () -> Void
+
+    var body: some View {
+        let active = store.isActive(set)
+        Button {
+            store.apply(set)
+        } label: {
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(active ? AnyShapeStyle(CWT.ink) : AnyShapeStyle(Color.clear))
+                    .overlay(Rectangle().strokeBorder(active ? CWT.ink : CWT.inkSoft, lineWidth: 1))
+                    .frame(width: 14, height: 14)
+                    .overlay {
+                        if active {
+                            Image(systemName: "checkmark")
+                                .font(CWT.ui(9))
+                                .foregroundStyle(CWT.paper)
+                        }
+                    }
+                Text(set.name)
+                    .font(CWT.ui(13, bold: active))
+                    .foregroundStyle(CWT.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text("\(set.visibleIDs.count)")
+                    .font(CWT.ui(11))
+                    .foregroundStyle(CWT.inkFaint)
+            }
+            // HIG ≥24pt target, like CalendarRow.
+            .frame(minHeight: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Show only this set's calendars")
+        .accessibilityAddTraits(active ? .isSelected : [])
+        .contextMenu {
+            Button("Update to current calendars") { store.updateSetToCurrent(set) }
+            Button("Rename…") { rename() }
+            Divider()
+            Button("Delete", role: .destructive) { store.deleteSet(set) }
+        }
+    }
+}
+
+/// Name prompt for saving or renaming a calendar set: an alert with a text
+/// field. The draft resets to `initial` each time it opens.
+private struct CalendarSetNameAlert: ViewModifier {
+    let title: String
+    @Binding var isPresented: Bool
+    let initial: String
+    let confirm: String
+    let message: String
+    let onSave: (String) -> Void
+    @State private var draft = ""
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isPresented) { _, open in
+                if open { draft = initial }
+            }
+            .alert(title, isPresented: $isPresented) {
+                TextField("Name", text: $draft)
+                Button(confirm) { onSave(draft) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if !message.isEmpty { Text(message) }
+            }
+    }
+}
+
+extension View {
+    func calendarSetNameAlert(_ title: String, isPresented: Binding<Bool>, initial: String = "",
+                              confirm: String = "Save", message: String,
+                              onSave: @escaping (String) -> Void) -> some View {
+        modifier(CalendarSetNameAlert(title: title, isPresented: isPresented, initial: initial,
+                                      confirm: confirm, message: message, onSave: onSave))
+    }
 }
 
 struct CalendarRow: View {
@@ -164,6 +397,13 @@ struct CalendarRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Button {
+                #if os(macOS)
+                // ⌥-click: show only this calendar; again on the solo one → all.
+                if NSEvent.modifierFlags.contains(.option) {
+                    if store.isSolo(cal) { store.showAllCalendars() } else { store.soloCalendar(cal) }
+                    return
+                }
+                #endif
                 store.toggle(cal)
             } label: {
                 HStack(spacing: 8) {
@@ -188,6 +428,9 @@ struct CalendarRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            #if os(macOS)
+            .help("⌥-click to show only this calendar")
+            #endif
             Button {
                 showColorPicker = true
             } label: {
@@ -207,6 +450,9 @@ struct CalendarRow: View {
         #endif
         .contextMenu {
             Button("Change color…") { showColorPicker = true }
+            Divider()
+            Button("Show only this calendar") { store.soloCalendar(cal) }
+            Button("Show all calendars") { store.showAllCalendars() }
         }
         .popover(isPresented: $showColorPicker) {
             CalendarColorPicker(cal: cal)

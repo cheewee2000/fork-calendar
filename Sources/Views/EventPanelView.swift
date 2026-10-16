@@ -172,6 +172,7 @@ struct EventPanelView: View {
                     }
                     .help("Bill to invoice (B)")
                     .accessibilityLabel("Bill to invoice")
+                    PersonalOSPanelButtons(store: store, event: context.event)
                 }
                 Spacer()
                 Button {

@@ -6,6 +6,9 @@ struct SettingsView: View {
     @ObservedObject private var accounts = AccountManager.shared
     @State private var transferStatus = ""
     @State private var oauthExpanded = false
+    @ObservedObject private var personalOS = PersonalOS.shared
+    /// Inline result of "Test connection": nil = not run, "" = running.
+    @State private var personalOSTest: String?
 
     private static let timeZones = AppSettings.curatedTimeZones
 
@@ -27,6 +30,7 @@ struct SettingsView: View {
                 syncSection
                 notifySection
                 generalSection
+                personalOSSection
             }
             .padding(16)
         }
@@ -254,6 +258,50 @@ struct SettingsView: View {
             }
         }
     }
+
+    // MARK: - Personal OS
+
+    private var personalOSSection: some View {
+        SettingsSection("Personal OS") {
+            SettingsRow("URL") {
+                SettingsField(PersonalOS.defaultURL, text: $settings.personalOSURL)
+                    .frame(maxWidth: 260)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    #endif
+            }
+            SettingsRow("Capture token") {
+                SettingsSecureField("Paste token", text: $settings.personalOSToken)
+                    .frame(maxWidth: 260)
+            }
+            HStack {
+                Button(personalOSTest == "" ? "Testing…" : "Test connection") {
+                    personalOSTest = ""
+                    Task {
+                        await personalOS.refreshCallSheet()
+                        let n = personalOS.callSheet.count
+                        personalOSTest = personalOS.callSheetError.map { "✗ \($0)" }
+                            ?? "OK — \(n) on today's call sheet"
+                    }
+                }
+                .buttonStyle(.cwt(size: 13))
+                .disabled(!personalOS.isConfigured || personalOSTest == "")
+                Spacer()
+                if let result = personalOSTest, !result.isEmpty {
+                    Text(result)
+                        .font(CWT.ui(11))
+                        .foregroundStyle(result.hasPrefix("✗") ? CWT.signalRed : CWT.inkSoft)
+                        .lineLimit(2)
+                }
+            }
+            .settingsRow()
+            SettingsFootnote("Optional. With a URL and capture token set: EC-calendar todo events get a checkbox (and moving one moves its due date), any event can become a **Follow up** todo (right-click or the event panel), and today's call sheet shows in the sidebar.")
+        }
+        .onChange(of: settings.personalOSToken) { personalOSTest = nil }
+        .onChange(of: settings.personalOSURL) { personalOSTest = nil }
+    }
 }
 
 // MARK: - Settings building blocks
@@ -367,6 +415,26 @@ private struct SettingsField: View {
 
     var body: some View {
         TextField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(CWT.inkFaint))
+            .textFieldStyle(.plain)
+            .font(CWT.ui(13))
+            .foregroundStyle(CWT.ink)
+            .padding(6)
+            .overlay(Rectangle().stroke(CWT.rule, lineWidth: 1))
+    }
+}
+
+/// `SettingsField` for secrets: same ruled box, input hidden.
+private struct SettingsSecureField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    init(_ placeholder: String, text: Binding<String>) {
+        self.placeholder = placeholder
+        self._text = text
+    }
+
+    var body: some View {
+        SecureField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(CWT.inkFaint))
             .textFieldStyle(.plain)
             .font(CWT.ui(13))
             .foregroundStyle(CWT.ink)

@@ -712,6 +712,7 @@ struct EventBlockView: View {
         } label: {
             Label(invoices.billed.contains(item.event.id) ? "Bill to another invoice…" : "Bill to invoice…", systemImage: "dollarsign.circle")
         }
+        PersonalOSMenuItems(store: store, event: item.event)
         if isEditable {
             Divider()
             Button(role: .destructive) {

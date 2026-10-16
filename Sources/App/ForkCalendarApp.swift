@@ -63,6 +63,22 @@ struct ForkCalendarApp: App {
                     appState.columnVisibility = appState.columnVisibility == .detailOnly ? .all : .detailOnly
                 }
                 .keyboardShortcut("\\", modifiers: [.command])
+                Divider()
+                Toggle("Show Declined Events", isOn: $settings.showDeclined)
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                // Saved focus sets; the first nine on ⌥⌘1…9 (KeyMonitor's bare
+                // 1–9 N-day keys ignore any modifier, so no clash).
+                Menu("Calendar Sets") {
+                    ForEach(Array(store.calendarSets.enumerated()), id: \.element.id) { i, set in
+                        Toggle(set.name, isOn: Binding(get: { store.isActive(set) }, set: { _ in store.apply(set) }))
+                            .keyboardShortcut(i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option]) : nil)
+                    }
+                    if !store.calendarSets.isEmpty { Divider() }
+                    Button("Show All Calendars") { store.showAllCalendars() }
+                    Button("Hide All Calendars") { store.hideAllCalendars() }
+                    Divider()
+                    Button("Save Current Calendars as Set…") { appState.showSaveCalendarSet = true }
+                }
             }
             CommandGroup(after: .toolbar) {
                 Button("Refresh Calendars") { store.refresh() }

@@ -58,6 +58,10 @@ final class AppSettings: ObservableObject {
     /// Manual sidebar ordering (calendarIdentifiers, display order). Calendars
     /// not listed sort after listed ones with the default primary/title rules.
     @Published var calendarOrder: [String] { didSet { UserDefaults.standard.set(calendarOrder, forKey: "calendarOrder") } }
+    /// Personal OS (optional): base URL, and the capture token — kept in
+    /// UserDefaults like the Google refresh tokens. Both set = integration on.
+    @Published var personalOSURL: String { didSet { UserDefaults.standard.set(personalOSURL, forKey: "personalOSURL") } }
+    @Published var personalOSToken: String { didSet { UserDefaults.standard.set(personalOSToken, forKey: "personalOSToken") } }
 
     private init() {
         let d = UserDefaults.standard
@@ -78,6 +82,8 @@ final class AppSettings: ObservableObject {
         rsvpNotifyOrganizer = d.object(forKey: "rsvpNotifyOrganizer") as? Bool ?? true
         guestNotifyPolicy = GuestNotifyPolicy(rawValue: d.string(forKey: "guestNotifyPolicy") ?? "") ?? .ask
         defaultCalendarID = d.string(forKey: "defaultCalendarID") ?? ""
+        personalOSURL = d.string(forKey: "personalOSURL") ?? PersonalOS.defaultURL
+        personalOSToken = d.string(forKey: "personalOSToken") ?? ""
     }
 
     // MARK: - Setup transfer (Mac → iPhone via Universal Clipboard)

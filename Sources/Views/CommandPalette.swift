@@ -213,7 +213,23 @@ private struct PaletteBody: View {
             PaletteItem(title: "Share availability", subtitle: nil, icon: "square.and.arrow.up.on.square", shortcut: "S") { appState.toggleAvailabilityMode() },
             PaletteItem(title: "Undo", subtitle: nil, icon: "arrow.uturn.backward", shortcut: "⌘Z") { store.undo() },
             PaletteItem(title: "Sync now", subtitle: "Pull changes from every Google account", icon: "arrow.triangle.2.circlepath", shortcut: "⌘R") { store.refresh() },
-        ]
+            PaletteItem(title: appState.settings.showDeclined ? "Hide declined events" : "Show declined events", subtitle: nil, icon: "person.crop.circle.badge.xmark", shortcut: Self.macShortcut("⇧⌘D")) {
+                appState.settings.showDeclined.toggle()
+            },
+            PaletteItem(title: "Show all calendars", subtitle: nil, icon: "eye", shortcut: nil) { store.showAllCalendars() },
+            PaletteItem(title: "Hide all calendars", subtitle: nil, icon: "eye.slash", shortcut: nil) { store.hideAllCalendars() },
+            // The palette closes before the action runs; RootView hosts the prompt.
+            PaletteItem(title: "Save calendar set…", subtitle: "Name the calendars showing now", icon: "square.stack.3d.up", shortcut: nil) {
+                appState.showSaveCalendarSet = true
+            },
+        ] + store.calendarSets.enumerated().map { i, set in
+            PaletteItem(
+                title: "Focus: \(set.name)",
+                subtitle: store.isActive(set) ? "Showing now" : "\(set.visibleIDs.count) calendar\(set.visibleIDs.count == 1 ? "" : "s")",
+                icon: store.isActive(set) ? "checkmark.circle" : "square.stack.3d.up",
+                shortcut: i < 9 ? Self.macShortcut("⌥⌘\(i + 1)") : nil
+            ) { store.apply(set) }
+        } + personalOSCommands
         if q.isEmpty {
             items.append(contentsOf: commands)
         } else {
@@ -236,6 +252,34 @@ private struct PaletteBody: View {
             }
         }
         return items
+    }
+
+    /// Personal OS actions on the selected event (open in the panel), like
+    /// billing: done / not done for an EC todo, "Follow up" for any other.
+    private var personalOSCommands: [PaletteItem] {
+        guard PersonalOS.shared.isConfigured, let ctx = appState.panelContext, !ctx.isNew else { return [] }
+        let event = ctx.event
+        let title = PersonalOS.displayTitle(event.title) ?? "Untitled"
+        if event.personalOSTodoID != nil {
+            let state = PersonalOS.shared.state(of: event)
+            guard state != .dropped else { return [] }
+            return [PaletteItem(
+                title: state == .done ? "Mark not done in Personal OS" : "Mark done in Personal OS",
+                subtitle: title, icon: state == .done ? "square" : "checkmark.square", shortcut: nil
+            ) { store.setPersonalOSCompleted(event, state != .done) }]
+        }
+        return [PaletteItem(title: "Follow up in Personal OS", subtitle: title, icon: "arrowshape.turn.up.right", shortcut: nil) {
+            store.followUpInPersonalOS(event)
+        }]
+    }
+
+    /// Shortcut hints for menu-bar-only shortcuts (no menu bar on iOS).
+    private static func macShortcut(_ s: String) -> String? {
+        #if os(macOS)
+        return s
+        #else
+        return nil
+        #endif
     }
 
     private func parseDate(_ q: String) -> Date? {

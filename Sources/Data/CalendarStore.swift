@@ -49,6 +49,27 @@ enum UndoAction {
     case remove(id: String)
 }
 
+/// A saved calendar focus set ("Work", "Just me"): a named visibility
+/// configuration. Stores the VISIBLE ids, so a calendar added later stays
+/// hidden whenever the set is applied.
+struct CalendarSet: Codable, Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var visibleIDs: [String]
+
+    private static let defaultsKey = "calendarSets"
+
+    static func load() -> [CalendarSet] {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return [] }
+        return (try? JSONDecoder().decode([CalendarSet].self, from: data)) ?? []
+    }
+
+    static func save(_ sets: [CalendarSet]) {
+        guard let data = try? JSONEncoder().encode(sets) else { return }
+        UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+}
+
 /// "Email the guests about this change?" — shown when the policy is Ask.
 struct NotifyPrompt: Identifiable {
     let id = UUID()
@@ -84,6 +105,12 @@ final class CalendarStore: ObservableObject {
             WidgetBridge.mirror(hiddenCalendarIDs: hiddenCalendarIDs)
         }
     }
+    /// Saved focus sets, in sidebar order. Lives here (not AppSettings) next
+    /// to the visibility it rewrites — and an AppSettings change would also
+    /// restart the sync timer and flush the day index for nothing.
+    @Published private(set) var calendarSets: [CalendarSet] {
+        didSet { CalendarSet.save(calendarSets) }
+    }
 
     private var fetchedInterval: DateInterval?
     private var undoStack: [UndoAction] = []
@@ -93,6 +120,7 @@ final class CalendarStore: ObservableObject {
 
     init() {
         hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: "hiddenCalendarIDs") ?? [])
+        calendarSets = CalendarSet.load()
         WidgetBridge.mirror(
             hiddenCalendarIDs: hiddenCalendarIDs,
             calendarColors: AppSettings.shared.calendarColors,
@@ -105,6 +133,11 @@ final class CalendarStore: ObservableObject {
             guard let self else { return }
             self.findEvent(id: old)?.id = new
             self.remapUndo(from: old, to: new)
+        }
+        // An offline edit that finally reached Google: same write-back as a
+        // live save (see writeBackPersonalOSDueDate).
+        engine.onReplayedUpdate = { [weak self] old, new in
+            self?.writeBackPersonalOSDueDate(old: old, new: new)
         }
         engine.$isOffline
             .receive(on: DispatchQueue.main)
@@ -134,6 +167,14 @@ final class CalendarStore: ObservableObject {
                 self?.objectWillChange.send()
                 self?.restartTimer()
             }
+            .store(in: &bag)
+        // The widget snapshot is filtered when it's published, so flipping
+        // the declined filter has to re-publish it (no-op on macOS).
+        AppSettings.shared.$showDeclined
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.publishWidgetData() }
             .store(in: &bag)
         accounts.$accounts
             .receive(on: DispatchQueue.main)
@@ -215,6 +256,7 @@ final class CalendarStore: ObservableObject {
         accessState = accounts.accounts.isEmpty ? .denied : .granted
         reload()
         restartTimer()
+        PersonalOS.shared.refreshCallSheetSoon()
         if accessState == .granted {
             engine.syncAll()
         }
@@ -222,12 +264,14 @@ final class CalendarStore: ObservableObject {
 
     /// ⌘R: full pass over every account.
     func refresh() {
+        PersonalOS.shared.refreshCallSheetSoon()
         guard accessState == .granted else { return }
         engine.syncAll()
     }
 
     /// Foreground / window-activation sync (if enabled).
     func syncIfDue() {
+        PersonalOS.shared.refreshCallSheetSoon(minAge: 20)
         guard accessState == .granted, AppSettings.shared.syncOnActivate else { return }
         if let last = engine.lastSync, Date().timeIntervalSince(last) < 20 { return }
         engine.syncAll()
@@ -241,6 +285,7 @@ final class CalendarStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
                 guard !Task.isCancelled, let self else { return }
+                PersonalOS.shared.refreshCallSheetSoon()
                 guard self.accessState == .granted else { continue }
                 self.engine.syncAll()
             }
@@ -373,6 +418,74 @@ final class CalendarStore: ObservableObject {
         } else {
             hiddenCalendarIDs.insert(calendar.calendarIdentifier)
         }
+    }
+
+    // MARK: - Calendar sets (focus)
+
+    /// Make exactly `visible` (among loaded calendars) show, in ONE assignment
+    /// — one didSet, so one UserDefaults write and one widget mirror — and
+    /// only if something changes. Ids in `visible` that no longer exist are
+    /// ignored; hidden ids of calendars not loaded right now (an account
+    /// awaiting re-auth) carry over untouched.
+    private func setVisibleCalendars(_ visible: Set<String>) {
+        let existing = Set(calendars.map(\.calendarIdentifier))
+        let hidden = existing.subtracting(visible).union(hiddenCalendarIDs.subtracting(existing))
+        if hidden != hiddenCalendarIDs { hiddenCalendarIDs = hidden }
+    }
+
+    /// Visible calendar ids among the loaded calendars.
+    private var visibleCalendarIDs: Set<String> {
+        Set(calendars.filter { isVisible($0) }.map(\.calendarIdentifier))
+    }
+
+    func showAllCalendars() { setVisibleCalendars(Set(calendars.map(\.calendarIdentifier))) }
+
+    func hideAllCalendars() { setVisibleCalendars([]) }
+
+    /// Show only this calendar.
+    func soloCalendar(_ cal: CalCalendar) { setVisibleCalendars([cal.calendarIdentifier]) }
+
+    /// True when this calendar is the only one showing.
+    func isSolo(_ cal: CalCalendar) -> Bool { visibleCalendarIDs == [cal.calendarIdentifier] }
+
+    func apply(_ set: CalendarSet) { setVisibleCalendars(Set(set.visibleIDs)) }
+
+    /// Derived, never stored: a set is active when what's showing now equals
+    /// the set's ids that still exist.
+    func isActive(_ set: CalendarSet) -> Bool {
+        let existing = Set(calendars.map(\.calendarIdentifier))
+        return visibleCalendarIDs == Set(set.visibleIDs).intersection(existing)
+    }
+
+    /// Visible ids in sidebar order (stable, readable JSON).
+    private var currentVisibleIDList: [String] {
+        orderedCalendars.filter { isVisible($0) }.map(\.calendarIdentifier)
+    }
+
+    @discardableResult
+    func saveCurrentAsSet(named name: String) -> CalendarSet {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let set = CalendarSet(
+            id: UUID(),
+            name: trimmed.isEmpty ? "Set \(calendarSets.count + 1)" : trimmed,
+            visibleIDs: currentVisibleIDList)
+        calendarSets.append(set)
+        return set
+    }
+
+    func updateSetToCurrent(_ set: CalendarSet) {
+        guard let i = calendarSets.firstIndex(where: { $0.id == set.id }) else { return }
+        calendarSets[i].visibleIDs = currentVisibleIDList
+    }
+
+    func renameSet(_ set: CalendarSet, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let i = calendarSets.firstIndex(where: { $0.id == set.id }) else { return }
+        calendarSets[i].name = trimmed
+    }
+
+    func deleteSet(_ set: CalendarSet) {
+        calendarSets.removeAll { $0.id == set.id }
     }
 
     private func passesFilters(_ event: CalEvent) -> Bool {
@@ -797,6 +910,7 @@ final class CalendarStore: ObservableObject {
                     engine.upsert(r)
                 }
                 reload()
+                writeBackPersonalOSDueDate(old: old, new: event.record())
                 if event.isMaster || (old?.recurrence ?? []) != (event.recurrence ?? []) {
                     await engine.resync(calendarKey: key)
                 }

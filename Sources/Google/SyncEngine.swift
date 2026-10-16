@@ -91,6 +91,9 @@ final class SyncEngine: ObservableObject {
     var onChange: (() -> Void)?
     /// A replayed insert traded its local id for the server's.
     var onRemapID: ((_ old: String, _ new: String) -> Void)?
+    /// A queued (offline) update reached Google: the pre-edit record and
+    /// the server's result.
+    var onReplayedUpdate: ((_ old: EventRecord?, _ new: EventRecord) -> Void)?
 
     private let accounts = AccountManager.shared
     private var saveTask: Task<Void, Never>?
@@ -584,6 +587,7 @@ final class SyncEngine: ObservableObject {
             if var record = patched.record(calendarKey: op.calendarKey) {
                 record.recurrence = record.recurrence ?? op.optimistic?.recurrence
                 upsert(record)
+                onReplayedUpdate?(op.rollback, record)
             }
         case .delete:
             try await GoogleCalendarAPI.delete(

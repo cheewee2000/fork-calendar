@@ -21,6 +21,10 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 - Year view: whole year as a stack of weeks with event dots (Y)
 - Right-hand event panel (Notion-style): click an event to open, edit inline
 - Sidebar with mini-month and per-calendar show/hide toggles, grouped by account
+- Calendar focus sets: save which calendars are showing as a named set (sidebar FOCUS → +), click a set to switch to it (the active one is checked), right-click to update, rename or delete; ALL / NONE show or hide every calendar. Also in ⌘K ("Focus: …", "Show all calendars", "Hide all calendars", "Save calendar set…") and View ▸ Calendar Sets (⌥⌘1–9)
+- Solo a calendar: ⌥-click it in the sidebar to show only that one (⌥-click again to show all), or right-click → Show only this calendar
+- Hide declined events in one click: view menu (Week ▾) → Show declined events, ⌘K, or View ▸ Show Declined Events (⇧⌘D)
+- Header ‹ Today › buttons step to the previous / next week (or day, month, year — whatever the view shows) on macOS
 - Time grid: red now-line, overlapping-event layout, all-day row, past events dimmed
 - Drag on empty grid to create; drag events to move (15-min snap, across days); drag top/bottom edges to resize; ⌥-drag to duplicate
 - Right-click context menus: join meeting, duplicate, move to calendar, copy title, delete
@@ -39,6 +43,16 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 - macOS menu bar agenda with next event + Join buttons
 - Settings (⌘,): accounts, sync cadence, guest/RSVP emails, default calendar, week start, default duration, weekends, declined events, secondary time zones in the gutter
 
+## Personal OS (optional)
+
+Hooks into a [Personal OS](https://personal-os-two-gold.vercel.app) instance — a todo / people / call-sheet web app that mirrors every dated todo into a Google calendar ("EC") as an all-day event. Off until you set it up: Settings (⌘,) → **Personal OS** → paste the base URL and your capture token, then **Test connection**. With both set:
+
+- **Two-way EC todos:** todo events get a checkbox on their all-day bar (click to mark done / not done; dropped todos show a struck, inactive box), plus the same in the right-click menu and the event panel. Dragging a todo to another day (or editing its date, or undoing a move) moves the todo's due date too.
+- **Follow-up todos:** right-click any other event (or use its panel button, or ⌘K with the event open) → **Follow up in Personal OS** creates "Follow up: *event title*" due the next weekday, with the time and attendees in the notes and a link back to the event.
+- **Call sheet:** today's people to call appear in the sidebar under CALL SHEET (click opens their profile), refreshed with every sync.
+
+The token is stored locally with the rest of the app's settings, like the Google tokens.
+
 ## Keyboard shortcuts
 
 | Key | Action |
@@ -46,7 +60,10 @@ A native Notion-Calendar-style calendar app for macOS and iOS, built with SwiftU
 | T | Today |
 | D / W / M / Y | Day / Week / Month / Year view |
 | 1–9 | Show N days |
-| ← / → | Previous / next period |
+| ← / → (or ‹ › in the header) | Previous / next period |
+| ⇧⌘D | Show / hide declined events |
+| ⌥⌘1–9 | Apply calendar set 1–9 |
+| ⌥-click a calendar | Show only that calendar (again: show all) |
 | C | Create event |
 | S | Share availability |
 | ⌘K | Search & commands |

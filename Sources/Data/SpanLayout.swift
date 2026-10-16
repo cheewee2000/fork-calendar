@@ -87,21 +87,33 @@ enum SpanLayout {
 struct SpanBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var store: CalendarStore
+    @ObservedObject private var personalOS = PersonalOS.shared
     let event: CalEvent
     var duplicates: [CalEvent] = []
     var compact = false
 
     private var copies: [CalEvent] { [event] + duplicates }
 
+    /// Where the title (or a Personal OS todo's checkbox) starts: after the
+    /// calendar strips. The host overlays `PersonalOSCheckbox` here.
+    static func contentInset(copies: Int) -> CGFloat {
+        3 + CalendarStrips.totalWidth(count: copies) + 3
+    }
+
+    /// EC todo with Personal OS on: the "✓ "/"✗ " prefix becomes the
+    /// host's checkbox, so drop it from the title and leave room.
+    private var isTodo: Bool { personalOS.isConfigured && event.personalOSTodoID != nil }
+
     var body: some View {
         let color = event.calendar?.displayColor ?? Color.accentColor
         let isSelected = appState.selectedKey == eventKey(event)
         let awaiting = event.needsMyResponse
-        Text(event.title ?? "Untitled")
+        let todo = isTodo
+        Text((todo ? PersonalOS.displayTitle(event.title) : event.title) ?? "Untitled")
             .font(CWT.ui(compact ? 10 : 11))
             .lineLimit(1)
             .foregroundStyle(color)
-            .padding(.leading, 3 + CalendarStrips.totalWidth(count: copies.count) + 3)
+            .padding(.leading, Self.contentInset(copies: copies.count) + (todo ? PersonalOSCheckbox.boxSize + 4 : 0))
             .padding(.trailing, 6)
             .padding(.vertical, compact ? 0 : 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

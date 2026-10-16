@@ -279,12 +279,20 @@ struct MonthSpanBar: View {
                 )
             }
             #endif
+            // Personal OS todo checkbox: above the bar's tap/drag layers (on
+            // iOS, above LongPressDrag), so it toggles without selecting.
+            .overlay(alignment: .leading) {
+                PersonalOSCheckbox(store: store, event: bar.event,
+                                   color: bar.event.calendar?.displayColor ?? Color.accentColor)
+                    .padding(.leading, SpanBarView.contentInset(copies: 1 + bar.duplicates.count) - 2)
+            }
             .offset(
                 x: CGFloat(startIdx) * cellW + 3 + dragOffset.width,
                 y: barsTop + CGFloat(bar.lane) * 16 + dragOffset.height
             )
             #if os(macOS)
             .gesture(moveDrag)
+            .contextMenu { PersonalOSMenuItems(store: store, event: bar.event) }
             #endif
     }
 
@@ -614,6 +622,7 @@ struct MonthChip: View {
                 Button("Delete", role: .destructive) { appState.requestDelete(event, store: store) }
             }
             Button("Copy title") { Clipboard.copy(event.title ?? "") }
+            PersonalOSMenuItems(store: store, event: event)
         }
         #endif
     }

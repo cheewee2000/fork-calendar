@@ -479,6 +479,10 @@ final class AppState: ObservableObject {
     @Published var showCalendarsSheet = false
     /// iOS: settings/accounts sheet (macOS uses the Settings window).
     @Published var showSettingsSheet = false
+    /// "Save calendar set…" name prompt, raised from ⌘K or the View menu
+    /// (hosted by RootView; the sidebar's + button keeps its own prompt so it
+    /// still works inside the iPhone calendars sheet).
+    @Published var showSaveCalendarSet = false
 
     // ⌘K palette
     @Published var paletteOpen = false

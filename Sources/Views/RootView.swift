@@ -124,6 +124,10 @@ struct RootView: View {
         } message: {
             Text("Google notifies guests by email. You can change the default in Settings.")
         }
+        .calendarSetNameAlert("Save calendar set", isPresented: $appState.showSaveCalendarSet,
+                              message: "Saves which calendars are showing now.") { name in
+            store.saveCurrentAsSet(named: name)
+        }
         .onChange(of: store.toast) { _, message in
             if let message { appState.toast = message; store.toast = nil }
         }
@@ -324,6 +328,7 @@ private struct RowBandZoom: ViewModifier {
 struct HeaderBar: View {
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #else
@@ -379,9 +384,35 @@ struct HeaderBar: View {
                     .controlSize(.mini)
                     .padding(.trailing, 2)
             }
-            Button("Today") { appState.goToToday() }
+            HStack(spacing: 4) {
+                #if os(macOS)
+                // ‹ Today › — ←/→ already step; this makes paging visible.
+                // (iOS pages by swipe, and its header has no room.)
+                Button {
+                    appState.step(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: Self.iconMinWidth)
+                }
                 .buttonStyle(.cwt)
-                .help("Today (T)")
+                .help("Previous (←)")
+                .accessibilityLabel("Previous")
+                #endif
+                Button("Today") { appState.goToToday() }
+                    .buttonStyle(.cwt)
+                    .help("Today (T)")
+                #if os(macOS)
+                Button {
+                    appState.step(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(minWidth: Self.iconMinWidth)
+                }
+                .buttonStyle(.cwt)
+                .help("Next (→)")
+                .accessibilityLabel("Next")
+                #endif
+            }
             viewMenu
             Button {
                 appState.toggleAvailabilityMode()
@@ -459,6 +490,10 @@ struct HeaderBar: View {
                 Button { appState.setViewMode(.days(n)) } label: {
                     menuLabel("\(n) days", "\(n)", appState.viewMode == .days(n))
                 }
+            }
+            Divider()
+            Button { settings.showDeclined.toggle() } label: {
+                menuLabel("Show declined events", "⇧⌘D", settings.showDeclined)
             }
         } label: {
             Text(appState.viewMode.title + " ▾")
