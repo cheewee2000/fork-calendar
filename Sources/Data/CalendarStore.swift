@@ -649,11 +649,20 @@ final class CalendarStore: ObservableObject {
         do {
             let token = try await accounts.validToken(for: cal.accountID)
             let sendUpdates = AppSettings.shared.rsvpNotifyOrganizer ? "all" : "none"
+            let body: [String: Any] = ["attendees": attendees.map { $0.googleJSON() }]
             _ = try await GoogleCalendarAPI.patch(
-                calendarID: cal.googleID, eventID: targetID,
-                body: ["attendees": attendees.map { $0.googleJSON() }],
-                sendUpdates: sendUpdates, token: token
+                calendarID: cal.googleID, eventID: targetID, body: body, sendUpdates: sendUpdates, token: token
             )
+            // An occurrence the organizer moved (or I answered on its own) is an exception the
+            // master's answer never reaches — check it and answer it directly.
+            if event.id != targetID {
+                let fresh = try await GoogleCalendarAPI.getEvent(calendarID: cal.googleID, eventID: event.id, token: token)
+                if fresh.attendees?.first(where: { $0.isSelf == true })?.responseStatus != status.rawValue {
+                    _ = try await GoogleCalendarAPI.patch(
+                        calendarID: cal.googleID, eventID: event.id, body: body, sendUpdates: sendUpdates, token: token
+                    )
+                }
+            }
             let label: String = status == .accepted ? "Going" : status == .tentative ? "Maybe" : "Not going"
             toast = "RSVP sent: \(label)" + (sendUpdates == "none" ? " (organizer not emailed)" : "")
         } catch {
