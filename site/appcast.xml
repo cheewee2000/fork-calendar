@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.1</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.1</link>
-      <sparkle:version>106</sparkle:version>
-      <sparkle:shortVersionString>0.16.1</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.2</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.2</link>
+      <sparkle:version>107</sparkle:version>
+      <sparkle:shortVersionString>0.16.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Update feed URL points at the canonical host directly.</p>]]></description>
+      <description><![CDATA[<p>Events from Gmail (flights, reservations) and birthdays are now read-only — Google refuses time changes on them, which showed up as a Bad Request error when dragging.</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.1/Fork-Calendar-0.16.1.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.2/Fork-Calendar-0.16.2.zip"
         type="application/octet-stream"
-        sparkle:edSignature="3JQnxlnoc5oN9Xh/FH31J+/7aBdVpLMRhUCh7eLS+W0H7qQbCYWFAGP5jaqbYdpOUwYSl86l+TuNLMAJKvWpAQ==" length="2775757"/>
+        sparkle:edSignature="wsCRwy3uHH1xGhV/gjggeFCjlFb20sV/jiqSW/0pXHsEBiTbyhPsfUB16IuzuyQCKSstvrlPWQqbz+4y3NxIBg==" length="2782271"/>
     </item>
   </channel>
 </rss>
