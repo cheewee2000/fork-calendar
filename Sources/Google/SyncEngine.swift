@@ -119,7 +119,7 @@ final class SyncEngine: ObservableObject {
     }
 
     /// Bump to force a one-time full re-list on every calendar at next launch.
-    static let cacheRevision = 2
+    static let cacheRevision = 3 // 3: records gained eventType
 
     static func defaultWindow(around day: Date) -> DateInterval {
         DateInterval(start: day.addingTimeInterval(-365 * 86400), end: day.addingTimeInterval(548 * 86400))

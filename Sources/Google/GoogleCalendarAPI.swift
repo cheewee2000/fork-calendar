@@ -95,6 +95,7 @@ struct GEvent: Decodable {
     let transparency: String?
     let guestsCanModify: Bool?
     let source: Source?
+    let eventType: String?
 
     /// Nil when the payload can't describe a dated event (cancelled stubs).
     func record(calendarKey: String) -> EventRecord? {
@@ -135,7 +136,8 @@ struct GEvent: Decodable {
             updated: updated.flatMap { GoogleDates.rfc3339.date(from: $0) ?? GoogleDates.rfc3339Plain.date(from: $0) },
             colorId: colorId,
             transparency: transparency,
-            guestsCanModify: guestsCanModify ?? false
+            guestsCanModify: guestsCanModify ?? false,
+            eventType: eventType
         )
     }
 }

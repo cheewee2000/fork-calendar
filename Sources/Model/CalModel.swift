@@ -100,6 +100,7 @@ struct EventRecord: Codable, Hashable {
     var colorId: String?
     var transparency: String?
     var guestsCanModify: Bool
+    var eventType: String? = nil
 }
 
 /// Mutable, identity-based event object the views edit in place (what EKEvent
@@ -132,6 +133,8 @@ final class CalEvent: Identifiable, Hashable {
     var timeZone: String?
     var transparency: String?
     var guestsCanModify = false
+    /// Google's `eventType` (default, fromGmail, birthday, …).
+    var eventType: String?
     /// Set by the editor: create a Google Meet link on the next save.
     var wantsMeet = false
 
@@ -167,6 +170,7 @@ final class CalEvent: Identifiable, Hashable {
         timeZone = r.timeZone
         transparency = r.transparency
         guestsCanModify = r.guestsCanModify
+        eventType = r.eventType
     }
 
     func record() -> EventRecord {
@@ -195,13 +199,20 @@ final class CalEvent: Identifiable, Hashable {
             updated: updated,
             colorId: colorId,
             transparency: transparency,
-            guestsCanModify: guestsCanModify
+            guestsCanModify: guestsCanModify,
+            eventType: eventType
         )
     }
 
     // MARK: EventKit-shaped conveniences the views rely on
 
     var eventIdentifier: String? { id }
+    /// Writable calendar and an event kind Google lets us change. Events from
+    /// Gmail and birthdays reject start/end edits with a bare 400 Bad Request.
+    var canEdit: Bool {
+        calendar?.allowsContentModifications == true && !CalEvent.lockedTypes.contains(eventType ?? "default")
+    }
+    static let lockedTypes: Set<String> = ["fromGmail", "birthday"]
     var isLocal: Bool { id.hasPrefix(CalEvent.localPrefix) }
     var isInstance: Bool { recurringEventId != nil }
     var isMaster: Bool { recurringEventId == nil && !(recurrence ?? []).isEmpty }

@@ -503,7 +503,7 @@ struct EventBlockView: View {
     @State private var isResizing = false
 
     private var isEditable: Bool {
-        item.event.calendar?.allowsContentModifications == true
+        item.event.canEdit
     }
 
     /// The primary copy plus any merged duplicates from other calendars.

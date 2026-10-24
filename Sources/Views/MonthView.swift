@@ -227,7 +227,7 @@ struct MonthSpanBar: View {
     @State private var isResizing = false
 
     private var isEditable: Bool {
-        bar.event.calendar?.allowsContentModifications == true
+        bar.event.canEdit
     }
 
     var body: some View {
@@ -529,7 +529,7 @@ struct MonthChip: View {
     @State private var moveTranslation: CGSize = .zero
 
     private var isEditable: Bool {
-        event.calendar?.allowsContentModifications == true
+        event.canEdit
     }
 
     var body: some View {

@@ -133,7 +133,7 @@ struct EventPanelView: View {
     }
 
     private var isReadOnly: Bool {
-        !context.isNew && !(context.event.calendar?.allowsContentModifications ?? true)
+        !context.isNew && !context.event.canEdit
     }
 
     /// All-day pickers show the last day the event covers; the model (like
