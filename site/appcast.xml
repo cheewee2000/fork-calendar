@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.4</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.4</link>
-      <sparkle:version>108</sparkle:version>
-      <sparkle:shortVersionString>0.16.4</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.5</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.5</link>
+      <sparkle:version>109</sparkle:version>
+      <sparkle:shortVersionString>0.16.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>v0.16.4 — follow system time-zone changes: on NSSystemTimeZoneDidChange re-point the cached formatters, drop the day index, re-render, and full re-list (all-day dates were parsed at the old zone's midnight)</p>]]></description>
+      <description><![CDATA[<p>v0.16.5 — menu bar stays current and shows only unfinished events: read today/tomorrow straight from the cache (not the main window's fetched range), drop ended events, and re-render label + panel every minute via TimelineView</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.4/Fork-Calendar-0.16.4.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.5/Fork-Calendar-0.16.5.zip"
         type="application/octet-stream"
-        sparkle:edSignature="IRlAoQJ4Sp9OFoZ8lUfoQCqW7HzJfpq1uijEuisNh6KhXaevia64WzQgbsuogrpYmAOC8RSaMeWe+jWZsBrJBQ==" length="2788489"/>
+        sparkle:edSignature="1HUY7Wau7UNK86n51PLA1DLmAU3tkivox67ZdH6cop01NrPd1g3ukDOAgs3WbmQOw1tyzIcnxwSeFG0vIQnFBA==" length="2793738"/>
     </item>
   </channel>
 </rss>
