@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.16.4</string>
+	<string>0.16.5</string>
 	<key>CFBundleVersion</key>
-	<string>108</string>
+	<string>109</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>SpaceMono-Regular.ttf</string>

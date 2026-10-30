@@ -6,10 +6,12 @@ struct MenuBarLabel: View {
     @ObservedObject var store: CalendarStore
 
     var body: some View {
-        if let next = store.nextUpcomingEvent, let start = next.startDate {
-            Text("\(Fmt.time.string(from: start))  \(String((next.title ?? "").prefix(20)))")
-        } else {
-            Image(systemName: "calendar")
+        TimelineView(.everyMinute) { context in
+            if let next = store.nextUpcomingEvent(now: context.date), let start = next.startDate {
+                Text("\(Fmt.time.string(from: start))  \(String((next.title ?? "").prefix(20)))")
+            } else {
+                Image(systemName: "calendar")
+            }
         }
     }
 }
@@ -21,12 +23,18 @@ struct MenuBarView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        TimelineView(.everyMinute) { context in
+            content(now: context.date)
+        }
+    }
+
+    private func content(now: Date) -> some View {
         let cal = Calendar.autoupdatingCurrent
-        let today = Date()
-        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
-        VStack(alignment: .leading, spacing: 8) {
-            agendaSection(title: "Today", day: today, calendar: cal)
-            agendaSection(title: "Tomorrow", day: tomorrow, calendar: cal)
+        let upcoming = store.menuBarEvents(now: now, calendar: cal)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now
+        return VStack(alignment: .leading, spacing: 8) {
+            agendaSection(title: "Today", events: upcoming.filter { $0.startDate < tomorrow })
+            agendaSection(title: "Tomorrow", events: upcoming.filter { $0.endDate > tomorrow })
             Divider()
             Button {
                 NSApp.activate(ignoringOtherApps: true)
@@ -42,9 +50,8 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder
-    private func agendaSection(title: String, day: Date, calendar: Calendar) -> some View {
-        let dayEvents = store.events(on: day, calendar: calendar)
-        let all = dayEvents.allDay + dayEvents.timed
+    private func agendaSection(title: String, events: [CalEvent]) -> some View {
+        let all = events.filter(\.isAllDay) + events.filter { !$0.isAllDay }
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(CWT.mono(10))

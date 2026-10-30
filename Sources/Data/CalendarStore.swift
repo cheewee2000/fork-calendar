@@ -436,13 +436,25 @@ final class CalendarStore: ObservableObject {
         return index
     }
 
-    var nextUpcomingEvent: CalEvent? {
-        let now = Date()
+    /// Unfinished events from now through end of tomorrow, read straight from the cache so the
+    /// menu bar doesn't depend on whatever range the main window last fetched.
+    func menuBarEvents(now: Date, calendar: Calendar) -> [CalEvent] {
+        let end = calendar.date(byAdding: .day, value: 2, to: calendar.startOfDay(for: now)) ?? now
+        var out: [CalEvent] = []
+        for cal in calendars where isVisible(cal) {
+            guard let dict = engine.records[cal.calendarIdentifier] else { continue }
+            for r in dict.values where r.status != "cancelled" && r.end > now && r.start < end {
+                let e = CalEvent(record: r, calendar: cal)
+                if passesFilters(e) { out.append(e) }
+            }
+        }
+        return out.sorted { $0.startDate != $1.startDate ? $0.startDate < $1.startDate : $0.id < $1.id }
+    }
+
+    func nextUpcomingEvent(now: Date) -> CalEvent? {
         let cal = Calendar.autoupdatingCurrent
-        return events.first {
-            guard let cal2 = $0.calendar, isVisible(cal2), !$0.isAllDay else { return false }
-            guard let s = $0.startDate else { return false }
-            return s > now && cal.isDateInToday(s)
+        return menuBarEvents(now: now, calendar: cal).first {
+            !$0.isAllDay && $0.startDate > now && cal.isDateInToday($0.startDate)
         }
     }
 
