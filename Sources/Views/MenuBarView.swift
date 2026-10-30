@@ -2,16 +2,30 @@
 import SwiftUI
 import AppKit
 
+/// Ticks the menu bar views forward. TimelineView inside a MenuBarExtra label spins SwiftUI's
+/// status-item update loop at launch, so the label observes this instead.
+@MainActor
+final class MinuteClock: ObservableObject {
+    static let shared = MinuteClock()
+    @Published private(set) var now = Date()
+    private var timer: Timer?
+
+    private init() {
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.now = Date() }
+        }
+    }
+}
+
 struct MenuBarLabel: View {
     @ObservedObject var store: CalendarStore
+    @ObservedObject private var clock = MinuteClock.shared
 
     var body: some View {
-        TimelineView(.everyMinute) { context in
-            if let next = store.nextUpcomingEvent(now: context.date), let start = next.startDate {
-                Text("\(Fmt.time.string(from: start))  \(String((next.title ?? "").prefix(20)))")
-            } else {
-                Image(systemName: "calendar")
-            }
+        if let next = store.nextUpcomingEvent(now: clock.now), let start = next.startDate {
+            Text("\(Fmt.time.string(from: start))  \(String((next.title ?? "").prefix(20)))")
+        } else {
+            Image(systemName: "calendar")
         }
     }
 }
@@ -21,18 +35,14 @@ struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openURL) private var openURL
+    @ObservedObject private var clock = MinuteClock.shared
 
     var body: some View {
-        TimelineView(.everyMinute) { context in
-            content(now: context.date)
-        }
-    }
-
-    private func content(now: Date) -> some View {
+        let now = clock.now
         let cal = Calendar.autoupdatingCurrent
         let upcoming = store.menuBarEvents(now: now, calendar: cal)
         let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             agendaSection(title: "Today", events: upcoming.filter { $0.startDate < tomorrow })
             agendaSection(title: "Tomorrow", events: upcoming.filter { $0.endDate > tomorrow })
             Divider()
