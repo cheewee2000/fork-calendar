@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.3</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.3</link>
+      <title>Fork Calendar 0.16.4</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.4</link>
       <sparkle:version>108</sparkle:version>
-      <sparkle:shortVersionString>0.16.3</sparkle:shortVersionString>
+      <sparkle:shortVersionString>0.16.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>RSVP now sticks on recurring occurrences the organizer moved.</p>]]></description>
+      <description><![CDATA[<p>v0.16.4 — follow system time-zone changes: on NSSystemTimeZoneDidChange re-point the cached formatters, drop the day index, re-render, and full re-list (all-day dates were parsed at the old zone's midnight)</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.3/Fork-Calendar-0.16.3.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.4/Fork-Calendar-0.16.4.zip"
         type="application/octet-stream"
-        sparkle:edSignature="h/sjEpYGkQXCC1G20PuCXWvW26M+e2fl5XMZxlaDXEcrxDI3U57WoM8puXyC7Zt1SINKVhi0ITB1BEADgzQiDQ==" length="2785981"/>
+        sparkle:edSignature="IRlAoQJ4Sp9OFoZ8lUfoQCqW7HzJfpq1uijEuisNh6KhXaevia64WzQgbsuogrpYmAOC8RSaMeWe+jWZsBrJBQ==" length="2788489"/>
     </item>
   </channel>
 </rss>
