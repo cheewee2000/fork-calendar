@@ -127,6 +127,18 @@ final class CalendarStore: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] message in self?.toast = "Sync: \(message)" }
             .store(in: &bag)
+        // System time zone changed (travel, manual change): formatters, the
+        // day index and all-day dates were all built in the old zone.
+        NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Fmt.resetTimeZones()
+                self?.dayIndexCache = nil
+                self?.reload()
+                self?.objectWillChange.send()
+                self?.engine.relistAll()
+            }
+            .store(in: &bag)
         AppSettings.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

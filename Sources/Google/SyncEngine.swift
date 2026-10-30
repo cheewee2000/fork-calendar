@@ -228,6 +228,13 @@ final class SyncEngine: ObservableObject {
         syncAll()
     }
 
+    /// Full re-list of every calendar: all-day dates were parsed at local
+    /// midnight, so a system time-zone change leaves them shifted.
+    func relistAll() {
+        syncTokens.removeAll()
+        syncAll()
+    }
+
     // MARK: - Sync
 
     /// Sync every enabled account. Coalesces: a call during a sync schedules

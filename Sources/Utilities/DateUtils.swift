@@ -81,4 +81,12 @@ enum Fmt {
         f.setLocalizedDateFormatFromTemplate("EEE")
         return f
     }()
+
+    /// Cached formatters keep the zone they were built in; re-point them
+    /// after a system time-zone change.
+    static func resetTimeZones() {
+        for f in [monthYear, time, hour, dayNum, month, dateTime, weekdayShort] { f.timeZone = .current }
+        interval.timeZone = .current
+        RRule.dayFormatter.timeZone = .current
+    }
 }
