@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.5</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.5</link>
-      <sparkle:version>109</sparkle:version>
-      <sparkle:shortVersionString>0.16.5</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.6</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.6</link>
+      <sparkle:version>110</sparkle:version>
+      <sparkle:shortVersionString>0.16.6</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>v0.16.5 — menu bar stays current and shows only unfinished events: read today/tomorrow straight from the cache (not the main window's fetched range), drop ended events, and re-render label + panel every minute via TimelineView</p>]]></description>
+      <description><![CDATA[<p>v0.16.6 — fix launch hang: TimelineView inside the MenuBarExtra label spun SwiftUI's status-item update loop at 100% CPU in applicationDidFinishLaunching; menu bar views now observe a 30s MinuteClock instead</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.5/Fork-Calendar-0.16.5.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.6/Fork-Calendar-0.16.6.zip"
         type="application/octet-stream"
-        sparkle:edSignature="1HUY7Wau7UNK86n51PLA1DLmAU3tkivox67ZdH6cop01NrPd1g3ukDOAgs3WbmQOw1tyzIcnxwSeFG0vIQnFBA==" length="2793738"/>
+        sparkle:edSignature="SVmjMxUnR+YzytHUO1W3UZB8BLCjqCJvGilWhTIAdvKJk8Mz6us5pwozwC/SLstuUV3HA98hgFTvGPNRB++PDA==" length="2795478"/>
     </item>
   </channel>
 </rss>
