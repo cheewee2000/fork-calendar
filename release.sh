@@ -67,6 +67,7 @@ git add site && git commit -q -m "release: v$V appcast + site" && git push -q
 
 echo "── installing"
 osascript -e 'quit app "Fork Calendar"' 2>/dev/null || true
+sleep 2; pkill -x "Fork Calendar" || true   # a hung build ignores the quit event
 rm -rf "/Applications/Fork Calendar.app"
 ditto "$APP" "/Applications/Fork Calendar.app"
 open "/Applications/Fork Calendar.app"
