@@ -56,7 +56,7 @@ struct TimeGridView: View {
                     // headers from receiving gutter clicks.
                     HStack(spacing: 0) {
                         ForEach(settings.secondaryTZs, id: \.self) { id in
-                            Text(TimeZone(identifier: id)?.abbreviation() ?? AppSettings.timeZoneLabel(id))
+                            Text(TimeZone(identifier: id)?.abbreviation(for: gutterDay) ?? AppSettings.timeZoneLabel(id))
                                 .font(CWT.mono(8))
                                 .foregroundStyle(CWT.inkFaint)
                                 .lineLimit(1)
@@ -270,8 +270,14 @@ struct TimeGridView: View {
         }
     }
 
+    /// The day the gutter labels describe: the displayed day, not "now", so
+    /// zone offsets (DST) follow navigation instead of a stale launch-time render.
+    private var gutterDay: Date { appState.calendar.startOfDay(for: days.first ?? Date()) }
+
     private func hourLabel(_ hour: Int, timeZone: TimeZone?) -> String {
-        let date = Calendar.autoupdatingCurrent.date(bySettingHour: hour, minute: 0, second: 0, of: Date()) ?? Date()
+        // Same linear mapping the grid uses for events (dayStart + h hours),
+        // so labels stay aligned on DST-transition days too.
+        let date = gutterDay.addingTimeInterval(TimeInterval(hour) * 3600)
         if let timeZone {
             let f = DateFormatter()
             f.setLocalizedDateFormatFromTemplate("j")
