@@ -270,14 +270,14 @@ struct TimeGridView: View {
         }
     }
 
-    /// The day the gutter labels describe: the displayed day, not "now", so
-    /// zone offsets (DST) follow navigation instead of a stale launch-time render.
-    private var gutterDay: Date { appState.calendar.startOfDay(for: days.first ?? Date()) }
+    /// The day the gutter labels describe: the last displayed day, so zone
+    /// offsets (DST) follow navigation. Last, not first, so a week that opens
+    /// on a transition Sunday labels the six days after the switch.
+    private var gutterDay: Date { appState.calendar.startOfDay(for: days.last ?? Date()) }
 
     private func hourLabel(_ hour: Int, timeZone: TimeZone?) -> String {
-        // Same linear mapping the grid uses for events (dayStart + h hours),
-        // so labels stay aligned on DST-transition days too.
-        let date = gutterDay.addingTimeInterval(TimeInterval(hour) * 3600)
+        // Wall-clock hour on gutterDay (same mapping as event placement).
+        let date = appState.calendar.date(atWallHours: Double(hour), in: gutterDay)
         if let timeZone {
             let f = DateFormatter()
             f.setLocalizedDateFormatFromTemplate("j")
@@ -376,11 +376,11 @@ struct DayColumn: View {
             // details panel is open.
             if let ctx = appState.panelContext, ctx.isNew, !ctx.event.isAllDay,
                let s = ctx.event.startDate, let e = ctx.event.endDate {
-                let dayStart = appState.calendar.startOfDay(for: day)
-                let dayEnd = dayStart.addingTimeInterval(86400)
-                if s < dayEnd, e > dayStart {
-                    let y = CGFloat(max(s, dayStart).timeIntervalSince(dayStart) / 3600) * hourHeight
-                    let h = CGFloat(min(e, dayEnd).timeIntervalSince(max(s, dayStart)) / 3600) * hourHeight
+                let cal = appState.calendar
+                let top = cal.wallHours(of: s, in: day), bottom = cal.wallHours(of: e, in: day)
+                if top < 24, bottom > 0 {
+                    let y = CGFloat(top) * hourHeight
+                    let h = CGFloat(bottom - top) * hourHeight
                     Rectangle()
                         .fill(Color.accentColor.opacity(0.22))
                         .overlay(Rectangle().strokeBorder(Color.accentColor.opacity(0.6)))
@@ -391,9 +391,9 @@ struct DayColumn: View {
             }
 
             ForEach(appState.availabilitySlots.filter { $0.start.isSameDay(as: day, calendar: appState.calendar) }) { slot in
-                let dayStart = appState.calendar.startOfDay(for: day)
-                let y = CGFloat(slot.start.timeIntervalSince(dayStart) / 3600) * hourHeight
-                let h = CGFloat(slot.end.timeIntervalSince(slot.start) / 3600) * hourHeight
+                let top = appState.calendar.wallHours(of: slot.start, in: day)
+                let y = CGFloat(top) * hourHeight
+                let h = CGFloat(appState.calendar.wallHours(of: slot.end, in: day) - top) * hourHeight
                 Rectangle()
                     .fill(CWT.signalGreen.opacity(0.25))
                     .overlay(Rectangle().strokeBorder(CWT.signalGreen.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4])))
@@ -456,7 +456,7 @@ struct DayColumn: View {
     private func date(atY y: CGFloat) -> Date {
         let clamped = max(0, min(y, hourHeight * 24))
         let hours = Double(clamped / hourHeight)
-        return appState.calendar.startOfDay(for: day).addingTimeInterval(hours * 3600)
+        return appState.calendar.date(atWallHours: hours, in: day)
     }
 
     private func createEvent(fromY: CGFloat, toY: CGFloat) {
@@ -479,8 +479,7 @@ struct NowLine: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let start = Calendar.autoupdatingCurrent.startOfDay(for: context.date)
-            let y = CGFloat(context.date.timeIntervalSince(start) / 3600) * hourHeight
+            let y = CGFloat(Calendar.autoupdatingCurrent.wallHours(of: context.date, in: context.date)) * hourHeight
             HStack(spacing: 0) {
                 Rectangle().fill(CWT.signalRed).frame(width: 5, height: 5)
                 Rectangle().fill(CWT.signalRed).frame(height: 1)
@@ -517,12 +516,10 @@ struct EventBlockView: View {
 
     var body: some View {
         let cal = appState.calendar
-        let dayStart = cal.startOfDay(for: day)
-        let dayEnd = dayStart.addingTimeInterval(86400)
-        let start = max(item.event.startDate ?? dayStart, dayStart)
-        let end = min(item.event.endDate ?? dayEnd, dayEnd)
-        var y = CGFloat(start.timeIntervalSince(dayStart) / 3600) * hourHeight
-        var height = max(CGFloat(end.timeIntervalSince(start) / 3600) * hourHeight, 16)
+        let top = item.event.startDate.map { cal.wallHours(of: $0, in: day) } ?? 0
+        let bottom = item.event.endDate.map { cal.wallHours(of: $0, in: day) } ?? 24
+        var y = CGFloat(top) * hourHeight
+        var height = max(CGFloat(bottom - top) * hourHeight, 16)
         let subWidth = (colWidth - 6) / CGFloat(item.columnCount)
         let x = 2 + subWidth * CGFloat(item.column)
         let color = item.event.calendar?.displayColor ?? Color.accentColor

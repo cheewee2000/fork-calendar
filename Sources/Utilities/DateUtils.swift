@@ -24,6 +24,26 @@ extension Calendar {
             .first { self.component(.day, from: $0) == 1 }
     }
 
+    /// Wall-clock hours from midnight of `day` to `date` (24 at or past the
+    /// next midnight). Clock components, not elapsed seconds, so a 23/25-hour
+    /// DST day still lines up with the 24-slot grid.
+    func wallHours(of date: Date, in day: Date) -> Double {
+        let dayStart = startOfDay(for: day)
+        if date <= dayStart { return 0 }
+        if date >= self.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86400) { return 24 }
+        let c = dateComponents([.hour, .minute, .second], from: date)
+        return Double(c.hour ?? 0) + Double(c.minute ?? 0) / 60 + Double(c.second ?? 0) / 3600
+    }
+
+    /// Inverse of `wallHours`: the instant at wall-clock `hours` on `day`.
+    func date(atWallHours hours: Double, in day: Date) -> Date {
+        let dayStart = startOfDay(for: day)
+        if hours >= 24 { return self.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86400) }
+        let total = Int((hours * 3600).rounded())
+        return self.date(bySettingHour: total / 3600, minute: total % 3600 / 60, second: total % 60, of: dayStart)
+            ?? dayStart.addingTimeInterval(hours * 3600)
+    }
+
     func orderedVeryShortWeekdaySymbols() -> [String] {
         let symbols = veryShortWeekdaySymbols
         let first = firstWeekday - 1
