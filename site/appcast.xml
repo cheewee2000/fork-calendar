@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.7</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.7</link>
-      <sparkle:version>110</sparkle:version>
-      <sparkle:shortVersionString>0.16.7</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.8</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.8</link>
+      <sparkle:version>111</sparkle:version>
+      <sparkle:shortVersionString>0.16.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>v0.16.7 — time-zone gutter follows DST: secondary zone labels and abbreviations are computed for the displayed day (dayStart + h hours, matching event placement) instead of Date() at render time</p>]]></description>
+      <description><![CDATA[<p>Fix hour labels for DST week</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.7/Fork-Calendar-0.16.7.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.8/Fork-Calendar-0.16.8.zip"
         type="application/octet-stream"
-        sparkle:edSignature="hDJ2uLqdwS1RbgvYF4/Bf8lufmpG8zqsk36fMAPrC2AKN7eaQ8KHDNI2XlekhpUhtNtQW4TKH7iHvr16ZYwUAw==" length="2796926"/>
+        sparkle:edSignature="H64WKpOIszwryvwNEmxA3HkrGaMYwvoahrZeOqOBal3iuw1e4q+fbV2f3MRlCiCRjwGa0aFVQ/VQxYl0QPLHBA==" length="2804361"/>
     </item>
   </channel>
 </rss>
