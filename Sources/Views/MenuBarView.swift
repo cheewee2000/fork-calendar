@@ -11,9 +11,16 @@ final class MinuteClock: ObservableObject {
     private var timer: Timer?
 
     private init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.now = Date() }
+        // Fires on :00 and :30 so "now" flips on the minute instead of up to 30s late.
+        // ForkCalDebugClockOffset (seconds) shifts the menu bar's clock for scripted checks.
+        let offset = UserDefaults.standard.double(forKey: "ForkCalDebugClockOffset")
+        let first = Date(timeIntervalSinceReferenceDate: (Date.timeIntervalSinceReferenceDate / 30).rounded(.up) * 30)
+        let t = Timer(fire: first, interval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.now = Date().addingTimeInterval(offset) }
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+        now = Date().addingTimeInterval(offset)
     }
 }
 
@@ -22,10 +29,32 @@ struct MenuBarLabel: View {
     @ObservedObject private var clock = MinuteClock.shared
 
     var body: some View {
-        if let next = store.nextUpcomingEvent(now: clock.now), let start = next.startDate {
-            Text("\(Fmt.time.string(from: start))  \(String((next.title ?? "").prefix(20)))")
+        if let next = store.menuBarHeadline(now: clock.now), let start = next.startDate {
+            let title = String((next.title ?? "").prefix(20))
+            let mins = Int((start.timeIntervalSince(clock.now) / 60).rounded(.up))
+            if mins <= 0 {
+                Image(nsImage: Self.highlight("now  \(title)"))
+                    .accessibilityLabel("now, \(title)")
+            } else {
+                Text("\(mins < 60 ? "\(mins)m" : "\(mins / 60)h \(mins % 60)m")  \(title)")
+            }
         } else {
             Image(systemName: "calendar")
+        }
+    }
+
+    /// Status items only draw template (monochrome) text, so "it's time" is a pre-rendered
+    /// block: black on signal orange, readable on light and dark menu bars.
+    static func highlight(_ string: String) -> NSImage {
+        let text = NSAttributedString(string: string, attributes: [
+            .font: NSFont.menuBarFont(ofSize: 0), .foregroundColor: NSColor.black,
+        ])
+        let textSize = text.size()
+        return NSImage(size: NSSize(width: ceil(textSize.width) + 12, height: 18), flipped: false) { rect in
+            NSColor(CWT.signalOrange).setFill()
+            rect.fill()
+            text.draw(at: NSPoint(x: 6, y: (rect.height - textSize.height) / 2))
+            return true
         }
     }
 }

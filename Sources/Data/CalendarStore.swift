@@ -451,11 +451,12 @@ final class CalendarStore: ObservableObject {
         return out.sorted { $0.startDate != $1.startDate ? $0.startDate < $1.startDate : $0.id < $1.id }
     }
 
-    func nextUpcomingEvent(now: Date) -> CalEvent? {
-        let cal = Calendar.autoupdatingCurrent
-        return menuBarEvents(now: now, calendar: cal).first {
-            !$0.isAllDay && $0.startDate > now && cal.isDateInToday($0.startDate)
-        }
+    /// Menu bar headline: an event that started within the last 15 minutes (latest start wins),
+    /// else the next one up — through end of tomorrow, so the label doesn't go blank at night.
+    func menuBarHeadline(now: Date) -> CalEvent? {
+        let timed = menuBarEvents(now: now, calendar: .autoupdatingCurrent)
+            .filter { !$0.isAllDay && $0.startDate > now.addingTimeInterval(-15 * 60) }
+        return timed.last { $0.startDate <= now } ?? timed.first
     }
 
     // MARK: - Search (whole cache)
