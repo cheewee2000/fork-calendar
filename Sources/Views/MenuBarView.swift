@@ -32,30 +32,34 @@ struct MenuBarLabel: View {
         if let next = store.menuBarHeadline(now: clock.now), let start = next.startDate {
             let title = String((next.title ?? "").prefix(20))
             let mins = Int((start.timeIntervalSince(clock.now) / 60).rounded(.up))
-            if mins <= 0 {
-                Image(nsImage: Self.highlight("now  \(title)"))
-                    .accessibilityLabel("now, \(title)")
-            } else {
-                Text("\(mins < 60 ? "\(mins)m" : "\(mins / 60)h \(mins % 60)m")  \(title)")
-            }
+            let label = mins <= 0 ? "now  \(title)" : "\(mins < 60 ? "\(mins)m" : "\(mins / 60)h \(mins % 60)m")  \(title)"
+            Image(nsImage: Self.render(label, highlighted: mins <= 0))
+                .accessibilityLabel(label)
         } else {
             Image(systemName: "calendar")
         }
     }
 
-    /// Status items only draw template (monochrome) text, so "it's time" is a pre-rendered
-    /// block: black on signal orange, readable on light and dark menu bars.
-    static func highlight(_ string: String) -> NSImage {
+    /// Status items ignore SwiftUI fonts and colors, so the label is pre-rendered in Space Mono:
+    /// a template image normally (follows the menu bar's light/dark), and when it's time a
+    /// black-on-signal-orange block that reads on either.
+    static func render(_ string: String, highlighted: Bool) -> NSImage {
         let text = NSAttributedString(string: string, attributes: [
-            .font: NSFont.menuBarFont(ofSize: 0), .foregroundColor: NSColor.black,
+            .font: NSFont(name: "SpaceMono-Regular", size: 12) ?? .menuBarFont(ofSize: 0),
+            .foregroundColor: NSColor.black,
         ])
         let textSize = text.size()
-        return NSImage(size: NSSize(width: ceil(textSize.width) + 12, height: 18), flipped: false) { rect in
-            NSColor(CWT.signalOrange).setFill()
-            rect.fill()
-            text.draw(at: NSPoint(x: 6, y: (rect.height - textSize.height) / 2))
+        let pad: CGFloat = highlighted ? 6 : 0
+        let image = NSImage(size: NSSize(width: ceil(textSize.width) + pad * 2, height: 18), flipped: false) { rect in
+            if highlighted {
+                NSColor(CWT.signalOrange).setFill()
+                rect.fill()
+            }
+            text.draw(at: NSPoint(x: pad, y: (rect.height - textSize.height) / 2))
             return true
         }
+        image.isTemplate = !highlighted
+        return image
     }
 }
 
@@ -80,6 +84,7 @@ struct MenuBarView: View {
                 openWindow(id: "main")
             } label: {
                 Label("Open Fork Calendar", systemImage: "calendar")
+                    .font(CWT.mono(12))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
