@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.8</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.8</link>
-      <sparkle:version>111</sparkle:version>
-      <sparkle:shortVersionString>0.16.8</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.10</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.10</link>
+      <sparkle:version>113</sparkle:version>
+      <sparkle:shortVersionString>0.16.10</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Fix hour labels for DST week</p>]]></description>
+      <description><![CDATA[<p>Menu bar label counts down to the next event in Space Mono, stays highlighted for the first 15 minutes, and no longer goes blank after the day's last event</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.8/Fork-Calendar-0.16.8.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.10/Fork-Calendar-0.16.10.zip"
         type="application/octet-stream"
-        sparkle:edSignature="H64WKpOIszwryvwNEmxA3HkrGaMYwvoahrZeOqOBal3iuw1e4q+fbV2f3MRlCiCRjwGa0aFVQ/VQxYl0QPLHBA==" length="2804361"/>
+        sparkle:edSignature="ud80WpUW10ud8FjkBPdFPKwpwCSBoCG6rvtKPEFggiAGyd7ve+gpwDkHE4n8HVHLseUSdEWvN/3jxu41dsFPCg==" length="2807745"/>
     </item>
   </channel>
 </rss>
