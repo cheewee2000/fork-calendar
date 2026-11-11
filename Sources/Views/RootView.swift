@@ -211,7 +211,9 @@ struct CalendarDetailView: View {
                     let sheetTravel = max(geo.size.height - appState.stripBottomY, 0)
                     ZStack {
                         if family == .year {
-                            YearView()
+                            YearView(initialWeek: appState.calendar.date(from: DateComponents(
+                                year: appState.calendar.component(.year, from: appState.currentDate), month: 1, day: 1))
+                                .map { appState.calendar.startOfWeek(for: $0) })
                                 .background(CWT.paper)
                                 .transition(zoomTransition)
                                 .id(ZoomFamily.year)
