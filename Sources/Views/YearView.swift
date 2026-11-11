@@ -155,7 +155,7 @@ private struct YearDayCell: View {
         }
         .padding(.leading, 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(inYear && evenMonth ? CWT.paper3.opacity(0.55) : Color.clear)
+        .background(inYear && evenMonth ? CWT.monthBand : Color.clear)
         .overlay(alignment: .top) {
             Rectangle().fill(CWT.ruleSoft).frame(height: 0.5)
         }

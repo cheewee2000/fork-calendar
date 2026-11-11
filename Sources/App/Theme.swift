@@ -41,6 +41,9 @@ enum CWT {
     static let paper2 = adaptive("F6F5F2", "22211E")
     /// A touch darker — section divides, weekend shading.
     static let paper3 = adaptive("ECECEA", "2A2925")
+    /// Every other month in month/year views — strong enough against paper
+    /// that month boundaries read at a glance.
+    static let monthBand = adaptive("E6E3DA", "33322C")
 
     /// Status accents — used sparingly (now-line, destructive, availability).
     static let signalRed = Color(hex: "D11D1D")!

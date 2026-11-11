@@ -400,8 +400,10 @@ struct MonthCell: View {
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
-            (evenMonth ? CWT.paper2 : Color.clear)
-                .overlay(isWeekend ? CWT.paper3.opacity(0.55) : Color.clear)
+            (evenMonth ? CWT.monthBand : Color.clear)
+                // Ink tint, not a paper tone: stays visible on both the
+                // plain and the banded month.
+                .overlay(isWeekend ? CWT.ink.opacity(0.04) : Color.clear)
                 .overlay(isInDraftRange ? Color.accentColor.opacity(0.14) : Color.clear)
         )
         .overlay(alignment: .top) {
