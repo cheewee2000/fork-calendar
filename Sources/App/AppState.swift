@@ -435,7 +435,7 @@ final class AppState {
 
     init() {
         let stored = UserDefaults.standard.double(forKey: "hourHeight")
-        hourHeight = stored >= 28 && stored <= 160 ? CGFloat(stored) : 56
+        hourHeight = stored >= 8 && stored <= 160 ? CGFloat(stored) : 56
         #if os(macOS)
         // Automation hook: lets scripted tests drive view-mode changes
         // (`ForkCalDebugKey` distributed notification with a key string) so

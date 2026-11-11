@@ -180,7 +180,8 @@ struct TimeGridView: View {
         }
     }
 
-    /// Pinch to zoom the hour scale (28–160 pt/hour), anchored at the pinch
+    /// Pinch to zoom the hour scale (up to 160 pt/hour; zoomed all the way
+    /// out, the 24 hours exactly fill the viewport), anchored at the pinch
     /// location so the hours under the fingers stay in view.
     private var zoomGesture: some Gesture {
         MagnifyGesture()
@@ -192,7 +193,9 @@ struct TimeGridView: View {
                     zoomAnchorY = value.startAnchor.y * viewportH
                     zoomAnchorHours = (appState.gridScrollY + zoomAnchorY) / appState.hourHeight
                 }
-                let newHeight = min(160, max(28, (zoomBase ?? 56) * value.magnification))
+                // 20 = the hour stack's bottom padding inside the scroll view.
+                let fit = appState.gridViewportH > 100 ? (appState.gridViewportH - 20) / 24 : 28
+                let newHeight = min(160, max(fit, (zoomBase ?? 56) * value.magnification))
                 appState.hourHeight = newHeight
                 if let hours = zoomAnchorHours {
                     gridScroll.scrollTo(y: max(0, hours * newHeight - zoomAnchorY))
