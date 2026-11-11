@@ -59,12 +59,25 @@ struct MonthView: View {
             .padding(.vertical, 4)
             Divider()
             GeometryReader { geo in
-                let cellW = (geo.size.width - gutter) / 7
+                let cellW = (geo.size.width - gutter).snapped / 7
+                // Only rows in or next to the viewport are real. The lazy
+                // stack also pre-builds rows far outside it (the list's first
+                // two, and at times a full screen above and below — 44 rows
+                // instead of 16 in the commit that opens this view); those
+                // stay empty until the scroll position reaches them.
+                let liveFrom = topWeek.flatMap { cal.date(byAdding: .day, value: -7, to: $0) }
+                let liveTo = topWeek.flatMap {
+                    cal.date(byAdding: .day, value: 7 * (Int(ceil(geo.size.height / rowHeight)) + 2), to: $0)
+                }
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(allWeeks, id: \.self) { weekStart in
-                            MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
-                                .frame(height: rowHeight)
+                            if let liveFrom, let liveTo, weekStart < liveFrom || weekStart >= liveTo {
+                                Color.clear.frame(height: rowHeight)
+                            } else {
+                                MonthWeekRow(weekStart: weekStart, cellW: cellW, rowH: rowHeight)
+                                    .frame(height: rowHeight)
+                            }
                         }
                     }
                     .scrollTargetLayout()

@@ -56,6 +56,14 @@ enum CWT {
     static func mono(_ size: CGFloat) -> Font { .custom("SpaceMono-Regular", fixedSize: size) }
 }
 
+extension CGFloat {
+    /// Snapped to the half-point grid. Sizes read from GeometryReader flicker
+    /// in their last floating-point digit between layout passes (1600 vs
+    /// 1600.0000000000002); a column width derived from one then "changes"
+    /// on every pass and re-renders every cell that takes it as input.
+    var snapped: CGFloat { (self * 2).rounded() / 2 }
+}
+
 extension View {
     /// iOS paints `.borderedProminent` labels white regardless of tint, which is
     /// invisible on our paper-white dark-mode tint. Pair with every prominent button.

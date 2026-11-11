@@ -21,7 +21,7 @@ struct TimeGridView: View {
 
     var body: some View {
         GeometryReader { outer in
-            let pageWidth = max(outer.size.width - gutterWidth, 1)
+            let pageWidth = max((outer.size.width - gutterWidth).snapped, 1)
             let colWidth = pageWidth / CGFloat(max(days.count, 1))
             let extDays = appState.visibleDays(pageOffset: -1, current: days) + days + appState.visibleDays(pageOffset: 1, current: days)
             let allStripBars = SpanLayout.bars(days: extDays, store: store, calendar: appState.calendar, stableLanes: true)

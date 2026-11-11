@@ -107,19 +107,40 @@ private struct YearWeekRow: View {
                 .foregroundStyle(CWT.inkSoft)
                 .frame(width: gutter, alignment: .leading)
                 .padding(.leading, 6)
-            ZStack(alignment: .topLeading) {
-                HStack(spacing: 0) {
-                    ForEach(days, id: \.self) { day in
-                        YearDayCell(day: day, rowH: rowH)
+            // The seven day cells are ONE canvas (month band, hairlines, day
+            // number, today box) and one tap target, not seven view trees:
+            // a year is ~370 cells, and building ~18 views for each was most
+            // of the cost of switching to this view.
+            GeometryReader { geo in
+                let cellW = geo.size.width / 7
+                let barH: CGFloat = rowH >= 26 ? 9 : 4
+                let laneCap = rowH >= 38 ? 2 : 1
+                let bars = SpanLayout.bars(days: days, store: store, calendar: cal)
+                    .filter { $0.lane < laneCap }
+                ZStack(alignment: .topLeading) {
+                    Canvas { ctx, size in
+                        let today = Date()
+                        for (i, day) in days.enumerated() {
+                            let x = CGFloat(i) * cellW
+                            if cal.component(.month, from: day) % 2 == 0 {
+                                ctx.fill(Path(CGRect(x: x, y: 0, width: cellW, height: size.height)),
+                                         with: .color(CWT.monthBand))
+                            }
+                            let isToday = day.isSameDay(as: today, calendar: cal)
+                            let box = CGRect(x: x + 3, y: (size.height - 13) / 2, width: 16, height: 13)
+                            if isToday { ctx.fill(Path(box), with: .color(CWT.signalRed)) }
+                            ctx.draw(
+                                Text(Fmt.dayNum.string(from: day))
+                                    .font(CWT.mono(9))
+                                    .foregroundStyle(isToday ? Color.white : Color.primary),
+                                at: CGPoint(x: box.midX, y: box.midY))
+                            ctx.fill(Path(CGRect(x: x, y: 0, width: 0.5, height: size.height)),
+                                     with: .color(CWT.ruleSoft))
+                        }
+                        ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: 0.5)),
+                                 with: .color(CWT.ruleSoft))
                     }
-                }
-                // All-day/multi-day events as compact bars along the row bottom
-                GeometryReader { geo in
-                    let cellW = geo.size.width / 7
-                    let barH: CGFloat = rowH >= 26 ? 9 : 4
-                    let laneCap = rowH >= 38 ? 2 : 1
-                    let bars = SpanLayout.bars(days: days, store: store, calendar: cal)
-                        .filter { $0.lane < laneCap }
+                    // All-day/multi-day events as compact bars along the row bottom
                     ForEach(bars) { bar in
                         YearSpanChip(event: bar.event, showTitle: barH >= 8)
                             .frame(width: CGFloat(bar.endIndex - bar.startIndex + 1) * cellW - 3, height: barH)
@@ -129,6 +150,13 @@ private struct YearWeekRow: View {
                             )
                     }
                 }
+                .contentShape(Rectangle())
+                .gesture(SpatialTapGesture().onEnded { tap in
+                    let i = min(max(Int(tap.location.x / max(cellW, 1)), 0), days.count - 1)
+                    guard days.indices.contains(i) else { return }
+                    appState.goTo(days[i])
+                    appState.setViewMode(.day)
+                })
             }
         }
         .frame(height: rowH)
@@ -176,41 +204,5 @@ private struct YearSpanChip: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { appState.select(event) }
-    }
-}
-
-private struct YearDayCell: View {
-    @EnvironmentObject var store: CalendarStore
-    @Environment(AppState.self) var appState
-    let day: Date
-    let rowH: CGFloat
-
-    var body: some View {
-        let cal = appState.calendar
-        let isToday = day.isSameDay(as: Date(), calendar: cal)
-        let evenMonth = cal.component(.month, from: day) % 2 == 0
-
-        HStack(spacing: 3) {
-            Text(Fmt.dayNum.string(from: day))
-                .font(CWT.mono(9))
-                .frame(width: 16, height: 13)
-                .background { if isToday { Rectangle().fill(CWT.signalRed) } }
-                .foregroundStyle(isToday ? Color.white : Color.primary)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 3)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(evenMonth ? CWT.monthBand : Color.clear)
-        .overlay(alignment: .top) {
-            Rectangle().fill(CWT.ruleSoft).frame(height: 0.5)
-        }
-        .overlay(alignment: .leading) {
-            Rectangle().fill(CWT.ruleSoft).frame(width: 0.5)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            appState.goTo(day)
-            appState.setViewMode(.day)
-        }
     }
 }

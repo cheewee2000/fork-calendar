@@ -133,9 +133,6 @@ final class AppState {
     /// the header strip and month rows are live the whole time — nothing is
     /// destroyed until the fold finishes.
     var gridMonthOverlap = false
-    /// Columns the overlapping grid shows once viewMode is already .month
-    /// (visibleDays is empty then).
-    @ObservationIgnored var gridOverlapDays: [Date] = []
     @ObservationIgnored private var overlapGeneration = 0
     /// False while a zoom/column animation runs: the grid's offscreen
     /// neighbor pages render as empty space so mount commits and per-frame
@@ -209,7 +206,7 @@ final class AppState {
                 // own .animation(value: monthCover) drives the motion.)
                 let gen = overlapGeneration
                 monthCover = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration + 0.02)) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
@@ -288,7 +285,7 @@ final class AppState {
                     self.monthCover = true // sheet's .animation(value:) slides it
                     // Cleanup is anchored to the slide's start commit, not the
                     // keypress, so a slow mount can't cut the slide short.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration + 0.02)) {
                         guard self.overlapGeneration == gen else { return }
                         var t = Transaction()
                         t.disablesAnimations = true
@@ -315,7 +312,7 @@ final class AppState {
                 // before the columns had visibly slid.
                 DispatchQueue.main.async {
                     guard self.overlapGeneration == gen else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.28)) { cover() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration)) { cover() }
                 }
             }
             return
@@ -340,7 +337,7 @@ final class AppState {
                 guard self.overlapGeneration == gen else { return }
                 self.monthCover = false // sheet's .animation(value:) slides it
                 // Anchored to the slide's start commit (see cover-up path).
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(0.3)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration + 0.02)) {
                     guard self.overlapGeneration == gen else { return }
                     self.gridMonthOverlap = false
                 }
@@ -362,11 +359,13 @@ final class AppState {
     }
 
     // Linear, no easing: constant speed from frame one to a hard stop.
-    static var zoomAnimation: Animation { .linear(duration: slowZoom ? 2.0 : 0.28) }
+    static var zoomAnimation: Animation { .linear(duration: slowZoom ? 2.0 : zoomDuration) }
+    /// One zoom/slide phase. Phase handoffs are timed off this same number.
+    static let zoomDuration = 0.22
     /// Debug: 8x slow motion for scripted transition recordings ("!" hook key).
     static var slowZoom = false
     /// Phase-handoff delays scale with slow motion so sequencing stays honest.
-    static func phaseDelay(_ d: Double) -> Double { slowZoom ? d * 2.0 / 0.28 : d }
+    static func phaseDelay(_ d: Double) -> Double { slowZoom ? d * 2.0 / zoomDuration : d }
 
     private func makeZoomSpec(from: ZoomFamily, to: ZoomFamily) -> ZoomSpec {
         let zoomingIn = to.rawValue > from.rawValue

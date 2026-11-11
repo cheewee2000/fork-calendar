@@ -206,9 +206,13 @@ struct CalendarDetailView: View {
                 // unmounts after the fold. .transition sits INSIDE the .id
                 // identity boundary — outside it, the id swap replaces the
                 // subtree without ever consulting the transition.
-                let family = appState.viewMode.zoomFamily
                 GeometryReader { geo in
-                    let sheetTravel = max(geo.size.height - appState.stripBottomY, 0)
+                    // Read INSIDE this closure, next to gridMonthOverlap: read
+                    // in the outer body, a transaction changing both let this
+                    // closure re-run with the new overlap and a stale family —
+                    // removing the MonthView, then rebuilding it from scratch.
+                    let family = appState.viewMode.zoomFamily
+                    let sheetTravel = max(geo.size.height - appState.stripBottomY, 0).snapped
                     ZStack {
                         if family == .year {
                             YearView(initialWeek: appState.calendar.date(from: DateComponents(
@@ -246,8 +250,8 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.month)
                                 .zIndex(3)
                         }
-                        if family == .grid || (appState.gridMonthOverlap && family == .month) {
-                            TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridOverlapDays)
+                        if family == .grid {
+                            TimeGridView(days: appState.visibleDays)
                                 .transition(zoomTransition)
                                 .id(ZoomFamily.grid)
                                 .zIndex(2)
