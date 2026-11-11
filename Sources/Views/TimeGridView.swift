@@ -14,9 +14,6 @@ struct TimeGridView: View {
 
     private var gutterWidth: CGFloat { settings.gridGutterWidth }
     private var hourHeight: CGFloat { appState.hourHeight }
-    @State private var zoomBase: CGFloat?
-    @State private var zoomAnchorHours: CGFloat?
-    @State private var zoomAnchorY: CGFloat = 0
     @State private var gridScroll = ScrollPosition(edge: .top)
 
     var body: some View {
@@ -145,23 +142,19 @@ struct TimeGridView: View {
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
                     CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
-                }) { old, new in
+                }) { _, new in
                     appState.gridScrollY = new.origin.x
                     appState.gridViewportH = new.origin.y
-                    // Viewport resized (window, or the all-day strip grew):
-                    // a fully zoomed-out grid keeps filling it, and no zoom
-                    // may leave a gap below 11 PM.
-                    if old.origin.y != new.origin.y, new.origin.y > 100, !appState.isZooming {
-                        let wasFit = (old.origin.y - 20) / 24, fit = (new.origin.y - 20) / 24
-                        if appState.hourHeight <= wasFit + 0.5 || appState.hourHeight < fit {
-                            appState.hourHeight = min(160, fit)
-                        }
+                    // No zoom, no vertical scroll: the 24 hours always
+                    // exactly fill the viewport (20 = the hour stack's
+                    // bottom padding), whatever the window or the all-day
+                    // strip does to its height.
+                    let fit = (new.origin.y - 20) / 24
+                    if new.origin.y > 100, abs(appState.hourHeight - fit) > 0.01 {
+                        appState.hourHeight = fit
                     }
                 }
-                .simultaneousGesture(zoomGesture)
-                .onAppear {
-                    gridScroll.scrollTo(y: appState.hourHeight * 8)
-                }
+                .scrollDisabled(true)
             }
             // Column-geometry animation is scoped to zoomTick, not driven by
             // withAnimation transactions: a store publish coalescing into the
@@ -187,34 +180,6 @@ struct TimeGridView: View {
                 withTransaction(t) { appState.pan.offset = 0 }
             }
         }
-    }
-
-    /// Pinch to zoom the hour scale (up to 160 pt/hour; zoomed all the way
-    /// out, the 24 hours exactly fill the viewport), anchored at the pinch
-    /// location so the hours under the fingers stay in view.
-    private var zoomGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                appState.isZooming = true
-                if zoomBase == nil {
-                    zoomBase = appState.hourHeight
-                    let viewportH = appState.gridViewportH > 0 ? appState.gridViewportH : 400
-                    zoomAnchorY = value.startAnchor.y * viewportH
-                    zoomAnchorHours = (appState.gridScrollY + zoomAnchorY) / appState.hourHeight
-                }
-                // 20 = the hour stack's bottom padding inside the scroll view.
-                let fit = appState.gridViewportH > 100 ? (appState.gridViewportH - 20) / 24 : 28
-                let newHeight = min(160, max(fit, (zoomBase ?? 56) * value.magnification))
-                appState.hourHeight = newHeight
-                if let hours = zoomAnchorHours {
-                    gridScroll.scrollTo(y: max(0, hours * newHeight - zoomAnchorY))
-                }
-            }
-            .onEnded { _ in
-                zoomBase = nil
-                zoomAnchorHours = nil
-                appState.isZooming = false
-            }
     }
 
     private func weekdaySymbol(_ day: Date) -> String {
