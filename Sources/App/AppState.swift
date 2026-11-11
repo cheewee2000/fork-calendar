@@ -111,7 +111,9 @@ final class PanModel: ObservableObject {
 @MainActor
 @Observable
 final class AppState {
-    var currentDate = Date()
+    var currentDate = Date() {
+        didSet { scheduleParkedMonthSync() }
+    }
     var viewMode: ViewMode = ViewMode(saveKey: UserDefaults.standard.string(forKey: "lastViewMode")) ?? .week {
         didSet {
             if viewMode != oldValue { gridAnchor = nil }
@@ -134,6 +136,32 @@ final class AppState {
     /// destroyed until the fold finishes.
     var gridMonthOverlap = false
     @ObservationIgnored private var overlapGeneration = 0
+    /// Keep-alive across week↔month. Building either view from scratch is
+    /// what a W/M keypress used to wait on (100–250ms before anything moved),
+    /// so once both have been shown they stay mounted through the toggle:
+    /// in grid modes the MonthView sits parked below the viewport (clipped,
+    /// exactly the pre-slide state), and in month mode the grid stays under
+    /// the opaque month, frozen on the days it had (`gridParkedDays`).
+    /// Cost: a store change re-renders both. Year mode drops both.
+    var monthParked = false
+    var gridParked = false
+    var gridParkedDays: [Date] = []
+    @ObservationIgnored private var parkSyncGeneration = 0
+
+    /// Navigating in a grid mode moves the parked month to the viewed week —
+    /// shortly after the navigation, not in its commit — so a later M finds
+    /// the rows already built. (M itself still syncs if this hasn't run.)
+    private func scheduleParkedMonthSync() {
+        guard monthParked else { return }
+        parkSyncGeneration += 1
+        let gen = parkSyncGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            guard self.parkSyncGeneration == gen, self.monthParked, !self.gridMonthOverlap,
+                  self.viewMode.zoomFamily == .grid else { return }
+            self.monthScrollTarget = self.currentDate
+        }
+    }
+
     /// False while a zoom/column animation runs: the grid's offscreen
     /// neighbor pages render as empty space so mount commits and per-frame
     /// layout only pay for the visible page.
@@ -276,11 +304,11 @@ final class AppState {
             let gen = overlapGeneration
             let cover: () -> Void = {
                 guard self.overlapGeneration == gen else { return }
+                let alreadyMounted = self.monthParked
                 self.monthCover = false
                 self.gridMonthOverlap = true
-                // The sheet mounts in this commit; animating it must wait
-                // one runloop turn or it renders directly at the end state.
-                DispatchQueue.main.async {
+                self.monthParked = true
+                let slide = {
                     guard self.overlapGeneration == gen else { return }
                     self.monthCover = true // sheet's .animation(value:) slides it
                     // Cleanup is anchored to the slide's start commit, not the
@@ -290,11 +318,22 @@ final class AppState {
                         var t = Transaction()
                         t.disablesAnimations = true
                         withTransaction(t) {
+                            // The grid stays mounted under the month, frozen
+                            // on these days. Parked BEFORE the mode flips so
+                            // no evaluation sees month-without-grid and tears
+                            // it down.
+                            self.gridParkedDays = self.visibleDays
+                            self.gridParked = true
                             self.viewMode = mode
                             self.gridMonthOverlap = false
+                            self.monthScrollTarget = nil
                         }
                     }
                 }
+                // A MonthView mounting in this commit must render once at its
+                // start position before it can animate; a parked one already
+                // has, so it slides in the keypress's own commit.
+                if alreadyMounted { slide() } else { DispatchQueue.main.async(execute: slide) }
             }
             if aligned {
                 cover()
@@ -319,11 +358,13 @@ final class AppState {
         }
         if fromF == .month, toF == .grid {
             zoomSpec = ZoomSpec(direction: 0, anchorY: 0, scale: 1, kind: .gridMonth)
-            // The grid mounts fresh in this commit — neighbors parked so the
-            // commit stays light enough to not stall the slide's first frames.
-            hideGridNeighbors(restoreAfter: 0.5)
-            monthCover = true // sheet starts up, covering; slides down to reveal
+            // A grid mounting fresh in this commit parks its neighbor pages
+            // so the commit stays light enough to not stall the slide's first
+            // frames; one kept alive under the month is already whole.
+            if !gridParked { hideGridNeighbors(restoreAfter: 0.5) }
+            monthCover = true // starts up, covering; slides down to reveal
             gridMonthOverlap = true
+            monthParked = true // the month stays mounted, parked, after the slide
             var t = Transaction()
             t.disablesAnimations = true
             withTransaction(t) {
@@ -345,6 +386,15 @@ final class AppState {
             return
         }
         if toF == .grid { hideGridNeighbors(restoreAfter: 0.6) }
+        // Year mode keeps nothing alive. Cleared once the zoom is over: the
+        // parked view leaves with its visible sibling's transition instead of
+        // being torn down in the commit that starts the motion. (Entering
+        // from year, the flags are already clear.)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration + 0.1)) {
+            guard self.viewMode.zoomFamily == .year else { return }
+            self.monthParked = false
+            self.gridParked = false
+        }
         let spec = makeZoomSpec(from: fromF, to: toF)
         if spec != zoomSpec {
             // Publish the spec first, then swap modes on the next runloop
@@ -614,7 +664,6 @@ final class AppState {
             let cal = calendar
             gridAnchor = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: today))
             currentDate = today
-            monthScrollTarget = today
         default:
             goTo(today)
         }
@@ -624,7 +673,9 @@ final class AppState {
         cancelPan()
         gridAnchor = nil
         currentDate = date
-        monthScrollTarget = date
+        // In grid modes a parked month follows via scheduleParkedMonthSync;
+        // scrolling it in this commit would stall the navigation itself.
+        if viewMode == .month { monthScrollTarget = date }
     }
 
     /// Abort any in-flight side-scroll (gesture or momentum) before navigating.

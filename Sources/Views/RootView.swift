@@ -223,7 +223,10 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.year)
                                 .zIndex(0)
                         }
-                        if family == .month || appState.gridMonthOverlap {
+                        // Under the grid: mid-slide, or parked below the
+                        // viewport between visits (AppState.monthParked).
+                        let monthUnder = appState.gridMonthOverlap || (family == .grid && appState.monthParked)
+                        if family == .month || monthUnder {
                             // Grid↔month zoom: the real MonthView is itself
                             // the sliding layer (it used to be a throwaway
                             // sheet of rows, with the MonthView mounted again
@@ -234,14 +237,14 @@ struct CalendarDetailView: View {
                             // slides up over the hour grid (or down off it).
                             // Settling is just dropping the clip — the rows
                             // under it are pixel-identical to the strip.
-                            let clipTop = appState.gridMonthOverlap ? appState.stripBottomY : 0
+                            let clipTop = monthUnder ? appState.stripBottomY : 0
                             MonthView(initialWeek: appState.calendar.startOfWeek(
                                 for: appState.monthScrollTarget ?? appState.currentDate))
                                 .background(CWT.paper)
                                 .padding(.top, -clipTop)
                                 .clipped()
                                 .padding(.top, clipTop)
-                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
+                                .offset(y: monthUnder && !appState.monthCover ? sheetTravel : 0)
                                 // Scoped to monthCover so the slide always
                                 // animates (and nothing else rides along) no
                                 // matter what shares the update cycle.
@@ -250,8 +253,8 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.month)
                                 .zIndex(3)
                         }
-                        if family == .grid {
-                            TimeGridView(days: appState.visibleDays)
+                        if family == .grid || (family == .month && appState.gridParked) {
+                            TimeGridView(days: family == .grid ? appState.visibleDays : appState.gridParkedDays)
                                 .transition(zoomTransition)
                                 .id(ZoomFamily.grid)
                                 .zIndex(2)
