@@ -145,9 +145,18 @@ struct TimeGridView: View {
                 .scrollPosition($gridScroll)
                 .onScrollGeometryChange(for: CGRect.self, of: {
                     CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
-                }) { _, new in
+                }) { old, new in
                     appState.gridScrollY = new.origin.x
                     appState.gridViewportH = new.origin.y
+                    // Viewport resized (window, or the all-day strip grew):
+                    // a fully zoomed-out grid keeps filling it, and no zoom
+                    // may leave a gap below 11 PM.
+                    if old.origin.y != new.origin.y, new.origin.y > 100, !appState.isZooming {
+                        let wasFit = (old.origin.y - 20) / 24, fit = (new.origin.y - 20) / 24
+                        if appState.hourHeight <= wasFit + 0.5 || appState.hourHeight < fit {
+                            appState.hourHeight = min(160, fit)
+                        }
+                    }
                 }
                 .simultaneousGesture(zoomGesture)
                 .onAppear {

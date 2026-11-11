@@ -514,6 +514,13 @@ final class AppState {
                 default:
                     // "type:<text>" fills the palette query (opening it first)
                     // so search results can be verified without a keyboard.
+                    // "h:<points>" grows/shrinks the main window's height.
+                    if key.hasPrefix("h:"), let d = Double(key.dropFirst(2)),
+                       let w = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 }) {
+                        var f = w.frame
+                        f.size.height += d
+                        w.setFrame(f, display: true)
+                    }
                     if key.hasPrefix("type:") {
                         self.paletteOpen = true
                         // After the palette's open-reset (delivered on the
