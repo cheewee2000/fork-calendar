@@ -134,9 +134,13 @@ private struct YearWeekRow: View {
         .frame(height: rowH)
         .onAppear {
             // Rows of the neighboring years scroll in before currentDate
-            // (and RootView's year fetch) follows.
-            if let end = cal.date(byAdding: .day, value: 7, to: weekStart) {
-                store.ensureFetched(DateInterval(start: weekStart, end: end))
+            // (and RootView's year fetch) follows. Ask for the row's whole
+            // year at once: per-week requests grew the fetch window a month
+            // at a time — a store reload + cache save every few rows scrolled.
+            if let end = cal.date(byAdding: .day, value: 7, to: weekStart),
+               let from = cal.dateInterval(of: .year, for: weekStart)?.start,
+               let to = cal.dateInterval(of: .year, for: end)?.end {
+                store.ensureFetched(DateInterval(start: from, end: to))
             }
         }
     }
