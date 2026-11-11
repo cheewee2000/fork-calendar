@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.10</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.10</link>
-      <sparkle:version>113</sparkle:version>
-      <sparkle:shortVersionString>0.16.10</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.18</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.18</link>
+      <sparkle:version>121</sparkle:version>
+      <sparkle:shortVersionString>0.16.18</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Menu bar label counts down to the next event in Space Mono, stays highlighted for the first 15 minutes, and no longer goes blank after the day's last event</p>]]></description>
+      <description><![CDATA[<p>v0.16.18 — arrow keys: ← → slide the day/week grid one page (0.22s, the neighbor page is already mounted; the dates shift under it in a pixel-identical non-animated commit, and a press mid-slide lands the previous one first); ↑ ↓ scroll month view by a week row and year view by four rows; debug hook gains left/right/up/down</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.10/Fork-Calendar-0.16.10.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.18/Fork-Calendar-0.16.18.zip"
         type="application/octet-stream"
-        sparkle:edSignature="ud80WpUW10ud8FjkBPdFPKwpwCSBoCG6rvtKPEFggiAGyd7ve+gpwDkHE4n8HVHLseUSdEWvN/3jxu41dsFPCg==" length="2807745"/>
+        sparkle:edSignature="0QrX5ANnoLLf2Pclpvov8a0/mce4BZbAVBrWGYQrxYVIA5T+/EL7gKwlwSCpGDAesPGAjzUN7giByhUHAFgUAg==" length="2837858"/>
     </item>
   </channel>
 </rss>
