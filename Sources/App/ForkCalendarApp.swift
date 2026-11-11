@@ -6,7 +6,7 @@ import UIKit
 @main
 struct ForkCalendarApp: App {
     @StateObject private var store = CalendarStore()
-    @StateObject private var appState = AppState()
+    @State private var appState = AppState()
     @StateObject private var settings = AppSettings.shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -26,7 +26,7 @@ struct ForkCalendarApp: App {
         WindowGroup("Fork Calendar", id: "main") {
             RootView()
                 .environmentObject(store)
-                .environmentObject(appState)
+                .environment(appState)
                 .environmentObject(settings)
                 .font(CWT.mono(12))
                 .tint(CWT.ink)
@@ -91,7 +91,7 @@ struct ForkCalendarApp: App {
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(store)
-                .environmentObject(appState)
+                .environment(appState)
         } label: {
             MenuBarLabel(store: store)
         }

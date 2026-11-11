@@ -5,7 +5,7 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -20,6 +20,7 @@ struct RootView: View {
     }
 
     var body: some View {
+        @Bindable var appState = appState
         Group {
             if isCompact {
                 // iPhone: the grid directly; calendar list lives in a sheet
@@ -182,7 +183,7 @@ struct RootView: View {
 
 struct CalendarDetailView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -216,32 +217,31 @@ struct CalendarDetailView: View {
                                 .id(ZoomFamily.year)
                                 .zIndex(0)
                         }
-                        if family == .month {
-                            // viewMode flips to .month only at overlap cleanup,
-                            // after the sheet settles: this mounts as a static,
-                            // pixel-identical swap — never during motion.
+                        if family == .month || appState.gridMonthOverlap {
+                            // Grid↔month zoom: the real MonthView is itself
+                            // the sliding layer (it used to be a throwaway
+                            // sheet of rows, with the MonthView mounted again
+                            // at cleanup — building every month row twice).
+                            // While overlapping, its header + top week are
+                            // clipped away so the grid's pinned strip is the
+                            // only copy of the current week, and the rest
+                            // slides up over the hour grid (or down off it).
+                            // Settling is just dropping the clip — the rows
+                            // under it are pixel-identical to the strip.
+                            let clipTop = appState.gridMonthOverlap ? appState.stripBottomY : 0
                             MonthView(initialWeek: appState.calendar.startOfWeek(
                                 for: appState.monthScrollTarget ?? appState.currentDate))
                                 .background(CWT.paper)
-                                .transition(zoomTransition)
-                                .id(ZoomFamily.month)
-                                .zIndex(1)
-                        }
-                        if appState.gridMonthOverlap {
-                            // Grid↔month zoom: the sheet of upcoming weeks
-                            // slides up over the static hour grid (or down off
-                            // it) beneath the pinned strip. The current week
-                            // isn't in the sheet, so it cannot move. When the
-                            // slide settles, the real MonthView (or the grid
-                            // alone) takes over pixel for pixel.
-                            MonthSheet()
-                                .padding(.top, appState.stripBottomY)
-                                .offset(y: appState.monthCover ? 0 : sheetTravel)
+                                .padding(.top, -clipTop)
+                                .clipped()
+                                .padding(.top, clipTop)
+                                .offset(y: appState.gridMonthOverlap && !appState.monthCover ? sheetTravel : 0)
                                 // Scoped to monthCover so the slide always
                                 // animates (and nothing else rides along) no
                                 // matter what shares the update cycle.
                                 .animation(AppState.zoomAnimation, value: appState.monthCover)
-                                .transition(.identity)
+                                .transition(zoomTransition)
+                                .id(ZoomFamily.month)
                                 .zIndex(3)
                         }
                         if family == .grid || (appState.gridMonthOverlap && family == .month) {
@@ -313,7 +313,7 @@ private struct RowBandZoom: ViewModifier {
 
 struct HeaderBar: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #else
@@ -458,7 +458,7 @@ struct AnyButtonStyle: PrimitiveButtonStyle {
 }
 
 struct AvailabilityBar: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
 
     var body: some View {
         HStack(spacing: 12) {
@@ -491,7 +491,7 @@ struct AvailabilityBar: View {
 }
 
 struct AccessDeniedView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @ObservedObject private var accounts = AccountManager.shared
     @EnvironmentObject var settings: AppSettings
 

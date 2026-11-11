@@ -85,7 +85,7 @@ enum SpanLayout {
 }
 
 struct SpanBarView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var store: CalendarStore
     let event: CalEvent
     var duplicates: [CalEvent] = []

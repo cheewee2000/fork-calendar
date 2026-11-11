@@ -8,7 +8,7 @@ import AppKit
 /// the neighboring weeks before snapping.
 struct TimeGridView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
     let days: [Date]
 
@@ -104,7 +104,7 @@ struct TimeGridView: View {
                 }
                 .frame(height: monthRowHeight)
                 .background(CWT.paper)
-                // The month sheet masks itself above this line while sliding
+                // The month view clips itself above this line while sliding
                 // over the hour grid, keeping this strip the only copy visible.
                 .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("calBody")).maxY }) { _, y in
                     appState.stripBottomY = y
@@ -306,7 +306,7 @@ struct PagedStrip<Content: View>: View {
 
 struct DayColumn: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let day: Date
     let colWidth: CGFloat
     let hourHeight: CGFloat
@@ -492,7 +492,7 @@ struct NowLine: View {
 
 struct EventBlockView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @ObservedObject private var invoices = InvoiceLink.shared
     @Environment(\.openURL) private var openURL
     let item: PositionedEvent

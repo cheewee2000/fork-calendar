@@ -3,7 +3,7 @@ import SwiftUI
 /// Whole year as a stack of weeks — one row per week, 7 columns, event dots.
 struct YearView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
 
     private let gutter: CGFloat = 38
@@ -57,7 +57,7 @@ struct YearView: View {
 
 private struct YearWeekRow: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let weekStart: Date
     let year: Int
     let rowH: CGFloat
@@ -108,7 +108,7 @@ private struct YearWeekRow: View {
 }
 
 private struct YearSpanChip: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let event: CalEvent
     let showTitle: Bool
 
@@ -134,7 +134,7 @@ private struct YearSpanChip: View {
 
 private struct YearDayCell: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let day: Date
     let year: Int
     let rowH: CGFloat

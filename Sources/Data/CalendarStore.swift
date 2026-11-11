@@ -87,7 +87,13 @@ final class CalendarStore: ObservableObject {
 
     private var fetchedInterval: DateInterval?
     private var undoStack: [UndoAction] = []
-    private var dayIndexCache: [Date: [CalEvent]]?
+    private var dayIndexCache: [Date: [CalEvent]]? {
+        didSet { if dayIndexCache == nil { spanCache = nil } }
+    }
+    /// Filtered all-day/multi-day events, built once per store change: every
+    /// week row (53 in year view) asks for its spans in the same render, and
+    /// re-filtering the whole event list per row stalled view transitions.
+    private var spanCache: [CalEvent]?
     private var bag = Set<AnyCancellable>()
     private var timerTask: Task<Void, Never>?
 
@@ -409,12 +415,13 @@ final class CalendarStore: ObservableObject {
     }
 
     func spanningEvents(from: Date, to: Date) -> [CalEvent] {
-        events.filter { event in
+        let spans = spanCache ?? events.filter { event in
             guard passesFilters(event) else { return false }
             guard let start = event.startDate, let end = event.endDate else { return false }
-            guard event.isAllDay || end.timeIntervalSince(start) >= 86400 else { return false }
-            return start < to && end > from
+            return event.isAllDay || end.timeIntervalSince(start) >= 86400
         }
+        spanCache = spans
+        return spans.filter { $0.startDate < to && $0.endDate > from }
     }
 
     private func dayIndex() -> [Date: [CalEvent]] {

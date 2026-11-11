@@ -12,7 +12,7 @@ let monthSpanLaneCap = 5
 /// ±1–2 years). The header month updates as you scroll; navigation scrolls here.
 struct MonthView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
 
     private let rowHeight: CGFloat = monthRowHeight
@@ -98,7 +98,7 @@ struct MonthWeekRow: View {
     let weekStart: Date
     let cellW: CGFloat
     let rowH: CGFloat
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var store: CalendarStore
     @EnvironmentObject var settings: AppSettings
 
@@ -134,35 +134,6 @@ struct MonthWeekRow: View {
     }
 }
 
-/// The animated layer of a grid↔month zoom: only the weeks AFTER the current
-/// one, laid out exactly like the month view's rows. It slides up over the
-/// hour grid (or down off it) beneath the pinned week strip — the current
-/// week is not in this view at all, so it can never appear to move. When the
-/// slide settles, the real MonthView replaces grid+sheet pixel for pixel.
-struct MonthSheet: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var settings: AppSettings
-
-    var body: some View {
-        GeometryReader { geo in
-            let gutter = settings.gridGutterWidth
-            let cellW = (geo.size.width - gutter) / 7
-            let cal = appState.calendar
-            let start = cal.startOfWeek(for: appState.currentDate)
-            let count = max(Int(ceil(geo.size.height / monthRowHeight)) + 1, 1)
-            VStack(spacing: 0) {
-                ForEach(1...count, id: \.self) { i in
-                    if let week = cal.date(byAdding: .day, value: 7 * i, to: start) {
-                        MonthWeekRow(weekStart: week, cellW: cellW, rowH: monthRowHeight)
-                            .frame(height: monthRowHeight)
-                    }
-                }
-            }
-            .background(CWT.paper)
-        }
-    }
-}
-
 /// "+N" markers in the day-number line for all-day events dropped past the
 /// lane cap, so a crowded day never hides events silently.
 struct SpanOverflowMarkers: View {
@@ -191,7 +162,7 @@ struct SpanOverflowMarkers: View {
 /// containing the 1st (the same idea as the year view's gutter). Used by both
 /// the month view and the time grid's week strip.
 struct MonthRowGutter: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let weekStart: Date
     let width: CGFloat
 
@@ -213,7 +184,7 @@ struct MonthRowGutter: View {
 /// weeks), drag an edge to extend into a multi-day span.
 struct MonthSpanBar: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     let bar: SpanBar
     let cellW: CGFloat
     let rowH: CGFloat
@@ -364,7 +335,7 @@ struct MonthSpanBar: View {
 
 struct MonthCell: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
     let day: Date
     let cellW: CGFloat
@@ -516,7 +487,7 @@ struct MonthCell: View {
 }
 
 struct MonthChip: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var store: CalendarStore
     let event: CalEvent
     /// Identical copies on other calendars, merged into this chip.

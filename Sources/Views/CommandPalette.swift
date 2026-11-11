@@ -11,7 +11,7 @@ struct PaletteItem: Identifiable {
 }
 
 struct CommandPalette: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
 
     var body: some View {
         PaletteBody(model: appState.palette)
@@ -20,7 +20,7 @@ struct CommandPalette: View {
 
 private struct PaletteBody: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @ObservedObject var model: PaletteModel
     @FocusState private var focused: Bool
     @Environment(\.openURL) private var openURL
@@ -61,7 +61,7 @@ private struct PaletteBody: View {
                 },
                 // The palette stays mounted for the window's whole life;
                 // each open resets the query and takes keyboard focus here.
-                appState.$paletteOpen.removeDuplicates().receive(on: DispatchQueue.main).sink { open in
+                appState.paletteOpenChanges.removeDuplicates().receive(on: DispatchQueue.main).sink { open in
                     if open {
                         model.reset()
                         refresh()

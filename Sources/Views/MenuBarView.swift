@@ -65,7 +65,7 @@ struct MenuBarLabel: View {
 
 struct MenuBarView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openURL) private var openURL
     @ObservedObject private var clock = MinuteClock.shared

@@ -44,7 +44,7 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable {
 /// Notion-style right-hand event panel: details + inline editing.
 struct EventPanelView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL

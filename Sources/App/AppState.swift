@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 enum ViewMode: Hashable {
     case day
@@ -102,10 +103,16 @@ final class PanModel: ObservableObject {
     @Published var offset: CGFloat = 0
 }
 
+/// @Observable, not ObservableObject: views re-render only for the properties
+/// they read. As an ObservableObject every property change synchronously
+/// re-rendered every observing view (each day cell, event block, year cell),
+/// several times per view-mode switch — 0.5–1.2s main-thread stalls that ate
+/// the whole zoom animation. Plain bookkeeping vars are @ObservationIgnored.
 @MainActor
-final class AppState: ObservableObject {
-    @Published var currentDate = Date()
-    @Published var viewMode: ViewMode = ViewMode(saveKey: UserDefaults.standard.string(forKey: "lastViewMode")) ?? .week {
+@Observable
+final class AppState {
+    var currentDate = Date()
+    var viewMode: ViewMode = ViewMode(saveKey: UserDefaults.standard.string(forKey: "lastViewMode")) ?? .week {
         didSet {
             if viewMode != oldValue { gridAnchor = nil }
             UserDefaults.standard.set(viewMode.saveKey, forKey: "lastViewMode")
@@ -114,33 +121,33 @@ final class AppState: ObservableObject {
     /// Geometry of the last cross-family view change. Published so the
     /// outgoing view re-renders with the right transition before the swap
     /// (SwiftUI captures removal transitions one render early).
-    @Published var zoomSpec = ZoomSpec(direction: 0, anchorY: 0.5, scale: 1)
+    var zoomSpec = ZoomSpec(direction: 0, anchorY: 0.5, scale: 1)
     /// True when the month sheet is in place covering the hour grid; false
     /// when it's pushed down below it (week side). Animated during grid↔month.
-    @Published var monthCover = false
+    var monthCover = false
     /// Bottom edge (in calendar-body coordinates) of the shared week strip,
     /// measured by the grid. The month sheet is masked above this line while
     /// it slides, so the pinned strip is the only copy of the week visible.
-    var stripBottomY: CGFloat = 130
+    @ObservationIgnored var stripBottomY: CGFloat = 130
     /// True while a grid↔month zoom is in flight: both views stay mounted so
     /// the header strip and month rows are live the whole time — nothing is
     /// destroyed until the fold finishes.
-    @Published var gridMonthOverlap = false
+    var gridMonthOverlap = false
     /// Columns the overlapping grid shows once viewMode is already .month
     /// (visibleDays is empty then).
-    var gridOverlapDays: [Date] = []
-    private var overlapGeneration = 0
+    @ObservationIgnored var gridOverlapDays: [Date] = []
+    @ObservationIgnored private var overlapGeneration = 0
     /// False while a zoom/column animation runs: the grid's offscreen
     /// neighbor pages render as empty space so mount commits and per-frame
     /// layout only pay for the visible page.
-    @Published var gridNeighborsLive = true
-    private var neighborsGeneration = 0
+    var gridNeighborsLive = true
+    @ObservationIgnored private var neighborsGeneration = 0
     /// Bumped in the same commit as any column-geometry change that should
     /// animate. The grid scopes its animation to this value
     /// (`.animation(_:value:)`) instead of relying on withAnimation's
     /// transaction: a CalendarStore publish (event sync) landing in the same
     /// update cycle used to strip the transaction and snap the transition.
-    @Published var zoomTick = 0
+    var zoomTick = 0
 
     /// The day at the viewport's left edge as the user actually sees it:
     /// the anchor (or aligned first day) plus the fractional page held in
@@ -254,10 +261,11 @@ final class AppState: ObservableObject {
             // sheet slides up from below, covering the hours.
             //
             // Nothing heavy may land in a commit that starts visible motion:
-            // the keypress commit only starts the align; the sheet (8 light
-            // rows) mounts as the align settles; the real MonthView mounts at
-            // cleanup, AFTER motion ends — a static pixel-identical swap.
-            // viewMode stays .week until that cleanup.
+            // the keypress commit only starts the align; the MonthView mounts
+            // (clipped below the strip, parked under the viewport) as the
+            // align settles and slides one runloop later. Cleanup, AFTER
+            // motion ends, just drops the clip and the grid — viewMode stays
+            // .week until then. ("Sheet" below = that sliding MonthView.)
             // "Aligned" means VISUALLY aligned: a side-scroll parks the strip
             // at a fractional pan offset without touching gridAnchor, so the
             // anchor alone can't tell whether Sunday is at the left.
@@ -396,32 +404,32 @@ final class AppState: ObservableObject {
                         scale: max(total / max(band, 0.5), 1))
     }
     /// Set when navigation (not scrolling) moves the month view; the view scrolls there and clears it.
-    @Published var monthScrollTarget: Date?
+    var monthScrollTarget: Date?
     /// When set, the time grid starts at this day instead of the aligned week
     /// (free side-scrolling can rest on any day).
-    @Published var gridAnchor: Date?
+    var gridAnchor: Date?
     /// Live horizontal pan offset for the time grid (trackpad side-scroll).
     let pan = PanModel()
     /// Layout metrics reported by the time grid, used for pan re-anchoring.
-    var weekPageWidth: CGFloat = 0
-    var gridColumnWidth: CGFloat = 0
+    @ObservationIgnored var weekPageWidth: CGFloat = 0
+    @ObservationIgnored var gridColumnWidth: CGFloat = 0
     /// True while a side-scroll gesture (or its settling animation) is active.
-    var isPanning = false
+    @ObservationIgnored var isPanning = false
     /// Bumped by navigation (Today, go-to-date) so an in-flight pan gesture or
     /// its momentum stops re-anchoring the grid it just navigated away from.
-    var panSession = 0
+    @ObservationIgnored var panSession = 0
     /// True while a pinch-zoom gesture is active (suppresses pan capture).
-    var isZooming = false
+    @ObservationIgnored var isZooming = false
     /// Time-grid vertical scroll metrics (plain vars: written every scroll
     /// frame, must not invalidate views).
-    var gridScrollY: CGFloat = 0
-    var gridViewportH: CGFloat = 0
+    @ObservationIgnored var gridScrollY: CGFloat = 0
+    @ObservationIgnored var gridViewportH: CGFloat = 0
     /// Day range highlighted while drag-creating an all-day event in month view.
-    @Published var monthDragRange: ClosedRange<Date>?
+    var monthDragRange: ClosedRange<Date>?
     /// Transient status message.
-    @Published var toast: String?
+    var toast: String?
     /// Time-grid vertical zoom (points per hour), pinch-adjustable.
-    @Published var hourHeight: CGFloat {
+    var hourHeight: CGFloat {
         didSet { UserDefaults.standard.set(Double(hourHeight), forKey: "hourHeight") }
     }
 
@@ -465,28 +473,31 @@ final class AppState: ObservableObject {
         }
         #endif
     }
-    @Published var panelContext: EditorContext?
-    @Published var pendingSpanAction: PendingSpanAction?
-    @Published var showSpanDialog = false
+    var panelContext: EditorContext?
+    var pendingSpanAction: PendingSpanAction?
+    var showSpanDialog = false
     /// Sidebar shown/hidden survives relaunch, like the view mode.
-    @Published var columnVisibility: NavigationSplitViewVisibility =
+    var columnVisibility: NavigationSplitViewVisibility =
         UserDefaults.standard.bool(forKey: "sidebarHidden") ? .detailOnly : .all {
         didSet {
             UserDefaults.standard.set(columnVisibility == .detailOnly, forKey: "sidebarHidden")
         }
     }
     /// iPhone: presents the calendar list (sidebar equivalent) as a sheet.
-    @Published var showCalendarsSheet = false
+    var showCalendarsSheet = false
     /// iOS: settings/accounts sheet (macOS uses the Settings window).
-    @Published var showSettingsSheet = false
+    var showSettingsSheet = false
 
     // ⌘K palette
-    @Published var paletteOpen = false
+    var paletteOpen = false { didSet { paletteOpenChanges.send(paletteOpen) } }
+    /// Combine mirror of paletteOpen for the always-mounted palette's
+    /// one-time sink (what `$paletteOpen` was under @Published).
+    @ObservationIgnored let paletteOpenChanges = CurrentValueSubject<Bool, Never>(false)
     let palette = PaletteModel()
 
     // Availability sharing
-    @Published var availabilityMode = false
-    @Published var availabilitySlots: [AvailabilitySlot] = []
+    var availabilityMode = false
+    var availabilitySlots: [AvailabilitySlot] = []
 
     let settings = AppSettings.shared
 
@@ -681,10 +692,10 @@ final class AppState: ObservableObject {
     }
 
     /// ⌘C's event. In-app only; not the system pasteboard.
-    var clipboard: EventSnapshot?
+    @ObservationIgnored var clipboard: EventSnapshot?
     /// Where ⌘V lands: the grid slot (timed) or month day under the pointer.
     /// Plain var — hover updates it on every mouse move, no re-render wanted.
-    var pasteTarget: (date: Date, timed: Bool)?
+    @ObservationIgnored var pasteTarget: (date: Date, timed: Bool)?
 
     func copyEvent(_ event: CalEvent? = nil, store: CalendarStore) {
         guard let event = event ?? panelContext.flatMap({ $0.isNew ? nil : $0.event }) else { return }

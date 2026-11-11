@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject var store: CalendarStore
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var accounts = AccountManager.shared
     @State private var showSettings = false
@@ -260,7 +260,7 @@ struct CalendarColorPicker: View {
 }
 
 struct MiniMonthView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @EnvironmentObject var settings: AppSettings
 
     var body: some View {
