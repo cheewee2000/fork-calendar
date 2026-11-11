@@ -192,8 +192,10 @@ struct CalendarDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
             HeaderBar()
             Divider()
+            #endif
             if store.accessState == .denied {
                 AccessDeniedView()
             } else {
@@ -266,6 +268,14 @@ struct CalendarDetailView: View {
             }
         }
         .background(CWT.paper)
+        #if os(macOS)
+        .toolbar(removing: .title)
+        .toolbar {
+            ToolbarItem(placement: .navigation) { HeaderBar(part: .title) }.bare()
+            ToolbarItem { Spacer() }.bare()
+            ToolbarItem { HeaderBar(part: .controls) }.bare()
+        }
+        #endif
         .onAppear {
             #if os(iOS)
             if !didSetInitialMode, sizeClass == .compact,
@@ -346,8 +356,27 @@ struct HeaderBar: View {
         #endif
     }
 
+    /// macOS puts the two halves in the window's title bar (one row, no
+    /// separate header); iOS draws the whole bar above the calendar.
+    enum Part { case all, title, controls }
+    var part = Part.all
+
     var body: some View {
-        HStack(spacing: 10) {
+        switch part {
+        case .all: HStack(spacing: 10) { title; Spacer(); controls }.modifier(BarPadding())
+        case .title: title
+        case .controls: HStack(spacing: 8) { controls }.font(CWT.mono(11))
+        }
+    }
+
+    private struct BarPadding: ViewModifier {
+        func body(content: Content) -> some View {
+            // Bordered controls don't inherit the root environment font.
+            content.font(CWT.mono(11)).padding(.horizontal, 10).padding(.vertical, 3)
+        }
+    }
+
+    @ViewBuilder private var title: some View {
             if showsCalendarsButton {
                 Button {
                     appState.showCalendarsSheet = true
@@ -364,15 +393,16 @@ struct HeaderBar: View {
                 .font(CWT.mono(15))
                 #endif
                 .lineLimit(1)
-            Spacer()
+    }
+
+    @ViewBuilder private var controls: some View {
             if store.isRefreshing {
                 ProgressView()
                     .controlSize(.mini)
                     .padding(.trailing, 2)
             }
             Button("Today") { appState.goToToday() }
-                .buttonStyle(.bordered)
-                .controlSize(barControlSize)
+                .modifier(BarChrome())
                 .help("Today (T)")
             viewMenu
             Button {
@@ -380,17 +410,14 @@ struct HeaderBar: View {
             } label: {
                 Image(systemName: "square.and.arrow.up.on.square")
             }
-            .buttonStyle(appState.availabilityMode ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
-            .prominentLabel(appState.availabilityMode)
-            .controlSize(barControlSize)
+            .modifier(BarChrome(prominent: appState.availabilityMode))
             .help("Share availability (S)")
             Button {
                 appState.paletteOpen = true
             } label: {
                 Image(systemName: "magnifyingglass")
             }
-            .buttonStyle(.bordered)
-            .controlSize(barControlSize)
+            .modifier(BarChrome())
             .help("Search & commands (⌘K)")
             // No accounts yet: a disabled prominent button renders nearly invisible
             // on iOS, so show a plain one that leads to Settings instead.
@@ -407,20 +434,8 @@ struct HeaderBar: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(store.accessState == .granted ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
-            .prominentLabel(store.accessState == .granted)
-            .controlSize(barControlSize)
+            .modifier(BarChrome(prominent: store.accessState == .granted))
             .help(store.accessState == .granted ? "New event (C)" : "Add a Google account in Settings")
-        }
-        // Bordered controls don't inherit the root environment font.
-        .font(CWT.mono(11))
-        #if os(iOS)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
-        #else
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        #endif
     }
 
     private var viewMenu: some View {
@@ -439,8 +454,7 @@ struct HeaderBar: View {
             Text(appState.viewMode.title)
         }
         .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(barControlSize)
+        .modifier(BarChrome())
         .fixedSize()
         .help("Day (D) · Week (W) · Month (M) · 1–9 days")
     }
@@ -454,6 +468,49 @@ struct HeaderBar: View {
         }
     }
 }
+
+/// Header button look. iOS: system bordered minis. macOS: the header lives
+/// in the window toolbar, which strips system button borders and fonts, so
+/// the chip is drawn here (square, Space Mono, ink fill when prominent).
+struct BarChrome: ViewModifier {
+    var prominent = false
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .buttonStyle(prominent ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+            .prominentLabel(prominent)
+            .controlSize(.mini)
+        #else
+        content.buttonStyle(Chip(prominent: prominent))
+        #endif
+    }
+
+    #if os(macOS)
+    private struct Chip: ButtonStyle {
+        let prominent: Bool
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .font(CWT.mono(11))
+                .foregroundStyle(prominent ? CWT.paper : CWT.ink)
+                .padding(.horizontal, 9)
+                .frame(height: 22)
+                .background(prominent ? CWT.ink : CWT.paper3)
+                .opacity(configuration.isPressed ? 0.6 : 1)
+                .contentShape(Rectangle())
+        }
+    }
+    #endif
+}
+
+#if os(macOS)
+extension ToolbarContent {
+    /// macOS 26 wraps every toolbar item in a glass capsule; the header's
+    /// own bordered controls are the only chrome wanted.
+    @ToolbarContentBuilder func bare() -> some ToolbarContent {
+        if #available(macOS 26.0, *) { sharedBackgroundVisibility(.hidden) } else { self }
+    }
+}
+#endif
 
 /// Type-erased button style so a style can be chosen conditionally.
 struct AnyButtonStyle: PrimitiveButtonStyle {
