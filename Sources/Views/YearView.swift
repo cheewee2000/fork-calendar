@@ -55,6 +55,13 @@ struct YearView: View {
             else { return }
             appState.currentDate = moved
         }
+        // ↑ / ↓: four week rows (about a month) per press.
+        .onChange(of: appState.rowScrollTick) {
+            guard appState.viewMode == .year, let top = topWeek,
+                  let next = cal.date(byAdding: .day, value: 28 * appState.rowScrollDelta, to: top),
+                  weeks.contains(next) else { return }
+            withAnimation(.linear(duration: 0.12)) { topWeek = next }
+        }
         // Navigation (‹ ›, Today, go-to-date) changed the year: scroll to it.
         // A scroll-driven change lands here with shownYear already matching.
         .onChange(of: currentYear) {

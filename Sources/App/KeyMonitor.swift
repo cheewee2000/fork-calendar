@@ -197,6 +197,10 @@ enum KeyMonitor {
         switch event.keyCode {
         case 123: appState.step(-1); return true  // left
         case 124: appState.step(1); return true   // right
+        case 125, 126:                             // down / up: scroll month & year
+            guard appState.viewMode == .month || appState.viewMode == .year else { return false }
+            appState.scrollRows(event.keyCode == 125 ? 1 : -1)
+            return true
         case 51, 117:                              // delete / fwd delete
             if let ctx = appState.panelContext, !ctx.isNew {
                 appState.requestDelete(ctx.event, store: store)

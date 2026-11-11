@@ -97,6 +97,13 @@ struct MonthView: View {
                     appState.monthScrollTarget = nil
                 }
                 .onChange(of: topWeek) { updateCurrentMonth() }
+                // ↑ / ↓: one week row per press.
+                .onChange(of: appState.rowScrollTick) {
+                    guard appState.viewMode == .month, let top = topWeek,
+                          let next = cal.date(byAdding: .day, value: 7 * appState.rowScrollDelta, to: top),
+                          allWeeks.contains(next) else { return }
+                    withAnimation(.linear(duration: 0.12)) { topWeek = next }
+                }
             }
         }
     }

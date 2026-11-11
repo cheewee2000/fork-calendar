@@ -223,6 +223,7 @@ final class AppState {
     /// switches should go through here (not `viewMode =`) so the transition
     /// knows whether it's diving in or pulling out, and from where.
     func setViewMode(_ mode: ViewMode) {
+        finishStepSlide?() // land an in-flight arrow-key slide first
         if mode == viewMode {
             // Cancels any scheduled cover/cleanup phase (viewMode swaps to
             // .month only at cleanup, so a mid-transition re-press of the
@@ -502,6 +503,10 @@ final class AppState {
                 case "m": self.setViewMode(.month)
                 case "y": self.setViewMode(.year)
                 case "t": self.goToToday()
+                case "up": self.scrollRows(-1)
+                case "down": self.scrollRows(1)
+                case "left": self.step(-1)
+                case "right": self.step(1)
                 case "1"..."9": self.setDayCount(Int(key) ?? 7)
                 case "!": Self.slowZoom.toggle()
                 case "k": self.paletteOpen = true
@@ -680,6 +685,9 @@ final class AppState {
 
     /// Abort any in-flight side-scroll (gesture or momentum) before navigating.
     func cancelPan() {
+        // Navigation elsewhere drops an in-flight arrow-key slide.
+        stepGeneration += 1
+        finishStepSlide = nil
         panSession += 1
         isPanning = false
         var t = Transaction()
@@ -687,7 +695,50 @@ final class AppState {
         withTransaction(t) { pan.offset = 0 }
     }
 
+    /// ↑ / ↓ in month and year views: scroll by rows. Those views own their
+    /// scroll position, so this is only a signal they apply (and animate).
+    var rowScrollTick = 0
+    @ObservationIgnored var rowScrollDelta = 0
+    func scrollRows(_ delta: Int) {
+        rowScrollDelta = delta
+        rowScrollTick += 1
+    }
+
+    /// ‹ › / arrow keys. In grid modes the strip slides one page (the
+    /// neighbor page is already mounted), then the dates shift under it in a
+    /// non-animated commit that is pixel-identical to the slide's end frame.
     func step(_ direction: Int) {
+        finishStepSlide?() // a press mid-slide lands the previous one first
+        // ponytail: a strip resting at a fractional pan offset (after a
+        // trackpad side-scroll) steps instantly, as before — sliding from
+        // there can run off the 3-page strip. Re-align first if that matters.
+        guard viewMode.zoomFamily == .grid, weekPageWidth > 0, gridNeighborsLive,
+              !isPanning, abs(pan.offset) < 1 else {
+            commitStep(direction)
+            return
+        }
+        stepGeneration += 1
+        let gen = stepGeneration
+        pan.offset = -CGFloat(direction) * weekPageWidth
+        zoomTick += 1 // the grid's .animation(value:) animates the offset
+        let finish = {
+            guard self.stepGeneration == gen else { return }
+            self.stepGeneration += 1
+            self.finishStepSlide = nil
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) {
+                self.commitStep(direction)
+                self.pan.offset = 0
+            }
+        }
+        finishStepSlide = finish
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.phaseDelay(Self.zoomDuration), execute: finish)
+    }
+    @ObservationIgnored private var stepGeneration = 0
+    @ObservationIgnored private var finishStepSlide: (() -> Void)?
+
+    private func commitStep(_ direction: Int) {
         let cal = calendar
         if gridAnchor != nil {
             switch viewMode {
