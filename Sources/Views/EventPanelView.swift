@@ -58,6 +58,8 @@ struct EventPanelView: View {
     @State private var isAllDay: Bool
     @State private var start: Date
     @State private var end: Date
+    /// Zone the start/end pickers read and write wall-clock time in.
+    @State private var timeZoneID: String
     @State private var location: String
     @State private var notes: String
     @State private var urlString: String
@@ -85,6 +87,7 @@ struct EventPanelView: View {
         _isAllDay = State(initialValue: context.event.isAllDay)
         _start = State(initialValue: context.event.startDate ?? Date())
         _end = State(initialValue: context.event.endDate ?? Date().addingTimeInterval(3600))
+        _timeZoneID = State(initialValue: context.event.timeZone ?? TimeZone.autoupdatingCurrent.identifier)
         _location = State(initialValue: context.event.location ?? "")
         _notes = State(initialValue: context.event.notes ?? "")
         _urlString = State(initialValue: context.event.url?.absoluteString ?? "")
@@ -226,6 +229,27 @@ struct EventPanelView: View {
                                 displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
                             )
                             .font(CWT.mono(12))
+                            if !isAllDay {
+                                Picker("Time zone", selection: $timeZoneID) {
+                                    ForEach(timeZoneChoices, id: \.self) { id in
+                                        Text(timeZoneTitle(id)).tag(id)
+                                    }
+                                }
+                                .font(CWT.mono(12))
+                            }
+                        }
+                        // The pickers show the event's zone, not the Mac's.
+                        .environment(\.timeZone, pickerZone)
+                        .environment(\.calendar, pickerCalendar)
+                        .onChange(of: timeZoneID) { old, new in
+                            // Keep the wall-clock time: 3 PM stays 3 PM in the
+                            // new zone, so the instant moves by the offset gap.
+                            // ponytail: offsets taken at the start instant; an
+                            // event straddling a DST change shifts by one gap.
+                            guard let from = TimeZone(identifier: old), let to = TimeZone(identifier: new) else { return }
+                            let shift = TimeInterval(from.secondsFromGMT(for: start) - to.secondsFromGMT(for: start))
+                            start += shift
+                            end += shift
                         }
                         .disabled(isReadOnly)
                     }
@@ -553,8 +577,32 @@ struct EventPanelView: View {
         if isSheet { dismiss() }
     }
 
+    private var pickerZone: TimeZone {
+        isAllDay ? .autoupdatingCurrent : TimeZone(identifier: timeZoneID) ?? .autoupdatingCurrent
+    }
+
+    private var pickerCalendar: Calendar {
+        var cal = Calendar.autoupdatingCurrent
+        cal.timeZone = pickerZone
+        return cal
+    }
+
+    /// This Mac's zone, the event's own, then the curated list.
+    private var timeZoneChoices: [String] {
+        var seen = Set<String>()
+        return ([TimeZone.autoupdatingCurrent.identifier, timeZoneID] + AppSettings.curatedTimeZones)
+            .filter { seen.insert($0).inserted }
+    }
+
+    private func timeZoneTitle(_ id: String) -> String {
+        "\(AppSettings.timeZoneLabel(id)) \(TimeZone(identifier: id)?.abbreviation(for: start) ?? "")"
+    }
+
     private func save() {
         let event = context.event
+        if !isAllDay, timeZoneID != event.timeZone ?? TimeZone.autoupdatingCurrent.identifier {
+            event.timeZone = timeZoneID
+        }
         event.title = title.isEmpty ? "New event" : title
         event.isAllDay = isAllDay
         if isAllDay {

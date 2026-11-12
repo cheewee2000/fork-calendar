@@ -999,10 +999,11 @@ enum EventBody {
         if event.title != old.title { b["summary"] = event.title ?? "" }
         if event.location != old.location { b["location"] = event.location ?? "" }
         if event.notes != old.notes { b["description"] = event.notes ?? "" }
-        if event.startDate != old.start || event.isAllDay != old.isAllDay {
+        let zoneChanged = event.timeZone != old.timeZone
+        if event.startDate != old.start || event.isAllDay != old.isAllDay || zoneChanged {
             b["start"] = time(event.startDate, allDay: event.isAllDay, tz: event.timeZone)
         }
-        if event.endDate != old.end || event.isAllDay != old.isAllDay {
+        if event.endDate != old.end || event.isAllDay != old.isAllDay || zoneChanged {
             b["end"] = time(event.endDate, allDay: event.isAllDay, tz: event.timeZone)
         }
         if event.url?.absoluteString != old.url {

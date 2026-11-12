@@ -514,6 +514,17 @@ final class AppState {
                 default:
                     // "type:<text>" fills the palette query (opening it first)
                     // so search results can be verified without a keyboard.
+                    // "press:<keyCode>:<chars>" queues a real key-down, so it
+                    // runs through KeyMonitor like a typed key.
+                    let parts = key.split(separator: ":", omittingEmptySubsequences: false)
+                    if parts.count == 3, parts[0] == "press", let code = UInt16(parts[1]),
+                       let w = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 }),
+                       let e = NSEvent.keyEvent(
+                           with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                           windowNumber: w.windowNumber, context: nil, characters: String(parts[2]),
+                           charactersIgnoringModifiers: String(parts[2]), isARepeat: false, keyCode: code) {
+                        NSApp.postEvent(e, atStart: false)
+                    }
                     // "h:<points>" grows/shrinks the main window's height.
                     if key.hasPrefix("h:"), let d = Double(key.dropFirst(2)),
                        let w = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 }) {
