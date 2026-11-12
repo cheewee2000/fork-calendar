@@ -84,6 +84,7 @@ struct EventPanelView: View {
     @State private var renderedNotes: AttributedString?
     private let originalSnapshot: EventSnapshot?
     @FocusState private var titleFocused: Bool
+    @FocusState private var describeFocused: Bool
     @FocusState private var inviteFocused: Bool
 
     init(context: EditorContext, isSheet: Bool = false) {
@@ -477,7 +478,11 @@ struct EventPanelView: View {
             end = end.addingTimeInterval(newValue.timeIntervalSince(oldValue))
         }
         .onAppear {
-            if context.isNew { titleFocused = true }
+            // A new event opens with the cursor in the describe box (the
+            // title when Apple Intelligence isn't available).
+            if context.isNew {
+                if EventAssistant.unavailableReason == nil { describeFocused = true } else { titleFocused = true }
+            }
         }
         // Never render inside body: the HTML importer spins the run loop
         // (WebKit), which re-entered SwiftUI mid-update and left the iPhone
@@ -603,6 +608,7 @@ struct EventPanelView: View {
                               text: $describeText, axis: .vertical)
                         .textFieldStyle(.plain)
                         .lineLimit(2...5)
+                        .focused($describeFocused)
                         .onSubmit { describe() }
                         .disabled(describeBusy)
                     if describeBusy { ProgressView().controlSize(.small) }
@@ -622,7 +628,9 @@ struct EventPanelView: View {
         guard !text.isEmpty, !describeBusy else { return }
         describeBusy = true
         Task {
-            defer { describeBusy = false }
+            // The field is disabled while busy, which drops its focus;
+            // put the cursor back for the answer or a correction.
+            defer { describeBusy = false; DispatchQueue.main.async { describeFocused = true } }
             do {
                 let f = try await assistant.fields(from: text, defaultMinutes: settings.defaultDuration)
                 if let t = f.title { title = t }
