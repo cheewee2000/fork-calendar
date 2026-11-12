@@ -532,6 +532,9 @@ final class AppState {
                         f.size.height += d
                         w.setFrame(f, display: true)
                     }
+                    // "describe:<text>" submits text to an open new-event
+                    // panel's describe box.
+                    if key.hasPrefix("describe:") { self.debugDescribe = String(key.dropFirst(9)) }
                     if key.hasPrefix("type:") {
                         self.paletteOpen = true
                         // After the palette's open-reset (delivered on the
@@ -716,6 +719,8 @@ final class AppState {
     /// ↑ / ↓ in month and year views: scroll by rows. Those views own their
     /// scroll position, so this is only a signal they apply (and animate).
     var rowScrollTick = 0
+    /// Debug hook → the new-event panel's describe box.
+    var debugDescribe = ""
     @ObservationIgnored var rowScrollDelta = 0
     func scrollRows(_ delta: Int) {
         rowScrollDelta = delta

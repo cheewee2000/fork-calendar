@@ -60,6 +60,12 @@ struct EventPanelView: View {
     @State private var end: Date
     /// Zone the start/end pickers read and write wall-clock time in.
     @State private var timeZoneID: String
+    /// "Describe it" box (new events): typed text, the model's pending
+    /// question, and the assistant that remembers the exchange.
+    @State private var describeText = ""
+    @State private var describeQuestion: String?
+    @State private var describeBusy = false
+    @State private var assistant = EventAssistant()
     @State private var location: String
     @State private var notes: String
     @State private var urlString: String
@@ -246,10 +252,10 @@ struct EventPanelView: View {
                             // new zone, so the instant moves by the offset gap.
                             // ponytail: offsets taken at the start instant; an
                             // event straddling a DST change shifts by one gap.
-                            guard let from = TimeZone(identifier: old), let to = TimeZone(identifier: new) else { return }
+                            guard !assistant.settingZone,
+                                  let from = TimeZone(identifier: old), let to = TimeZone(identifier: new) else { return }
                             let shift = TimeInterval(from.secondsFromGMT(for: start) - to.secondsFromGMT(for: start))
-                            start += shift
-                            end += shift
+                            start += shift // the end follows (onChange(of: start))
                         }
                         .disabled(isReadOnly)
                     }
@@ -442,6 +448,7 @@ struct EventPanelView: View {
                 .padding(14)
             }
 
+            if context.isNew { describeBox }
             Divider()
             HStack {
                 if isReadOnly {
@@ -464,6 +471,9 @@ struct EventPanelView: View {
         .font(CWT.mono(12))
         .background(BackgroundColor())
         .onChange(of: start) { oldValue, newValue in
+            // Moving the start keeps the duration — except when the describe
+            // box just set both ends itself.
+            guard !assistant.settingZone else { return }
             end = end.addingTimeInterval(newValue.timeIntervalSince(oldValue))
         }
         .onAppear {
@@ -575,6 +585,69 @@ struct EventPanelView: View {
     private func close() {
         appState.closePanel()
         if isSheet { dismiss() }
+    }
+
+    /// Type the event in words; Return fills the form above. Nothing is
+    /// saved from here — an unclear description comes back as a question.
+    @ViewBuilder private var describeBox: some View {
+        Divider()
+        VStack(alignment: .leading, spacing: 6) {
+            if let reason = EventAssistant.unavailableReason {
+                Text(reason).foregroundStyle(CWT.inkFaint)
+            } else {
+                if let q = describeQuestion {
+                    Text(q).foregroundStyle(CWT.signalOrange)
+                }
+                HStack(alignment: .top, spacing: 6) {
+                    TextField(describeQuestion == nil ? "Describe it: dinner Fri 7pm Tokyo time at Nobu…" : "Answer…",
+                              text: $describeText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(2...5)
+                        .onSubmit { describe() }
+                        .disabled(describeBusy)
+                    if describeBusy { ProgressView().controlSize(.small) }
+                }
+            }
+        }
+        .font(CWT.mono(12))
+        .padding(12)
+        .onChange(of: appState.debugDescribe) { _, text in
+            describeText = text
+            describe()
+        }
+    }
+
+    private func describe() {
+        let text = describeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !describeBusy else { return }
+        describeBusy = true
+        Task {
+            defer { describeBusy = false }
+            do {
+                let f = try await assistant.fields(from: text, defaultMinutes: settings.defaultDuration)
+                if let t = f.title { title = t }
+                if let s = f.start, let e = f.end {
+                    isAllDay = f.allDay
+                    // The model's dates are already instants in its zone;
+                    // the zone picker's keep-wall-clock shift must skip them.
+                    assistant.settingZone = true
+                    timeZoneID = f.timeZone ?? TimeZone.autoupdatingCurrent.identifier
+                    start = s
+                    // Next tick: the Ends picker's range still starts at the
+                    // old start during this update and would clamp an
+                    // earlier end back up to it.
+                    DispatchQueue.main.async { end = e }
+                    // Cleared after this update's onChange handlers have run.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { assistant.settingZone = false }
+                }
+                if let l = f.location { location = l }
+                if let u = f.url { urlString = u }
+                describeQuestion = f.question
+                describeText = ""
+            } catch {
+                describeQuestion = "Couldn't read that (\(error.localizedDescription)). Try rephrasing."
+            }
+        }
     }
 
     private var pickerZone: TimeZone {
