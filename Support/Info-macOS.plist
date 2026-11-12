@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.16.24</string>
+	<string>0.16.25</string>
 	<key>CFBundleVersion</key>
-	<string>127</string>
+	<string>128</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 CW&amp;T</string>
 	<key>SUEnableAutomaticChecks</key>

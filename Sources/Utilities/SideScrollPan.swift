@@ -60,7 +60,7 @@ struct SideScrollPan: UIViewRepresentable {
         /// touch straight to the scroll view's vertical pan.
         func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
             guard let pan = gesture as? UIPanGestureRecognizer, pan.view is UIScrollView else { return true }
-            guard !appState.isZooming, appState.weekPageWidth > 4 else { return false }
+            guard appState.weekPageWidth > 4 else { return false }
             let t = pan.translation(in: pan.view)
             return abs(t.x) > abs(t.y) * 1.2
         }

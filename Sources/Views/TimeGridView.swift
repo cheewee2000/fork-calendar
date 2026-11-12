@@ -14,7 +14,6 @@ struct TimeGridView: View {
 
     private var gutterWidth: CGFloat { settings.gridGutterWidth }
     private var hourHeight: CGFloat { appState.hourHeight }
-    @State private var gridScroll = ScrollPosition(edge: .top)
 
     var body: some View {
         GeometryReader { outer in
@@ -139,18 +138,14 @@ struct TimeGridView: View {
                     #endif
                 }
                 .background(CWT.paper)
-                .scrollPosition($gridScroll)
-                .onScrollGeometryChange(for: CGRect.self, of: {
-                    CGRect(x: $0.contentOffset.y, y: $0.containerSize.height, width: 0, height: 0)
-                }) { _, new in
-                    appState.gridScrollY = new.origin.x
-                    appState.gridViewportH = new.origin.y
+                .onScrollGeometryChange(for: CGFloat.self, of: { $0.containerSize.height }) { _, height in
+                    appState.gridViewportH = height
                     // No zoom, no vertical scroll: the 24 hours always
                     // exactly fill the viewport (20 = the hour stack's
                     // bottom padding), whatever the window or the all-day
                     // strip does to its height.
-                    let fit = (new.origin.y - 20) / 24
-                    if new.origin.y > 100, abs(appState.hourHeight - fit) > 0.01 {
+                    let fit = (height - 20) / 24
+                    if height > 100, abs(appState.hourHeight - fit) > 0.01 {
                         appState.hourHeight = fit
                     }
                 }

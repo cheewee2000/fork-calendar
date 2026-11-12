@@ -650,6 +650,9 @@ struct EventPanelView: View {
                 }
                 if let l = f.location { location = l }
                 if let u = f.url { urlString = u }
+                if let r = f.repeats { recurrence = r }
+                if !f.invitees.isEmpty { inviteEmails = f.invitees.joined(separator: ", ") }
+                if f.meet { addMeetOnSave = true }
                 describeQuestion = f.question
                 describeText = ""
             } catch {

@@ -107,6 +107,5 @@ enum Fmt {
     static func resetTimeZones() {
         for f in [monthYear, time, hour, dayNum, month, dateTime, weekdayShort] { f.timeZone = .current }
         interval.timeZone = .current
-        RRule.dayFormatter.timeZone = .current
     }
 }

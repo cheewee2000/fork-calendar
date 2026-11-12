@@ -468,24 +468,16 @@ final class AppState {
     /// Bumped by navigation (Today, go-to-date) so an in-flight pan gesture or
     /// its momentum stops re-anchoring the grid it just navigated away from.
     @ObservationIgnored var panSession = 0
-    /// True while a pinch-zoom gesture is active (suppresses pan capture).
-    @ObservationIgnored var isZooming = false
-    /// Time-grid vertical scroll metrics (plain vars: written every scroll
-    /// frame, must not invalidate views).
-    @ObservationIgnored var gridScrollY: CGFloat = 0
+    /// Time-grid viewport height (plain var: must not invalidate views).
     @ObservationIgnored var gridViewportH: CGFloat = 0
     /// Day range highlighted while drag-creating an all-day event in month view.
     var monthDragRange: ClosedRange<Date>?
     /// Transient status message.
     var toast: String?
-    /// Time-grid vertical zoom (points per hour), pinch-adjustable.
-    var hourHeight: CGFloat {
-        didSet { UserDefaults.standard.set(Double(hourHeight), forKey: "hourHeight") }
-    }
+    /// Time-grid points per hour: the grid sets it so 24 hours fill its viewport.
+    var hourHeight: CGFloat = 56
 
     init() {
-        let stored = UserDefaults.standard.double(forKey: "hourHeight")
-        hourHeight = stored >= 8 && stored <= 160 ? CGFloat(stored) : 56
         #if os(macOS)
         // Automation hook: lets scripted tests drive view-mode changes
         // (`ForkCalDebugKey` distributed notification with a key string) so

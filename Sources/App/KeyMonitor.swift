@@ -52,8 +52,6 @@ enum KeyMonitor {
             panSession = appState.panSession
             if capture == .horizontal || capture == .deciding { capture = .passthrough }
         }
-        // Never start a pan mid-pinch (pinches leak small scroll deltas).
-        if appState.isZooming, capture != .horizontal { capture = .passthrough }
 
         let dx = event.scrollingDeltaX
         let dy = event.scrollingDeltaY

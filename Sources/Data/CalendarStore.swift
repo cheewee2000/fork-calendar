@@ -139,6 +139,7 @@ final class CalendarStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Fmt.resetTimeZones()
+                RRule.dayFormatter.timeZone = .current
                 self?.dayIndexCache = nil
                 self?.reload()
                 self?.objectWillChange.send()
