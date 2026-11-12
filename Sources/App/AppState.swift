@@ -81,7 +81,9 @@ struct EditorContext: Identifiable {
     /// Keyed on the event, not a UUID: reresolveSelection swaps in a fresh
     /// CalEvent after every store reload, and a fresh id made .sheet(item:)
     /// dismiss + re-present on each sync tick (iPhone sheet flickered 3×).
-    var id: String { (isNew ? "new-" : "") + eventKey(event) }
+    /// A draft is keyed on its local id alone: its dates change as the
+    /// form is filled in, and a new key would re-create (empty) the panel.
+    var id: String { isNew ? "new-" + event.id : eventKey(event) }
 }
 
 enum PendingSpanAction {

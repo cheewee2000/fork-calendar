@@ -477,6 +477,9 @@ struct EventPanelView: View {
             guard !assistant.settingZone else { return }
             end = end.addingTimeInterval(newValue.timeIntervalSince(oldValue))
         }
+        // The placeholder block on the calendar follows the form.
+        .onChange(of: [start, end]) { syncPlaceholder() }
+        .onChange(of: isAllDay) { syncPlaceholder() }
         .onAppear {
             // A new event opens with the cursor in the describe box (the
             // title when Apple Intelligence isn't available).
@@ -623,6 +626,14 @@ struct EventPanelView: View {
         }
     }
 
+    private func syncPlaceholder() {
+        guard context.isNew else { return }
+        context.event.startDate = start
+        context.event.endDate = end
+        context.event.isAllDay = isAllDay
+        appState.panelContext = context // CalEvent is a plain class: re-set to redraw
+    }
+
     private func describe() {
         let text = describeText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !describeBusy else { return }
@@ -645,6 +656,12 @@ struct EventPanelView: View {
                     // old start during this update and would clamp an
                     // earlier end back up to it.
                     DispatchQueue.main.async { end = e }
+                    // Show the day it landed on, if it isn't on screen.
+                    let cal = appState.calendar
+                    if appState.viewMode.zoomFamily == .grid,
+                       !appState.visibleDays.contains(where: { cal.isDate($0, inSameDayAs: s) }) {
+                        appState.goTo(s)
+                    }
                     // Cleared after this update's onChange handlers have run.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { assistant.settingZone = false }
                 }
