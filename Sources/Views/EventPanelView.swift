@@ -624,6 +624,7 @@ struct EventPanelView: View {
             describeText = text
             describe()
         }
+        .onChange(of: appState.debugFill) { _, text in describeText = text }
     }
 
     private func syncPlaceholder() {
@@ -700,6 +701,13 @@ struct EventPanelView: View {
     }
 
     private func save() {
+        // A description still in the box is read first, not thrown away:
+        // pasting one and pressing Create saved an empty "New event".
+        // (Nor is a half-read one saved: describe() does nothing while busy.)
+        if context.isNew, describeBusy || !describeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            describe()
+            return
+        }
         let event = context.event
         if !isAllDay, timeZoneID != event.timeZone ?? TimeZone.autoupdatingCurrent.identifier {
             event.timeZone = timeZoneID

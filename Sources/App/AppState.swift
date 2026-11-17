@@ -486,7 +486,9 @@ final class AppState {
         // transitions can be screen-recorded and verified without a human at
         // the keyboard. Accepts only the KeyMonitor mode keys.
         DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("ForkCalDebugKey"), object: nil, queue: .main
+            // FORKCAL_HOOK renames it, so a test build can be driven while
+            // the installed copy (which hears the default name) runs.
+            forName: Notification.Name(ProcessInfo.processInfo.environment["FORKCAL_HOOK"] ?? "ForkCalDebugKey"), object: nil, queue: .main
         ) { [weak self] note in
             guard let key = note.object as? String else { return }
             Task { @MainActor in
@@ -511,10 +513,11 @@ final class AppState {
                     // "press:<keyCode>:<chars>" queues a real key-down, so it
                     // runs through KeyMonitor like a typed key.
                     let parts = key.split(separator: ":", omittingEmptySubsequences: false)
-                    if parts.count == 3, parts[0] == "press", let code = UInt16(parts[1]),
+                    // A fourth part "cmd" holds ⌘ ("press:9:v:cmd" pastes).
+                    if parts.count >= 3, parts[0] == "press", let code = UInt16(parts[1]),
                        let w = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 }),
                        let e = NSEvent.keyEvent(
-                           with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                           with: .keyDown, location: .zero, modifierFlags: parts.last == "cmd" ? .command : [], timestamp: ProcessInfo.processInfo.systemUptime,
                            windowNumber: w.windowNumber, context: nil, characters: String(parts[2]),
                            charactersIgnoringModifiers: String(parts[2]), isARepeat: false, keyCode: code) {
                         NSApp.postEvent(e, atStart: false)
@@ -529,6 +532,13 @@ final class AppState {
                     // "describe:<text>" submits text to an open new-event
                     // panel's describe box.
                     if key.hasPrefix("describe:") { self.debugDescribe = String(key.dropFirst(9)) }
+                    // "fill:<text>" only types it there; follow with
+                    // "press:36:\r" to test the real Return key.
+                    if key.hasPrefix("fill:") { self.debugFill = String(key.dropFirst(5)) }
+                    #if DEBUG
+                    // "demo" runs the describe box's self-check (stderr).
+                    if key == "demo" { EventAssistant.demo() }
+                    #endif
                     if key.hasPrefix("type:") {
                         self.paletteOpen = true
                         // After the palette's open-reset (delivered on the
@@ -715,6 +725,7 @@ final class AppState {
     var rowScrollTick = 0
     /// Debug hook → the new-event panel's describe box.
     var debugDescribe = ""
+    var debugFill = ""
     @ObservationIgnored var rowScrollDelta = 0
     func scrollRows(_ delta: Int) {
         rowScrollDelta = delta

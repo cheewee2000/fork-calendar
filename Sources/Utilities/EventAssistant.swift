@@ -115,7 +115,20 @@ final class EventAssistant {
     // MARK: - Checked resolution (no model below this line)
 
     static func resolve(_ p: Phrases, typed: [String], defaultMinutes: Int, now: Date = Date()) -> Fields {
-        let all = typed.joined(separator: " ")
+        // The detector reads "the 20th" but not a bare "20th" (the event
+        // landed on today): give it the "the" — unless a month is in front
+        // ("Nov 20th") or it counts something else ("3rd floor").
+        let all: String = {
+            var all = typed.joined(separator: " ")
+            guard let re = try? NSRegularExpression(pattern: #"(?i)(\b[a-z]+\.? +)?\b(\d{1,2}(?:st|nd|rd|th))\b(?! +(?:floor|street|st|ave|avenue|birthday|bday|anniversary|grade|annual)\b)"#) else { return all }
+            for m in re.matches(in: all, range: NSRange(all.startIndex..., in: all)).reversed() {
+                let before = Range(m.range(at: 1), in: all).map { all[$0].lowercased().trimmingCharacters(in: .whitespaces) } ?? ""
+                guard before != "the", !["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].contains(where: before.hasPrefix),
+                      let r = Range(m.range(at: 2), in: all) else { continue }
+                all.insert(contentsOf: "the ", at: r.lowerBound)
+            }
+            return all
+        }()
         func clean(_ s: String) -> String? {
             let t = s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",.;")))
             return t.isEmpty || ["none", "null", "n/a", "empty"].contains(t.lowercased()) ? nil : t
@@ -221,13 +234,16 @@ final class EventAssistant {
             .map { (match: $0, text: Range($0.range, in: all).map { String(all[$0]) } ?? "") }
         // Place: only words the user typed after "at" / "@" / "in", and not
         // a piece of the date — the model offers "friday" and "3pm" as venues.
+        // It runs from there to the model's word for it ("At meanwhile
+        // Shibuya" + "Shibuya" is "meanwhile Shibuya"): at most two words
+        // in between, none starting with a digit.
         let dateWords = Set(matches.map(\.text).joined(separator: " ").lowercased().split(separator: " ").map(String.init))
         // Without the model: capitalised words after "at".
         let place = clean(p.place) ?? groups(#"(?:\bat|@) ([A-Z][\w'’&]*(?: [A-Z&][\w'’&]*)*)"#, all).last?[1]
         if let place, !place.contains("://"),
            !place.lowercased().split(separator: " ").allSatisfy({ dateWords.contains(String($0)) }),
-           ["at ", "@ ", "@", "in "].contains(where: { all.localizedCaseInsensitiveContains($0 + place) }) {
-            out.location = place
+           let g = groups(#"(?i)(?:\b(?:at|in) |@ ?)((?:[^\s\d]\S* ){0,2}?"# + NSRegularExpression.escapedPattern(for: place) + ")", all).first {
+            out.location = g[1]
         }
         // The latest clock time and the latest day win, so "make it 8pm"
         // keeps the day and "actually saturday" keeps the time.
@@ -295,7 +311,7 @@ final class EventAssistant {
                 .subtracting(["breakfast", "brunch", "lunch", "dinner", "supper", "coffee", "drinks",
                               "to", "at", "on", "in", "the", "from", "of", "a"])
             let stop: Set<String> = ["at", "on", "from", "in", "until", "till", "to", "for", "with", "all", "day", "@"]
-            var words = title.split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init)
+            var words = title.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
                 .filter { !cut.contains($0.lowercased()) }
             while let last = words.last, stop.contains(last.lowercased()) { words.removeLast() }
             while let first = words.first, stop.contains(first.lowercased()) { words.removeFirst() }
@@ -381,6 +397,18 @@ extension EventAssistant {
         let c = Calendar.autoupdatingCurrent.dateComponents([.weekday, .hour], from: split.start!)
         assert(c.weekday == 5 && c.hour == 10 && split.question == nil)
         assert(resolve(Phrases(title: "Offsite"), typed: ["offsite all day next Tuesday"], defaultMinutes: 60).question == nil)
+        // A pasted two-line description: a bare ordinal is a day, and the
+        // place runs from "At" to the model's word for it.
+        let pasted = resolve(Phrases(title: "Shibuya meeting with Fujisaki", place: "Shibuya"),
+                             typed: ["20th 2pm \nAt meanwhile Shibuya meeting with Fujisaki (INNICON/meanwhile) "], defaultMinutes: 60)
+        let pc = Calendar.autoupdatingCurrent.dateComponents([.day, .hour], from: pasted.start!)
+        assert(pc.day == 20 && pc.hour == 14 && pasted.location == "meanwhile Shibuya" && pasted.question == nil)
+        let noModel = resolve(Phrases(), typed: ["20th 2pm \nmeeting with Fujisaki"], defaultMinutes: 60)
+        assert(noModel.title == "Meeting with Fujisaki" && Calendar.autoupdatingCurrent.component(.day, from: noModel.start!) == 20)
+        // An ordinal that counts something else is not a day.
+        let floor = resolve(Phrases(title: "Review"), typed: ["3rd floor review friday 2pm"], defaultMinutes: 60)
+        assert(Calendar.autoupdatingCurrent.component(.weekday, from: floor.start!) == 6)
+        NSLog("EventAssistant.demo passed") // NSLog: stdout to a file is buffered
     }
 }
 #endif
