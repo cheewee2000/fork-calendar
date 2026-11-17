@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.26</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.26</link>
-      <sparkle:version>129</sparkle:version>
-      <sparkle:shortVersionString>0.16.26</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.27</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.27</link>
+      <sparkle:version>130</sparkle:version>
+      <sparkle:shortVersionString>0.16.27</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Compact header in the title bar. Week and day views always fit the full day to the window (no zoom, no vertical scroll). Time zone picker for events. New-event panel has a Describe it box: type the event in words (day, time, length, time zone, place, link, repeats, guests, Google Meet) and it fills the form, asking when something is unclear. The new event's placeholder on the calendar follows the form.</p>]]></description>
+      <description><![CDATA[<p>Pasting a description into Describe it and pressing Create now fills the form instead of saving an empty New event. A bare day number like 20th is read as that day, and a place like At meanwhile Shibuya is kept.</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.26/Fork-Calendar-0.16.26.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.27/Fork-Calendar-0.16.27.zip"
         type="application/octet-stream"
-        sparkle:edSignature="E0RLd00x6mNjB0uS4+xkBSGBcd/qNcBHGy70Ehm8JXa4Bo/nsbIq7DDZ0sDb/nd5AhtOVEFAqKmb8jqxXUhADg==" length="2936820"/>
+        sparkle:edSignature="khZjybqVxxBSE0bQDwIxtMVqUW9+SA2qh7IJVcL1SCT2365AYDCRt6BmpzuYkQB1rueAH5SJ9OOywI2FXYDRCA==" length="2940501"/>
     </item>
   </channel>
 </rss>
