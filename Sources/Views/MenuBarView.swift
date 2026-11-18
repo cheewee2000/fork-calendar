@@ -36,7 +36,7 @@ struct MenuBarLabel: View {
                 .joined(separator: " · ")
             let mins = Int((start.timeIntervalSince(clock.now) / 60).rounded(.up))
             let label = mins <= 0 ? "now  \(title)" : "\(mins < 60 ? "\(mins)m" : "\(mins / 60)h \(mins % 60)m")  \(title)"
-            Image(nsImage: Self.render(label, highlighted: mins <= 0))
+            Image(nsImage: Self.render(label, fill: mins <= 0 ? Color(hex: "4CAF7A") : mins <= 5 ? CWT.signalOrange : nil))
                 .accessibilityLabel(label)
         } else {
             Image(systemName: "calendar")
@@ -45,23 +45,23 @@ struct MenuBarLabel: View {
 
     /// Status items ignore SwiftUI fonts and colors, so the label is pre-rendered in Space Mono:
     /// a template image normally (follows the menu bar's light/dark), and when it's time a
-    /// black-on-signal-orange block that reads on either.
-    static func render(_ string: String, highlighted: Bool) -> NSImage {
+    /// black-on-color block that reads on either: orange in the last 5 minutes, green once it starts.
+    static func render(_ string: String, fill: Color?) -> NSImage {
         let text = NSAttributedString(string: string, attributes: [
             .font: NSFont(name: "SpaceMono-Regular", size: 12) ?? .menuBarFont(ofSize: 0),
             .foregroundColor: NSColor.black,
         ])
         let textSize = text.size()
-        let pad: CGFloat = highlighted ? 6 : 0
+        let pad: CGFloat = fill != nil ? 6 : 0
         let image = NSImage(size: NSSize(width: ceil(textSize.width) + pad * 2, height: 18), flipped: false) { rect in
-            if highlighted {
-                NSColor(CWT.signalOrange).setFill()
+            if let fill {
+                NSColor(fill).setFill()
                 rect.fill()
             }
             text.draw(at: NSPoint(x: pad, y: (rect.height - textSize.height) / 2))
             return true
         }
-        image.isTemplate = !highlighted
+        image.isTemplate = fill == nil
         return image
     }
 }
