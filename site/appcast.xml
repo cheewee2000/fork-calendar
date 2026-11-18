@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.34</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.34</link>
+      <title>Fork Calendar 0.16.35</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.35</link>
       <sparkle:version>137</sparkle:version>
-      <sparkle:shortVersionString>0.16.34</sparkle:shortVersionString>
+      <sparkle:shortVersionString>0.16.35</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>The menu bar dropdown is now a time grid of the hours ahead, like the iPhone widget: 12 hours from the current hour, events as blocks sized by their length, a red line at now, all-day events on top, and a JOIN button on events with a video link. The dropdown is larger, and Open Fork Calendar now hides it.</p>]]></description>
+      <description><![CDATA[<p>v0.16.35 — the Mac menu bar label shows two overlapping events: when another timed event overlaps the headline one, both titles appear joined by " · " (14 characters each), timed from the headline. menuBarHeadline returns [CalEvent]; the same title at the same start counts once</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.34/Fork-Calendar-0.16.34.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.35/Fork-Calendar-0.16.35.zip"
         type="application/octet-stream"
-        sparkle:edSignature="bcGhzYjitZXZ3ZsTrekuFlgFIkHbx8a75Z4UKZYCKB3kRyALlTyvnmSe+Wz4wbwSLCcb5s1xwEdlgPGSQswUBw==" length="2985614"/>
+        sparkle:edSignature="TwPnQtn5kymxxQoS0+tGhoi3Cry5a3FY4sq0p5mSYfysQBhuRb8CFG9+F2csr3O7dK9CnkPK7HxiM1mzhkrACg==" length="2989135"/>
     </item>
   </channel>
 </rss>
