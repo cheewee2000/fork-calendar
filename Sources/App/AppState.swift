@@ -541,9 +541,16 @@ final class AppState {
                     // "fill:<text>" only types it there; follow with
                     // "press:36:\r" to test the real Return key.
                     if key.hasPrefix("fill:") { self.debugFill = String(key.dropFirst(5)) }
+                    // "menu" clicks the menu bar item, opening (or closing) its dropdown.
+                    if key == "menu" {
+                        func button(in v: NSView?) -> NSStatusBarButton? {
+                            (v as? NSStatusBarButton) ?? v?.subviews.lazy.compactMap { button(in: $0) }.first
+                        }
+                        NSApp.windows.lazy.compactMap { button(in: $0.contentView) }.first?.performClick(nil)
+                    }
                     #if DEBUG
-                    // "demo" runs the describe box's self-check (stderr).
-                    if key == "demo" { EventAssistant.demo() }
+                    // "demo" runs the describe box's and the mini grid's self-checks (stderr).
+                    if key == "demo" { EventAssistant.demo(); GridLayout.demo() }
                     #endif
                     if key.hasPrefix("type:") {
                         self.paletteOpen = true
