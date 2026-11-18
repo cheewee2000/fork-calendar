@@ -109,34 +109,32 @@ extension GridLayout {
 struct BlockView: View {
     let event: WidgetEvent
     let height: CGFloat
-    /// Multiplies the type and insets (the menu bar dropdown draws the grid at 1.5×).
-    var scale: CGFloat = 1
 
     var body: some View {
         // Beside the times when there's a second row, so it doesn't squeeze the title.
         let join = event.joinURL.map { url in
             Link(destination: url) {
                 Text("JOIN")
-                    .font(CWT.mono(9 * scale))
+                    .font(CWT.mono(9))
                     .foregroundStyle(CWT.paper)
-                    .padding(.horizontal, 4 * scale)
+                    .padding(.horizontal, 4)
                     .background(event.color)
             }
         }
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 2) {
                 Text(event.title)
-                    .font(CWT.mono(10 * scale))
+                    .font(CWT.mono(10))
                     .lineLimit(1)
-                if height < 26 * scale {
+                if height < 26 {
                     Spacer(minLength: 0)
                     join
                 }
             }
-            if height >= 26 * scale {
+            if height >= 26 {
                 HStack(spacing: 2) {
                     Text("\(WFmt.compact(event.start))–\(WFmt.compact(event.end))")
-                        .font(CWT.mono(8 * scale))
+                        .font(CWT.mono(8))
                         .opacity(0.75)
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -145,13 +143,13 @@ struct BlockView: View {
             }
         }
         .foregroundStyle(event.color)
-        .padding(.leading, 5 * scale)
+        .padding(.leading, 5)
         .padding(.trailing, 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // Paper under the tint, so the hour lines don't strike through the text.
         .background(event.color.opacity(0.16))
         .background(CWT.paper)
-        .overlay(alignment: .leading) { Rectangle().fill(event.color).frame(width: 2 * scale) }
+        .overlay(alignment: .leading) { Rectangle().fill(event.color).frame(width: 2) }
         .clipped()
     }
 }
@@ -162,8 +160,7 @@ struct TimeGrid: View {
     let now: Date
     /// Smallest hour row; the grid shows as many whole hours as fit at this height.
     var hourHeight: CGFloat = 22
-    var scale: CGFloat = 1
-    private var gutter: CGFloat { 22 * scale }
+    private let gutter: CGFloat = 22
 
     var body: some View {
         let cal = Calendar.autoupdatingCurrent
@@ -174,12 +171,12 @@ struct TimeGrid: View {
             if let first = allDay.first {
                 HStack(spacing: 0) {
                     Text(allDay.count > 1 ? "+\(allDay.count - 1)" : "ALL")
-                        .font(CWT.mono(9 * scale))
+                        .font(CWT.mono(9))
                         .foregroundStyle(CWT.inkFaint)
                         .frame(width: gutter, alignment: .leading)
-                    BlockView(event: first, height: 14 * scale, scale: scale)
+                    BlockView(event: first, height: 14)
                 }
-                .frame(height: 14 * scale)
+                .frame(height: 14)
             }
             GeometryReader { geo in grid(in: geo.size) }
         }
@@ -190,14 +187,14 @@ struct TimeGrid: View {
         let layout = GridLayout(events: events, now: now, hours: hours)
         // A grid that jumped ahead to tomorrow says so above its first hour.
         let jumped = !layout.start.isSameDay(as: now)
-        let top: CGFloat = jumped ? 13 * scale : 0
+        let top: CGFloat = jumped ? 13 : 0
         let hourHeight = (size.height - top) / CGFloat(hours)
         func y(_ d: Date) -> CGFloat { top + CGFloat(d.timeIntervalSince(layout.start) / 3600) * hourHeight }
         let width = size.width - gutter
         return ZStack(alignment: .topLeading) {
             if jumped {
                 Text("TOMORROW")
-                    .font(CWT.mono(9 * scale))
+                    .font(CWT.mono(9))
                     .foregroundStyle(CWT.inkFaint)
             }
             ForEach(0..<hours, id: \.self) { i in
@@ -206,16 +203,16 @@ struct TimeGrid: View {
                     .frame(width: width, height: 1)
                     .offset(x: gutter, y: y(hour))
                 Text(WFmt.compact(hour, Fmt.hour))
-                    .font(CWT.mono(9 * scale))
+                    .font(CWT.mono(9))
                     .foregroundStyle(CWT.inkFaint)
                     .offset(y: y(hour))
             }
             ForEach(layout.blocks) { block in
                 // A block already underway is cut off at the top of the grid.
                 let y0 = max(y(block.event.start), top)
-                let height = max(min(y(block.event.end), size.height) - y0 - 1, 13 * scale)
+                let height = max(min(y(block.event.end), size.height) - y0 - 1, 13)
                 let column = width / CGFloat(block.columnCount)
-                BlockView(event: block.event, height: height, scale: scale)
+                BlockView(event: block.event, height: height)
                     .frame(width: column - 1, height: height)
                     .offset(x: gutter + column * CGFloat(block.column), y: y0 + 1)
             }

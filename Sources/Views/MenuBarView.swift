@@ -71,9 +71,7 @@ struct MenuBarView: View {
 
     var body: some View {
         let now = clock.now
-        // The whole dropdown is the widget's layout at 1.5×.
-        let s: CGFloat = 1.5
-        VStack(alignment: .leading, spacing: 8 * s) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Fmt.weekdayShort.string(from: now).uppercased())
                     .foregroundStyle(CWT.inkFaint)
@@ -81,24 +79,24 @@ struct MenuBarView: View {
                 Text("\(Fmt.month.string(from: now).uppercased()) \(Fmt.dayNum.string(from: now))")
                     .foregroundStyle(CWT.ink)
             }
-            .font(CWT.mono(12 * s))
+            .font(CWT.mono(12))
             Rectangle().fill(CWT.rule).frame(height: 1)
-            // The widget's grid of the hours ahead: 12 hours.
-            TimeGrid(events: gridEvents(now: now), now: now, hourHeight: 28 * s, scale: s)
-                .frame(height: 336 * s)
+            // The widget's grid of the hours ahead, in the widget's type: 12 hours at 42 pt.
+            TimeGrid(events: gridEvents(now: now), now: now, hourHeight: 42)
+                .frame(height: 504)
             Divider()
             Button {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
             } label: {
                 Label("Open Fork Calendar", systemImage: "calendar")
-                    .font(CWT.mono(12 * s))
+                    .font(CWT.mono(12))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
         }
-        .padding(12 * s)
-        .frame(width: 300 * s)
+        .padding(12)
+        .frame(width: 450)
         .background(CWT.paper)
     }
 
