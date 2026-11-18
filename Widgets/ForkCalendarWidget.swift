@@ -429,7 +429,8 @@ struct UpNextWidgetView: View {
             } else {
                 switch family {
                 case .systemSmall: SmallView(entry: entry)
-                case .systemMedium: MediumView(entry: entry)
+                // Extra large (iPad only) is the medium layout with room for more hours.
+                case .systemMedium, .systemExtraLarge: MediumView(entry: entry)
                 case .accessoryRectangular: RectangularView(entry: entry)
                 case .accessoryInline: InlineView(entry: entry)
                 default: LargeView(entry: entry)
@@ -449,7 +450,7 @@ struct UpNextWidget: Widget {
         }
         .configurationDisplayName("Up Next")
         .description("The hours ahead, ink on paper.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge,
                             .accessoryRectangular, .accessoryInline])
     }
 }
