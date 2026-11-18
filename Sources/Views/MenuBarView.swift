@@ -86,6 +86,7 @@ struct MenuBarView: View {
                 .frame(height: 504)
             Divider()
             Button {
+                Self.toggle()   // hide the dropdown
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
             } label: {
@@ -98,6 +99,14 @@ struct MenuBarView: View {
         .padding(12)
         .frame(width: 450)
         .background(CWT.paper)
+    }
+
+    /// Clicks the menu bar item: opens the dropdown, or hides it when it's open.
+    static func toggle() {
+        func button(in v: NSView?) -> NSStatusBarButton? {
+            (v as? NSStatusBarButton) ?? v?.subviews.lazy.compactMap { button(in: $0) }.first
+        }
+        NSApp.windows.lazy.compactMap { button(in: $0.contentView) }.first?.performClick(nil)
     }
 
     /// Unfinished events through tomorrow as the grid's blocks (the widget's rules: an event
