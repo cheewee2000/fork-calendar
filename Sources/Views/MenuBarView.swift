@@ -29,8 +29,11 @@ struct MenuBarLabel: View {
     @ObservedObject private var clock = MinuteClock.shared
 
     var body: some View {
-        if let next = store.menuBarHeadline(now: clock.now), let start = next.startDate {
-            let title = String((next.title ?? "").prefix(20))
+        let events = store.menuBarHeadline(now: clock.now)
+        if let next = events.first, let start = next.startDate {
+            // Two overlapping events share the label's width.
+            let title = events.map { String(($0.title ?? "").prefix(events.count > 1 ? 14 : 20)) }
+                .joined(separator: " · ")
             let mins = Int((start.timeIntervalSince(clock.now) / 60).rounded(.up))
             let label = mins <= 0 ? "now  \(title)" : "\(mins < 60 ? "\(mins)m" : "\(mins / 60)h \(mins % 60)m")  \(title)"
             Image(nsImage: Self.render(label, highlighted: mins <= 0))
