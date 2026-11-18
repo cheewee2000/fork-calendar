@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.27</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.27</link>
-      <sparkle:version>130</sparkle:version>
-      <sparkle:shortVersionString>0.16.27</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.34</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.34</link>
+      <sparkle:version>137</sparkle:version>
+      <sparkle:shortVersionString>0.16.34</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>Pasting a description into Describe it and pressing Create now fills the form instead of saving an empty New event. A bare day number like 20th is read as that day, and a place like At meanwhile Shibuya is kept.</p>]]></description>
+      <description><![CDATA[<p>The menu bar dropdown is now a time grid of the hours ahead, like the iPhone widget: 12 hours from the current hour, events as blocks sized by their length, a red line at now, all-day events on top, and a JOIN button on events with a video link. The dropdown is larger, and Open Fork Calendar now hides it.</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.27/Fork-Calendar-0.16.27.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.34/Fork-Calendar-0.16.34.zip"
         type="application/octet-stream"
-        sparkle:edSignature="khZjybqVxxBSE0bQDwIxtMVqUW9+SA2qh7IJVcL1SCT2365AYDCRt6BmpzuYkQB1rueAH5SJ9OOywI2FXYDRCA==" length="2940501"/>
+        sparkle:edSignature="bcGhzYjitZXZ3ZsTrekuFlgFIkHbx8a75Z4UKZYCKB3kRyALlTyvnmSe+Wz4wbwSLCcb5s1xwEdlgPGSQswUBw==" length="2985614"/>
     </item>
   </channel>
 </rss>
