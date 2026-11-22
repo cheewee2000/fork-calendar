@@ -581,6 +581,10 @@ private struct TopBarChrome: ViewModifier {
             }
             content
         }
+        // The side bar's stack still reserves a strip for a top bar that
+        // has nothing in it; the header ran to the top edge, so the
+        // calendar does too.
+        .ignoresSafeArea(.container, edges: sideBar ? .top : [])
         // The compact layout's NavigationStack is there only for the side
         // bar; a split view keeps its bar (it holds the sidebar toggle).
         .toolbar(sideBar || sizeClass != .compact ? .automatic : .hidden, for: .navigationBar)
