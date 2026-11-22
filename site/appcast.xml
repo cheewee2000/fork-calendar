@@ -6,16 +6,16 @@
     <description>Updates for Fork Calendar</description>
     <language>en</language>
     <item>
-      <title>Fork Calendar 0.16.36</title>
-      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.36</link>
-      <sparkle:version>137</sparkle:version>
-      <sparkle:shortVersionString>0.16.36</sparkle:shortVersionString>
+      <title>Fork Calendar 0.16.38</title>
+      <link>https://github.com/cheewee2000/fork-calendar/releases/tag/v0.16.38</link>
+      <sparkle:version>139</sparkle:version>
+      <sparkle:shortVersionString>0.16.38</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<p>v0.16.36 — the Mac menu bar label turns orange 5 minutes before the headline event and green once it starts (was orange only from the start). MenuBarLabel.render takes a fill color instead of a highlighted flag</p>]]></description>
+      <description><![CDATA[<p>iPhone Duo: the header's controls move into the side bar on the right, and the calendar runs to the top edge. No changes on the Mac.</p>]]></description>
       <enclosure
-        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.36/Fork-Calendar-0.16.36.zip"
+        url="https://github.com/cheewee2000/fork-calendar/releases/download/v0.16.38/Fork-Calendar-0.16.38.zip"
         type="application/octet-stream"
-        sparkle:edSignature="hl0stSnYcSjJl6jaiIJrexVo18vJRKpLdAZqCGaCFWyjMhTmrbb8D1MvyhMEeFvWEnHFxHPj5HtMkLOxzQ8aBQ==" length="2990833"/>
+        sparkle:edSignature="hFE1yM+FIsDPl7Xp7sw3WS77SUwGi5sd8iED1lkpf6x8wfTPYBwav6a7OQcCRHxS7RuWg0oH5p2zzHfbyhAiCw==" length="3002015"/>
     </item>
   </channel>
 </rss>
