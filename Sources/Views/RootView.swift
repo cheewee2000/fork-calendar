@@ -25,8 +25,10 @@ struct RootView: View {
             if isCompact {
                 // iPhone: the grid directly; calendar list lives in a sheet
                 // (a collapsed NavigationSplitView would strand users on the
-                // sidebar with no path to the detail column).
-                CalendarDetailView()
+                // sidebar with no path to the detail column). The stack only
+                // hosts iPhone Duo's side bar (CalendarChrome); its own bar
+                // is hidden everywhere else.
+                NavigationStack { CalendarDetailView() }
                     .sheet(isPresented: $appState.showCalendarsSheet) {
                         NavigationStack { SidebarView() }
                     }
@@ -192,10 +194,6 @@ struct CalendarDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            #if os(iOS)
-            HeaderBar()
-            Divider()
-            #endif
             if store.accessState == .denied {
                 AccessDeniedView()
             } else {
@@ -267,6 +265,9 @@ struct CalendarDetailView: View {
                 }
             }
         }
+        #if os(iOS)
+        .modifier(CalendarChrome())
+        #endif
         .background(CWT.paper)
         #if os(macOS)
         .toolbar(removing: .title)
@@ -357,15 +358,36 @@ struct HeaderBar: View {
     }
 
     /// macOS puts the two halves in the window's title bar (one row, no
-    /// separate header); iOS draws the whole bar above the calendar.
-    enum Part { case all, title, controls }
+    /// separate header); iOS draws the whole bar above the calendar. The
+    /// single-control parts are the items of iPhone Duo's side bar
+    /// (SideBarChrome), which draws the chrome itself.
+    enum Part { case all, title, controls, month, calendars, today, view, share, search, add }
     var part = Part.all
+
+    private var chrome: BarChrome { chrome(prominent: false) }
+    private func chrome(prominent: Bool) -> BarChrome {
+        BarChrome(prominent: prominent, bare: ![.all, .title, .controls].contains(part))
+    }
 
     var body: some View {
         switch part {
         case .all: HStack(spacing: 10) { title; Spacer(); controls }.modifier(BarPadding())
         case .title: title
         case .controls: HStack(spacing: 8) { controls }.font(CWT.mono(11))
+        case .month:
+            // The side bar is one control wide: month over year.
+            VStack(spacing: 2) {
+                Text(appState.currentDate, format: .dateTime.month(.abbreviated))
+                Text(appState.currentDate, format: .dateTime.year())
+                if store.isRefreshing { ProgressView().controlSize(.mini) }
+            }
+            .font(CWT.mono(11))
+        case .calendars: calendarsButton
+        case .today: todayButton
+        case .view: viewMenu
+        case .share: shareButton
+        case .search: searchButton
+        case .add: addButton
         }
     }
 
@@ -376,15 +398,19 @@ struct HeaderBar: View {
         }
     }
 
+    private var calendarsButton: some View {
+        Button {
+            appState.showCalendarsSheet = true
+        } label: {
+            Label("Calendars", systemImage: "sidebar.leading").labelStyle(.iconOnly)
+        }
+    }
+
     @ViewBuilder private var title: some View {
             if showsCalendarsButton {
-                Button {
-                    appState.showCalendarsSheet = true
-                } label: {
-                    Image(systemName: "sidebar.leading")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(barControlSize)
+                calendarsButton
+                    .buttonStyle(.bordered)
+                    .controlSize(barControlSize)
             }
             Text(Fmt.monthYear.string(from: appState.currentDate))
                 #if os(iOS)
@@ -401,24 +427,40 @@ struct HeaderBar: View {
                     .controlSize(.mini)
                     .padding(.trailing, 2)
             }
-            Button("Today") { appState.goToToday() }
-                .modifier(BarChrome())
-                .help("Today (T)")
+            todayButton
             viewMenu
-            Button {
-                appState.toggleAvailabilityMode()
-            } label: {
-                Image(systemName: "square.and.arrow.up.on.square")
-            }
-            .modifier(BarChrome(prominent: appState.availabilityMode))
-            .help("Share availability (S)")
-            Button {
-                appState.paletteOpen = true
-            } label: {
-                Image(systemName: "magnifyingglass")
-            }
-            .modifier(BarChrome())
-            .help("Search & commands (⌘K)")
+            shareButton
+            searchButton
+            addButton
+    }
+
+    private var todayButton: some View {
+        Button("Today") { appState.goToToday() }
+            .modifier(chrome)
+            .help("Today (T)")
+    }
+
+    private var shareButton: some View {
+        Button {
+            appState.toggleAvailabilityMode()
+        } label: {
+            Label("Share availability", systemImage: "square.and.arrow.up.on.square").labelStyle(.iconOnly)
+        }
+        .modifier(chrome(prominent: appState.availabilityMode))
+        .help("Share availability (S)")
+    }
+
+    private var searchButton: some View {
+        Button {
+            appState.paletteOpen = true
+        } label: {
+            Label("Search", systemImage: "magnifyingglass").labelStyle(.iconOnly)
+        }
+        .modifier(chrome)
+        .help("Search & commands (⌘K)")
+    }
+
+    private var addButton: some View {
             // No accounts yet: a disabled prominent button renders nearly invisible
             // on iOS, so show a plain one that leads to Settings instead.
             Button {
@@ -432,9 +474,9 @@ struct HeaderBar: View {
                     #endif
                 }
             } label: {
-                Image(systemName: "plus")
+                Label("New event", systemImage: "plus").labelStyle(.iconOnly)
             }
-            .modifier(BarChrome(prominent: store.accessState == .granted))
+            .modifier(chrome(prominent: store.accessState == .granted))
             .help(store.accessState == .granted ? "New event (C)" : "Add a Google account in Settings")
     }
 
@@ -454,7 +496,7 @@ struct HeaderBar: View {
             Text(appState.viewMode.title)
         }
         .menuStyle(.button)
-        .modifier(BarChrome())
+        .modifier(chrome)
         .fixedSize()
         .help("Day (D) · Week (W) · Month (M) · 1–9 days")
     }
@@ -474,12 +516,22 @@ struct HeaderBar: View {
 /// the chip is drawn here (square, Space Mono, ink fill when prominent).
 struct BarChrome: ViewModifier {
     var prominent = false
+    /// iPhone Duo's side bar draws its own glass; only the type is ours.
+    var bare = false
     func body(content: Content) -> some View {
         #if os(iOS)
-        content
-            .buttonStyle(prominent ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
-            .prominentLabel(prominent)
-            .controlSize(.mini)
+        if bare {
+            if prominent, #available(iOS 26.0, *) {
+                content.buttonStyle(.glassProminent).prominentLabel().font(CWT.mono(11))
+            } else {
+                content.font(CWT.mono(11))
+            }
+        } else {
+            content
+                .buttonStyle(prominent ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
+                .prominentLabel(prominent)
+                .controlSize(.mini)
+        }
         #else
         content.buttonStyle(Chip(prominent: prominent))
         #endif
@@ -501,6 +553,69 @@ struct BarChrome: ViewModifier {
     }
     #endif
 }
+
+#if os(iOS)
+/// The iOS chrome around the calendar: the HeaderBar on top, or — where
+/// iPhone Duo stacks its bars down the hardware side (closed, and open in
+/// landscape) — the same controls as items in that side bar, which hands the
+/// header's row back to the calendar.
+struct CalendarChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.modifier(SideBarChrome())
+        } else {
+            content.modifier(TopBarChrome(sideBar: false))
+        }
+    }
+}
+
+private struct TopBarChrome: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    var sideBar: Bool
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            if !sideBar {
+                HeaderBar()
+                Divider()
+            }
+            content
+        }
+        // The compact layout's NavigationStack is there only for the side
+        // bar; a split view keeps its bar (it holds the sidebar toggle).
+        .toolbar(sideBar || sizeClass != .compact ? .automatic : .hidden, for: .navigationBar)
+    }
+}
+
+@available(iOS 27.1, *)
+private struct SideBarChrome: ViewModifier {
+    @Environment(\.toolbarVerticalEdge) private var edge
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(TopBarChrome(sideBar: edge != nil))
+            .toolbar {
+                if edge != nil {
+                    item(.month).sharedBackgroundVisibility(.hidden)
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    if sizeClass == .compact { item(.calendars) }
+                    item(.today)
+                    item(.view)
+                    item(.share)
+                    item(.search)
+                    ToolbarItem(placement: .bottomBar) { HeaderBar(part: .add) }
+                }
+            }
+    }
+
+    /// Text items lie flat by default; these all fit the bar's width.
+    private func item(_ part: HeaderBar.Part) -> some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) { HeaderBar(part: part) }
+            .axisBehavior(.verticalPreferred)
+    }
+}
+#endif
 
 #if os(macOS)
 extension ToolbarContent {
